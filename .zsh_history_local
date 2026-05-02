@@ -1,0 +1,22 @@
+: 1771174781:0;flutter build apk --release
+: 1772476607:0;flutter pub add --dev change_app_package_name
+: 1772476725:0;flutter pub run change_app_package_name:main com.picture-live.app
+: 1772476867:0;flutterfire configure
+: 1772477130:0;firebase login:use riadsafowan000@gmail.com
+: 1772477141:0;flutterfire reconfigure
+: 1772477158:0;flutterfire configure
+: 1772477319:0;flutter pub run change_app_package_name:main com.picture_live.app
+: 1772477328:0;flutterfire configure
+: 1772477622:0;cd android && ./gradlew signingReport
+: 1772566514:0;flutterfire configure
+: 1772653331:0;cd android && ./gradlew signingReport
+: 1772657435:0;adb shell pm get-app-links com.picture_live.app
+: 1772661132:0;flutter build apk --release
+: 1774536706:0;flutter clean
+: 1774538042:0;flutter pub get
+: 1774722416:0;flutter pub add firebase_messaging
+: 1774722430:0;flutter pub add flutter_local_notifications
+: 1774726814:0;flutter clean
+: 1774726830:0;flutter pub get
+: 1774743739:0;flutter build apk --release
+: 1774895493:0;flutter clean

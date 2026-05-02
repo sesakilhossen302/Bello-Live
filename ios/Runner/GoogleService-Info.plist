@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>44126273424-n7ok6qj02le05kfk1hnlja17ps2lahn3.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.44126273424-n7ok6qj02le05kfk1hnlja17ps2lahn3</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCHg6yNrmh8dAnDeyJX6LLGRVxJU8zSjxA</string>
+	<key>GCM_SENDER_ID</key>
+	<string>44126273424</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.cutelive.app.cuteLive</string>
+	<key>PROJECT_ID</key>
+	<string>ms-live-app-3fe90</string>
+	<key>STORAGE_BUCKET</key>
+	<string>ms-live-app-3fe90.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:44126273424:ios:1af8a1499391a42022bd15</string>
+	<key>DATABASE_URL</key>
+	<string>https://ms-live-app-3fe90-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+</dict>
+</plist>

@@ -1,0 +1,4 @@
+: 1772566510:0;cd ..
+: 1772656065:0;flutter pub get\
+flutter pub run flutter_launcher_icons:main
+: 1772657433:0;cd ..
