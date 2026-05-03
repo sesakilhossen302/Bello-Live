@@ -1,9 +1,9 @@
 {
   "project_info": {
     "project_number": "893744414245",
+    "firebase_url": "https://mplive-e556c-default-rtdb.firebaseio.com",
     "project_id": "mplive-e556c",
-    "storage_bucket": "mplive-e556c.firebasestorage.app",
-    "firebase_url": "https://mplive-e556c-default-rtdb.firebaseio.com"
+    "storage_bucket": "mplive-e556c.firebasestorage.app"
   },
   "client": [
     {
@@ -14,6 +14,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "893744414245-cab201dfogg7jj7q4e7mctaf6pbvce77.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mplive.app",
+            "certificate_hash": "8edbac03e3b9831badc6b5f17739631e180fc320"
+          }
+        },
         {
           "client_id": "893744414245-jsjpkiqcfokq0atjpj0kla555t1duj9q.apps.googleusercontent.com",
           "client_type": 3

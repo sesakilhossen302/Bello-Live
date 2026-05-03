@@ -41,7 +41,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2d1b2b),
+        backgroundColor: AppColors.bg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Exit App',
@@ -88,29 +88,23 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             },
             child: Scaffold(
               appBar: _buildNewAppBar(),
-              body: Container(
-                decoration: const BoxDecoration(
-                  image: DecorationImage(image: AssetImage('assets/images/home_bg_1.jpeg'), fit: BoxFit.cover),
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildPopularTab(cubit),
-                            SingleChildScrollView(child: _buildFresherGrid(cubit)),
-                            _buildPartyTab(cubit),
-                            // 👉 INJECTED CUBIT HERE
-                            PKTab(cubit: cubit),
-                            _buildGamesTab(),
-                          ],
-                        ),
+              body: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildPopularTab(cubit),
+                          SingleChildScrollView(child: _buildFresherGrid(cubit)),
+                          _buildPartyTab(cubit),
+                          PKTab(cubit: cubit),
+                          _buildGamesTab(),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -122,7 +116,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   PreferredSizeWidget _buildNewAppBar() {
     return AppBar(
-      backgroundColor: Colors.pink,
+      backgroundColor: AppColors.barColor,
       elevation: 0,
       toolbarHeight: 56,
       automaticallyImplyLeading: false,
@@ -422,7 +416,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           gradient: LinearGradient(
-                            colors: [Colors.black.withValues(alpha: 0.7), Colors.black.withValues(alpha: 0.3), Colors.transparent],
+                            colors: [AppColors.black.withValues(alpha: 0.7), AppColors.black.withValues(alpha: 0.3), Colors.transparent],
                             stops: const [0.0, 0.6, 1.0],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
@@ -617,7 +611,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
+        color: AppColors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
       ),

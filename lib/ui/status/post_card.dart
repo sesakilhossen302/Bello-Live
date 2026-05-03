@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/remote/firebase/social_media_service.dart';
 import '../../data/remote/firebase/media_services.dart';
 import 'comment_bottom_sheet.dart';
+import '../../theme/app_theme.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -92,7 +93,7 @@ class _PostCardState extends State<PostCard> {
           }
 
           return AlertDialog(
-            backgroundColor: Colors.grey.shade900,
+            backgroundColor: AppColors.bg,
             title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
             content: SingleChildScrollView(
               child: Column(
@@ -209,7 +210,7 @@ class _PostCardState extends State<PostCard> {
                   if (mounted) Navigator.pop(context);
                   widget.onPostChanged(); // Trigger parent refresh
                 },
-                child: const Text('Save', style: TextStyle(color: Colors.pink)),
+                child: const Text('Save', style: TextStyle(color: AppColors.primary)),
               ),
             ],
           );
@@ -222,7 +223,7 @@ class _PostCardState extends State<PostCard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: AppColors.bg,
         title: const Text('Delete Post?', style: TextStyle(color: Colors.white)),
         content: const Text('This action cannot be undone.', style: TextStyle(color: Colors.white70)),
         actions: [
@@ -248,7 +249,7 @@ class _PostCardState extends State<PostCard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: AppColors.bg,
         title: const Text('Share Post', style: TextStyle(color: Colors.white)),
         content: const Text('Do you want to share this post on your feed?', style: TextStyle(color: Colors.white70)),
         actions: [
@@ -338,8 +339,8 @@ class _PostCardState extends State<PostCard> {
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3)),
+        color: AppColors.white.withValues(alpha: 0.1),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -471,7 +472,7 @@ class _PostCardState extends State<PostCard> {
                   children: [
                     _buildInteractionButton(
                       icon: _isLikedByMe ? Icons.favorite : Icons.favorite_border,
-                      color: _isLikedByMe ? Colors.pink : Colors.white70,
+                      color: _isLikedByMe ? AppColors.primary : Colors.white70,
                       count: _reactionCount,
                       onTap: _toggleLike,
                     ),

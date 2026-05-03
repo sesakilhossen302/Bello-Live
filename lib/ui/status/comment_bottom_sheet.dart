@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/remote/firebase/social_media_service.dart';
+import '../../theme/app_theme.dart';
 
 class CommentBottomSheet {
   static void show(BuildContext context, String postId) {
@@ -54,7 +55,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
       builder: (_, controller) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
+            color: AppColors.bg,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -74,7 +75,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
                 child: StreamBuilder<List<Comment>>(
                   stream: SocialMediaService.getCommentsStream(widget.postId),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.pink));
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
                     final comments = snapshot.data!;
                     if (comments.isEmpty) return const Center(child: Text("No comments yet.", style: TextStyle(color: Colors.white54)));
 
@@ -141,7 +142,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.send, color: Colors.pink),
+                      icon: const Icon(Icons.send, color: AppColors.primary),
                       onPressed: _submitComment,
                     ),
                   ],

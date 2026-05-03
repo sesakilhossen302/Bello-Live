@@ -108,10 +108,6 @@ class _CarouselBannerState extends State<CarouselBanner> {
 
 class BannerUrls {
   static const List<String> liveStreamingBanners = [
-    'assets/banner/banner_1.jpeg',
-    // 'assets/banner/banner_2.jpeg'
-    // 'assets/banner/2.jpeg',
-    // 'assets/banner/3.jpeg',
-    // 'assets/banner/4.jpeg',
+    'assets/banner/banner.png',
   ];
 }

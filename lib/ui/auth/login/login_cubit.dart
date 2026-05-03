@@ -17,8 +17,10 @@ class LoginCubit extends Cubit<LoginState> {
 
   Future<void> _initializeGoogleSignIn() async {
     try {
+      // NOTE: serverClientId should be the "Web Client ID" from your Google Cloud Console.
+      // If you are only using Firebase Auth on Android, you can often leave this empty or use the one from google-services.json.
       await _googleSignIn.initialize(
-        serverClientId: "560026151205-tte03afg5kfkmdqgasc9p5cckblc1lic.apps.googleusercontent.com",
+        serverClientId: "893744414245-jsjpkiqcfokq0atjpj0kla555t1duj9q.apps.googleusercontent.com",
       );
       _isGoogleSignInInitialized = true;
     } catch (e) {
@@ -38,15 +40,29 @@ class LoginCubit extends Cubit<LoginState> {
       await _ensureGoogleSignInInitialized();
 
       // Authenticate with Google
-      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate(scopeHint: ['email', 'profile']);
+      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate(
+        scopeHint: ['email', 'profile'],
+      );
 
-      // Get authorization for Firebase scopes if needed
-      final authClient = _googleSignIn.authorizationClient;
-      final authorization = await authClient.authorizationForScopes(['email']);
+      if (googleUser == null) {
+        emit(state.copyWith(status: LoginStatus.initial));
+        return;
+      }
+
+      // Get ID Token (Synchronous in 7.0.0+)
+      final String? idToken = googleUser.authentication.idToken;
+
+      // Get Access Token (Asynchronous in 7.0.0+ via authorizationClient)
+      final authorization = await googleUser.authorizationClient.authorizationForScopes(['email']);
+      final String? accessToken = authorization?.accessToken;
+
+      if (idToken == null) {
+        throw Exception("Could not get ID Token from Google");
+      }
 
       final credential = GoogleAuthProvider.credential(
-        accessToken: authorization?.accessToken,
-        idToken: googleUser.authentication.idToken,
+        accessToken: accessToken,
+        idToken: idToken,
       );
 
       final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);

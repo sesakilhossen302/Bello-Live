@@ -39,343 +39,353 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: const AssetImage('assets/images/profile_bg.jpeg'),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.4), BlendMode.darken),
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header Section
-              Padding(
-                padding: const EdgeInsets.only(left: 0, right: 20, top: 0, bottom: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: Icon(CupertinoIcons.back, size: 28, color: AppColors.pink),
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                    Text(
-                      'Profile',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 2)),
-                        ],
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header Section
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(CupertinoIcons.back, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'Profile',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      _buildHeaderIconButton(
+                        icon: CupertinoIcons.pencil,
+                        onTap: () => context.push(Routes.editProfile.path),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(CupertinoIcons.pencil, size: 28, color: AppColors.pink),
-                      onPressed: () {
-                        context.push(Routes.editProfile.path);
-                      },
-                    ),
-                    IconButton(
-                      icon: Icon(CupertinoIcons.settings, size: 28, color: AppColors.pink),
-                      onPressed: () {
-                        context.push(Routes.settingsPage.path);
-                      },
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      _buildHeaderIconButton(
+                        icon: CupertinoIcons.settings,
+                        onTap: () => context.push(Routes.settingsPage.path),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              Expanded(
-                child: _userId == null
-                    ? const Center(
-                        child: Text('Please log in to see your profile.', style: TextStyle(color: Colors.white)),
-                      )
-                    : StreamBuilder<DocumentSnapshot>(
-                        stream: ProfileService.getUserProfileStream(_userId!),
-                        builder: (context, snapshot) {
-                          // Handle Loading State
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return Center(child: CircularProgressIndicator(color: AppColors.pink));
-                          }
-
-                          // Handle Error State
-                          if (snapshot.hasError) {
-                            return Center(
-                              child: Text('Error: ${snapshot.error}', style: TextStyle(color: Colors.red.shade300)),
-                            );
-                          }
-
-                          // Handle No Data State
-                          if (!snapshot.hasData || !snapshot.data!.exists) {
-                            return const Center(
-                              child: Text('Profile not found.', style: TextStyle(color: Colors.white70)),
-                            );
-                          }
-
-                          // Handle Success State
-                          final data = snapshot.data!.data() as Map<String, dynamic>;
-                          final uid = snapshot.data!.id;
-
-                          final now = DateTime.now();
-
-                          return FutureBuilder<int>(
-                            future: ProfileService.getMonthlyGiftsReceived(
-                              userId: uid,
-                              year: now.year,
-                              month: now.month,
+            ),
+            Expanded(
+              child: _userId == null
+                  ? const Center(
+                      child: Text(
+                        'Please log in to see your profile.',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    )
+                  : StreamBuilder<DocumentSnapshot>(
+                      stream: ProfileService.getUserProfileStream(_userId!),
+                      builder: (context, snapshot) {
+                        // Handle Loading State
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.pink,
                             ),
-                            builder: (context, diamondSnapshot) {
-                              final int monthlyDiamonds = diamondSnapshot.data ?? 0;
-
-                              // Map Firestore data to our local UserProfile model
-                              final userProfile = UserProfile(
-                                name: data['displayName'] ?? 'No Name',
-                                id: uid,
-                                displayId: data['displayId'] ?? 'N/A',
-                                country: data['country'] ?? 'N/A',
-                                countryFlagEmoji: data['countryFlagEmoji'],
-                                bio: data['bio'] ?? 'No bio yet.',
-                                profileImage: data['photoUrl'] ?? '',
-                                followers: data['followerCount'] ?? 0,
-                                following: data['followingCount'] ?? 0,
-                                diamonds: monthlyDiamonds,
-                                beans: data['balance'] ?? 0,
-                                giftSendingLevel: getSentLevel(data['totalSent'] ?? 0),
-                              );
-
-                              return SingleChildScrollView(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: Column(
-                                  children: [
-                                    const SizedBox(height: 10),
-                                    _buildProfileSection(userProfile),
-                                    const SizedBox(height: 30),
-                                    FutureBuilder<List<SimpleUser>>(
-                                      future: ProfileService.getMutualsList(userProfile.id),
-                                      builder: (context, mutualsSnapshot) {
-                                        if (mutualsSnapshot.connectionState == ConnectionState.waiting) {
-                                          return _buildStatistics(userProfile, null); // Pass null for loading
-                                        }
-                                        final friendsCount = mutualsSnapshot.data?.length ?? 0;
-                                        return _buildStatistics(userProfile, friendsCount);
-                                      },
-                                    ),
-                                    const SizedBox(height: 20),
-                                    _buildAchievementChips(userProfile),
-                                    const SizedBox(height: 30),
-                                    _buildButtonsGrid(),
-                                    const SizedBox(height: 30),
-                                  ],
-                                ),
-                              );
-                            },
                           );
-                        },
-                      ),
-              ),
-            ],
-          ),
+                        }
+
+                        // Handle Error State
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Error: ${snapshot.error}',
+                              style: TextStyle(color: Colors.red.shade300),
+                            ),
+                          );
+                        }
+
+                        // Handle No Data State
+                        if (!snapshot.hasData || !snapshot.data!.exists) {
+                          return const Center(
+                            child: Text(
+                              'Profile not found.',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          );
+                        }
+
+                        // Handle Success State
+                        final data =
+                            snapshot.data!.data() as Map<String, dynamic>;
+                        final uid = snapshot.data!.id;
+
+                        final now = DateTime.now();
+
+                        return FutureBuilder<int>(
+                          future: ProfileService.getMonthlyGiftsReceived(
+                            userId: uid,
+                            year: now.year,
+                            month: now.month,
+                          ),
+                          builder: (context, diamondSnapshot) {
+                            final int monthlyDiamonds =
+                                diamondSnapshot.data ?? 0;
+
+                            // Map Firestore data to our local UserProfile model
+                            final userProfile = UserProfile(
+                              name: data['displayName'] ?? 'No Name',
+                              id: uid,
+                              displayId: data['displayId'] ?? 'N/A',
+                              country: data['country'] ?? 'N/A',
+                              countryFlagEmoji: data['countryFlagEmoji'],
+                              bio: data['bio'] ?? 'No bio yet.',
+                              profileImage: data['photoUrl'] ?? '',
+                              followers: data['followerCount'] ?? 0,
+                              following: data['followingCount'] ?? 0,
+                              diamonds: monthlyDiamonds,
+                              beans: data['balance'] ?? 0,
+                              giftSendingLevel: getSentLevel(
+                                data['totalSent'] ?? 0,
+                              ),
+                            );
+
+                            return SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 10),
+                                  _buildTopAvatar(userProfile),
+                                  const SizedBox(height: 20),
+                                  _buildUserInfoCard(userProfile),
+                                  const SizedBox(height: 10),
+                                  _buildLocationSection(userProfile),
+                                  const SizedBox(height: 20),
+                                  FutureBuilder<int>(
+                                    future: ProfileService.getMutualsList(userProfile.id).then((l) => l.length),
+                                    builder: (context, mutualsSnapshot) {
+                                      final friendsCount = mutualsSnapshot.data ?? 0;
+                                      return _buildStatistics(userProfile, friendsCount);
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+                                  _buildDiamondCard(userProfile),
+                                  const SizedBox(height: 15),
+                                  _buildMenuList(context),
+                                  const SizedBox(height: 30),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildProfileSection(UserProfile userProfile) {
+  Widget _buildHeaderIconButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.barColor,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
+      ),
+    );
+  }
+
+  Widget _buildTopAvatar(UserProfile userProfile) {
     final profileImageUrl = userProfile.profileImage;
+    return SizedBox(
+      width: 160,
+      height: 160,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 160,
+            height: 160,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF7E57C2), // Purple color from screenshot
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 4),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: ClipOval(
+              child: (profileImageUrl.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: profileImageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                      errorWidget: (context, url, error) => const Center(
+                        child: Text(
+                          'F',
+                          style: TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    )
+                  : const Center(
+                      child: Text(
+                        'F',
+                        style: TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+            ),
+          ),
+          Positioned(
+            width: 160 * 1.3,
+            height: 160 * 1.3,
+            child: IgnorePointer(child: ActiveFrameWidget(userId: userProfile.id, size: 160 * 1.3)),
+          ),
+        ],
+      ),
+    );
+  }
 
-    Widget countryIndicator;
-    if (userProfile.countryFlagEmoji != null && userProfile.countryFlagEmoji!.isNotEmpty) {
-      countryIndicator = Text(userProfile.countryFlagEmoji!, style: const TextStyle(fontSize: 16));
-    } else {
-      countryIndicator = Icon(Icons.location_on_rounded, color: Colors.blue.shade300, size: 14);
-    }
-
-    return Column(
-      children: [
-        SizedBox(
-          width: 140,
-          height: 140,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
+  Widget _buildUserInfoCard(UserProfile userProfile) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.barColor.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 35,
+            backgroundColor: const Color(0xFF7E57C2),
+            backgroundImage: userProfile.profileImage.isNotEmpty ? NetworkImage(userProfile.profileImage) : null,
+            child: userProfile.profileImage.isEmpty
+                ? const Text('F', style: TextStyle(color: Colors.white, fontSize: 24))
+                : null,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userProfile.name,
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'ID: ${userProfile.displayId}',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Container(
-                width: 140,
-                height: 140,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.pinkLight, AppColors.pinkDark, Colors.pink.shade400, AppColors.pink600],
-                  ),
-                  boxShadow: [
-                    BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10)),
-                    BoxShadow(color: Colors.pink.withValues(alpha: 0.2), blurRadius: 40, offset: const Offset(0, 0)),
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.shield, color: Colors.white70, size: 24),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${userProfile.giftSendingLevel}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
                   ],
                 ),
-                padding: const EdgeInsets.all(4),
-                child: ClipOval(
-                  child: (profileImageUrl.isNotEmpty)
-                      ? Image.network(
-                          profileImageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [Colors.grey.shade700, Colors.grey.shade800]),
-                              ),
-                              child: const Icon(Icons.person, color: Colors.white, size: 70),
-                            );
-                          },
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [Colors.grey.shade700, Colors.grey.shade800]),
-                          ),
-                          child: const Icon(Icons.person, color: Colors.white, size: 70),
-                        ),
-                ),
               ),
-              // Overlay the Frame (140 * 1.3 = 182)
-              Positioned(
-                width: 182,
-                height: 182,
-                child: IgnorePointer(child: ActiveFrameWidget(userId: userProfile.id, size: 182)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Lv ${userProfile.giftSendingLevel}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationSection(UserProfile userProfile) {
+    return Column(
+      children: [
+        Text(
+          userProfile.country,
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
         ),
-
-        const SizedBox(height: 20),
-
-        // Name
-        ShaderMask(
-          shaderCallback: (bounds) =>
-              LinearGradient(colors: [AppColors.pinkLight, AppColors.pinkDark]).createShader(bounds),
-          child: AutoScrollText(
-            text: userProfile.name,
-            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-          ),
-        ),
-
         const SizedBox(height: 8),
-
-        // Level, ID and Country
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Level Badge
-            Image.asset(
-              'assets/images/levels/rank_caifu_cf_${userProfile.giftSendingLevel}.png',
-              height: 28,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => const SizedBox(),
-            ),
-            const SizedBox(width: 8),
-
-            // ID
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                color: Colors.black.withValues(alpha: 0.3),
-                border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-              ),
-              child: Text(
-                'ID: ${userProfile.displayId}',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Country
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                color: Colors.black.withValues(alpha: 0.3),
-                border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 1),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  countryIndicator,
-                  const SizedBox(width: 4),
-                  Text(
-                    userProfile.country,
-                    style: TextStyle(color: Colors.blue.shade300, fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Text(
-            userProfile.bio,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14, fontStyle: FontStyle.italic),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.barColor.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (userProfile.countryFlagEmoji != null) ...[
+                Text(userProfile.countryFlagEmoji!, style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 8),
+              ],
+              Text(userProfile.country, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatistics(UserProfile userProfile, int? friendsCount) {
+  Widget _buildStatistics(UserProfile userProfile, int friendsCount) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-        boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8))],
+        borderRadius: BorderRadius.circular(25),
+        color: AppColors.barColor.withValues(alpha: 0.8),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStatItem('Friends', friendsCount, Colors.cyan, onTap: _showFriendsBottomSheet),
-              _buildVerticalDivider(),
-              _buildStatItem('Followers', userProfile.followers, Colors.pink, onTap: _showFollowersBottomSheet),
-              _buildVerticalDivider(),
-              _buildStatItem('Following', userProfile.following, Colors.pink, onTap: _showFollowingBottomSheet),
-            ],
-          ),
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatItem(friendsCount.toString(), 'Friends', onTap: _showFriendsBottomSheet),
+          _buildVerticalDivider(),
+          _buildStatItem(userProfile.followers.toString(), 'Followers', onTap: _showFollowersBottomSheet),
+          _buildVerticalDivider(),
+          _buildStatItem(userProfile.following.toString(), 'Following', onTap: _showFollowingBottomSheet),
+        ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, int? count, Color color, {VoidCallback? onTap}) {
-    String displayCount = count == null ? '-' : _formatNumber(count);
+  Widget _buildStatItem(String count, String label, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Column(
         children: [
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(colors: [color, color]).createShader(bounds),
-            child: Text(
-              displayCount,
-              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-            ),
+          Text(
+            count,
+            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14),
           ),
         ],
       ),
@@ -384,186 +394,128 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildVerticalDivider() {
     return Container(
-      height: 40,
+      height: 30,
       width: 1,
+      color: Colors.white.withValues(alpha: 0.2),
+    );
+  }
+
+  Widget _buildDiamondCard(UserProfile userProfile) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.white.withValues(alpha: 0.3), Colors.transparent],
-        ),
+        borderRadius: BorderRadius.circular(25),
+        color: AppColors.barColor.withValues(alpha: 0.8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.diamond_outlined, color: Colors.white70, size: 28),
+          const SizedBox(width: 12),
+          Text(
+            userProfile.diamonds.toString(),
+            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildAchievementChips(UserProfile userProfile) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildAchievementChip(
-          assetIcon: 'assets/icons/beans.svg',
-          count: userProfile.beans,
-          color: Colors.amber,
-          label: 'Beans',
-          onTap: () {
-            context.push(Routes.topUp.path);
-          },
-        ),
-        const SizedBox(width: 16),
-        _buildAchievementChip(
-          icon: Icons.diamond_outlined,
-          count: userProfile.diamonds,
-          color: Colors.cyan,
-          label: 'Diamonds',
-        ),
-      ],
+
+  Widget _buildMenuList(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          _buildMenuItem(
+            icon: Icons.card_giftcard,
+            iconColor: Colors.blueAccent,
+            title: 'Claim 10,000 coins',
+            onTap: () {},
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.account_balance_wallet_outlined,
+            iconColor: Colors.orange,
+            title: 'Top-up',
+            onTap: () => context.push(Routes.topUp.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.trending_up,
+            iconColor: Colors.redAccent,
+            title: 'Earning',
+            onTap: () => context.push(Routes.earnings.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.stars,
+            iconColor: Colors.amber,
+            title: 'VIP',
+            onTap: () => context.push(Routes.vip.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.store,
+            iconColor: Colors.cyan,
+            title: 'Store',
+            onTap: () => context.push(Routes.store.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.palette,
+            iconColor: Colors.deepPurpleAccent,
+            title: 'Theme',
+            onTap: () {},
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.shopping_bag_outlined,
+            iconColor: Colors.orangeAccent,
+            title: 'My Bag',
+            onTap: () => context.push(Routes.myBag.path),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildAchievementChip({
-    IconData? icon,
-    String? assetIcon,
-    required int count,
-    required Color color,
-    required String label,
-    void Function()? onTap,
+  Widget _buildMenuItem({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(25),
-          color: Colors.black.withValues(alpha: 0.3),
-          border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
-          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 6))],
+          color: AppColors.barColor.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) Icon(icon, color: color, size: 24),
-                if (assetIcon != null) SvgPicture.asset(assetIcon, colorFilter: ColorFilter.mode(color, BlendMode.srcIn), width: 24),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _formatNumber(count),
-                      style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      label,
-                      style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ],
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
-          ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const Icon(CupertinoIcons.chevron_right, color: Colors.white54, size: 18),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _buildButtonsGrid() {
-    final buttons = [
-      ProfileButton(
-        title: 'Top Up',
-        icon: Icons.account_balance_wallet_rounded,
-        onTap: () {
-          context.push(Routes.topUp.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Earnings',
-        icon: Icons.trending_up_rounded,
-        onTap: () {
-          context.push(Routes.earnings.path);
-        },
-      ),
-      ProfileButton(
-        title: 'VIP',
-        icon: Icons.diamond_outlined,
-        onTap: () {
-          context.push(Routes.vip.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Store',
-        icon: Icons.shopping_bag_rounded,
-        onTap: () {
-          context.push(Routes.store.path);
-        },
-      ),
-      ProfileButton(
-        title: 'My Bag',
-        icon: Icons.shopping_basket_rounded,
-        onTap: () {
-          context.push(Routes.myBag.path);
-        },
-      ),
-      ProfileButton(
-        title: 'My Level',
-        icon: Icons.military_tech_rounded,
-        onTap: () {
-          context.push(Routes.myLevel.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Support',
-        icon: Icons.support_agent_rounded,
-        onTap: () {
-          context.push(Routes.feedback.path);
-        },
-      ),
-      ProfileButton(title: 'Blocked', icon: Icons.block_rounded),
-      ProfileButton(
-        title: 'My Invites',
-        icon: Icons.group_add_rounded,
-        onTap: () {
-          context.push(Routes.myInvites.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Profile Visitors',
-        icon: Icons.visibility_rounded,
-        onTap: () {
-          context.push(Routes.visitors.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Apply Hosting',
-        icon: Icons.live_tv_rounded,
-        onTap: () {
-          context.push(Routes.applyHosting.path);
-        },
-      ),
-      ProfileButton(
-        title: 'Apply Agency',
-        icon: Icons.business_rounded,
-        onTap: () {
-          context.push(Routes.applyAgency.path);
-        },
-      ),
-    ];
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: buttons.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 2.3,
-      ),
-      itemBuilder: (context, index) {
-        final button = buttons[index];
-        return button;
-      },
     );
   }
 
@@ -615,7 +567,12 @@ class ProfileButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
 
-  const ProfileButton({super.key, required this.title, required this.icon, this.onTap});
+  const ProfileButton({
+    super.key,
+    required this.title,
+    required this.icon,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -630,18 +587,25 @@ class ProfileButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(30),
-          color: Colors.transparent,
-          border: Border.all(color: const Color(0xFF5E4710), width: 1),
+          color: AppColors.white.withValues(alpha: 0.1),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            width: 1,
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Icon(icon, color: const Color(0xFFCA9B34), size: 24),
+            Icon(icon, color: AppColors.primary, size: 24),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -693,7 +657,12 @@ class UserListBottomSheet extends StatefulWidget {
   final String userId;
   final UserListType listType;
 
-  const UserListBottomSheet({super.key, required this.title, required this.userId, required this.listType});
+  const UserListBottomSheet({
+    super.key,
+    required this.title,
+    required this.userId,
+    required this.listType,
+  });
 
   @override
   State<UserListBottomSheet> createState() => _UserListBottomSheetState();
@@ -751,7 +720,8 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
           final roomData = entry.value as Map<dynamic, dynamic>;
 
           if (roomData['isActive'] == true) {
-            final participants = roomData['room_participants'] as Map<dynamic, dynamic>?;
+            final participants =
+                roomData['room_participants'] as Map<dynamic, dynamic>?;
             if (participants != null && participants.containsKey(userId)) {
               final participant = participants[userId] as Map<dynamic, dynamic>;
               final isHost = roomData['hostId'] == userId;
@@ -779,7 +749,8 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
           final roomData = entry.value as Map<dynamic, dynamic>;
 
           if (roomData['isActive'] == true) {
-            final participants = roomData['participants'] as Map<dynamic, dynamic>?;
+            final participants =
+                roomData['participants'] as Map<dynamic, dynamic>?;
             if (participants != null && participants.containsKey(userId)) {
               final participant = participants[userId] as Map<dynamic, dynamic>;
               final isHost = roomData['hostId'] == userId;
@@ -810,7 +781,10 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
       height: MediaQuery.of(context).size.height * 0.75,
       decoration: const BoxDecoration(
         color: Color(0xFF2d1b2b), // Match your app's bottom sheet background
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(25),
+          topRight: Radius.circular(25),
+        ),
       ),
       child: Column(
         children: [
@@ -822,7 +796,11 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
               children: [
                 Text(
                   widget.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white),
@@ -836,14 +814,22 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
           // User List
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: AppColors.pink))
+                ? Center(
+                    child: CircularProgressIndicator(color: AppColors.pink),
+                  )
                 : _error.isNotEmpty
                 ? Center(
-                    child: Text('Error: $_error', style: const TextStyle(color: Colors.red)),
+                    child: Text(
+                      'Error: $_error',
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   )
                 : _users.isEmpty
                 ? Center(
-                    child: Text('No ${widget.title.toLowerCase()} yet', style: const TextStyle(color: Colors.white70)),
+                    child: Text(
+                      'No ${widget.title.toLowerCase()} yet',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -854,7 +840,10 @@ class _UserListBottomSheetState extends State<UserListBottomSheet> {
                         future: _getUserRoomStatus(user.id),
                         builder: (context, snapshot) {
                           final roomStatus = snapshot.data;
-                          return UserListTile(user: user, roomStatus: roomStatus);
+                          return UserListTile(
+                            user: user,
+                            roomStatus: roomStatus,
+                          );
                         },
                       );
                     },
@@ -904,11 +893,20 @@ class UserListTile extends StatelessWidget {
 
     // Navigate based on room type
     if (roomStatus!.isLiveStream) {
-      context.push(Routes.liveStream.path, extra: {"roomId": roomStatus!.roomId, "isHost": false});
+      context.push(
+        Routes.liveStream.path,
+        extra: {"roomId": roomStatus!.roomId, "isHost": false},
+      );
     } else if (!roomStatus!.isVideo) {
-      context.push(Routes.audioRoom.path, extra: {"roomId": roomStatus!.roomId, "isHost": false});
+      context.push(
+        Routes.audioRoom.path,
+        extra: {"roomId": roomStatus!.roomId, "isHost": false},
+      );
     } else {
-      context.push(Routes.videoRoom.path, extra: {"roomId": roomStatus!.roomId, "isHost": false});
+      context.push(
+        Routes.videoRoom.path,
+        extra: {"roomId": roomStatus!.roomId, "isHost": false},
+      );
     }
   }
 
@@ -961,7 +959,12 @@ class UserListTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isInRoom ? Colors.green.withValues(alpha: 0.5) : Colors.pink.withValues(alpha: 0.3), width: 1),
+        border: Border.all(
+          color: isInRoom
+              ? Colors.green.withValues(alpha: 0.5)
+              : Colors.pink.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
@@ -983,18 +986,31 @@ class UserListTile extends StatelessWidget {
                         CircleAvatar(
                           radius: 28,
                           backgroundColor: Colors.grey,
-                          backgroundImage: user.pictureUrl != null && user.pictureUrl!.isNotEmpty
+                          backgroundImage:
+                              user.pictureUrl != null &&
+                                  user.pictureUrl!.isNotEmpty
                               ? CachedNetworkImageProvider(user.pictureUrl!)
                               : null,
-                          child: user.pictureUrl == null || user.pictureUrl!.isEmpty
-                              ? const Icon(Icons.person, color: Colors.white, size: 28)
+                          child:
+                              user.pictureUrl == null ||
+                                  user.pictureUrl!.isEmpty
+                              ? const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 28,
+                                )
                               : null,
                         ),
                         // Overlay the Frame (56 * 1.3 = 72.8)
                         Positioned(
                           width: 72.8,
                           height: 72.8,
-                          child: IgnorePointer(child: ActiveFrameWidget(userId: user.id, size: 72.8)),
+                          child: IgnorePointer(
+                            child: ActiveFrameWidget(
+                              userId: user.id,
+                              size: 72.8,
+                            ),
+                          ),
                         ),
                         if (isInRoom)
                           Positioned(
@@ -1006,7 +1022,10 @@ class UserListTile extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: Colors.green,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -1023,7 +1042,11 @@ class UserListTile extends StatelessWidget {
                       children: [
                         Text(
                           user.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1031,7 +1054,11 @@ class UserListTile extends StatelessWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              Icon(_getRoomIcon(), color: Colors.green, size: 14),
+                              Icon(
+                                _getRoomIcon(),
+                                color: Colors.green,
+                                size: 14,
+                              ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
@@ -1061,14 +1088,23 @@ class UserListTile extends StatelessWidget {
             GestureDetector(
               onTap: () => _joinRoom(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [AppColors.pinkLight, AppColors.pinkDark]),
+                  gradient: LinearGradient(
+                    colors: [AppColors.pinkLight, AppColors.pinkDark],
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
                   'Join',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

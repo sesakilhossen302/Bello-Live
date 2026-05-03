@@ -17,19 +17,19 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
           child: Column(
             children: [
               // Header Section
-              Padding(
+              Container(
+                color: AppColors.barColor,
                 padding: const EdgeInsets.only(left: 0, right: 20, top: 0, bottom: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: Icon(CupertinoIcons.back, size: 28, color: AppColors.pink),
+                      icon: Icon(CupertinoIcons.back, size: 28, color: Colors.white),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     Text(
@@ -38,9 +38,6 @@ class SettingsPage extends StatelessWidget {
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        shadows: [
-                          Shadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 2)),
-                        ],
                       ),
                     ),
                     const SizedBox(width: 48), // Balance the back button
@@ -181,7 +178,6 @@ class SettingsPage extends StatelessWidget {
               ),
             ],
           ),
-        ),
       ),
     );
   }
@@ -198,16 +194,15 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: Colors.black.withValues(alpha: 0.3),
-          border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-          boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8))],
+          color: AppColors.white.withValues(alpha: 0.1),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.pink.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: AppColors.pink, size: 24),
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: AppColors.primary, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -230,7 +225,7 @@ class SettingsPage extends StatelessWidget {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A2E),
+            backgroundColor: AppColors.bg,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(color: Colors.pink.withValues(alpha: 0.3)),
@@ -249,7 +244,7 @@ class SettingsPage extends StatelessWidget {
                 onPressed: () => Navigator.of(context).pop(true),
                 child: Text(
                   'Logout',
-                  style: TextStyle(color: AppColors.pink, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -268,22 +263,21 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(colors: [Colors.pink.withValues(alpha: 0.3), Colors.red.withValues(alpha: 0.3)]),
-          border: Border.all(color: Colors.red.withValues(alpha: 0.5), width: 1),
-          boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8))],
+          gradient: LinearGradient(colors: [Colors.red.withValues(alpha: 0.5), Colors.red.withValues(alpha: 0.8)]),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(CupertinoIcons.square_arrow_right, color: Colors.red, size: 24),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(CupertinoIcons.square_arrow_right, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
             const Text(
               'Logout',
-              style: TextStyle(color: Colors.red, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
         ),

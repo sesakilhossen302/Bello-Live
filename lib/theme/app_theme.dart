@@ -15,7 +15,7 @@ class AppTheme {
     colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
 
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.transparent, // transparent app bar
+      backgroundColor: AppColors.barColor, // Updated bar color
       elevation: 0,
       scrolledUnderElevation: 0,
       systemOverlayStyle: SystemUiOverlayStyle(
@@ -28,7 +28,7 @@ class AppTheme {
         // white icons (iOS)
 
         // Navigation bar
-        systemNavigationBarColor: Colors.black,
+        systemNavigationBarColor: AppColors.bg,
         // or AppColors.bg
         systemNavigationBarIconBrightness: Brightness.light, // white icons
       ),
@@ -37,28 +37,29 @@ class AppTheme {
 }
 
 class AppColors {
-  static Color primary = pinkDark;
-  static const Color primaryLight = Color(0xFFDAE3F1);
-  static const Color bg = Color(0xFFFFFFFF);
-  static const Color text = Color(0xFF1E1E1E);
-  static const Color textLight = Color(0xFF616161);
+  static const Color primary = Color(0xFFFFC0CB); // Light Pink from user image
+  static const Color primaryLight = Color(0xFFFFB6C1);
+  static const Color bg = Color(0xFFD69AA4); // Solid dusty rose from user image
+  static const Color barColor = Color(0xFF8B6C77); // Darker dusty rose for bars
+  static const Color text = Color(0xFFFFFFFF);
+  static const Color textLight = Color(0xFFE0E0E0);
 
   // Primary colors
   static const Color black = Colors.black;
   static const Color white = Colors.white;
 
-  static Color pinkLight = Colors.pink.shade300;
-  static Color pinkDark = Colors.pink.shade500;
-  static Color pink400 = Colors.pink.shade400;
-  static Color pink = Colors.pink;
-  static Color pink600 = Colors.pink.shade600;
+  static const Color pinkLight = Color(0xFFFFD1DC);
+  static const Color pinkDark = Color(0xFFFFB6C1);
+  static const Color pink400 = Color(0xFFFFC0CB);
+  static const Color pink = Color(0xFFFFC0CB);
+  static const Color pink600 = Color(0xFFF8BBD0);
 
   // Background gradient
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF000000), Color(0xFF1a0a0a), Color(0xFF2d1b2b), Color(0xFF4a2c4a), Color(0xFFff6b9d)],
-    stops: [0.0, 0.3, 0.6, 0.8, 1.0],
+    colors: [Color(0xFFD69AA4), Color(0xFFD69AA4)],
+    stops: [0.0, 1.0],
   );
 
   // Logo gradient
@@ -69,22 +70,22 @@ class AppColors {
   );
 
   // Tab indicator gradient
-  static LinearGradient tabIndicatorGradient = LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]);
+  static LinearGradient tabIndicatorGradient = LinearGradient(colors: [pink400, pink600]);
 
   // Button gradient
-  static LinearGradient buttonGradient = LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]);
+  static LinearGradient buttonGradient = LinearGradient(colors: [pink400, pink600]);
 
   // Shadows
   static List<BoxShadow> logoShadow = [
-    BoxShadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10)),
+    BoxShadow(color: pink.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10)),
   ];
 
   static List<BoxShadow> buttonShadow = [
-    BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 6)),
+    BoxShadow(color: pink.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 6)),
   ];
 
   // Input decoration colors
-  static Color inputBorderColor = Colors.pink.withValues(alpha: 0.3);
+  static Color inputBorderColor = pink.withValues(alpha: 0.3);
   static Color inputBackground = Colors.black.withValues(alpha: 0.2);
 
   // Divider gradients

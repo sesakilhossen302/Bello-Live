@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import '../theme/app_theme.dart';
 
 class MyBottomNavBar extends StatefulWidget {
   final int selectedPosition;
@@ -85,19 +86,11 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
         Container(
           height: 70,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.black.withValues(alpha: 0.8),
-                Colors.pink.shade900.withValues(alpha: 0.3),
-                Colors.black.withValues(alpha: 0.9),
-              ],
-            ),
-            border: Border(top: BorderSide(color: Colors.pink.withValues(alpha: 0.2), width: 1)),
+            color: AppColors.barColor,
+            border: Border(top: BorderSide(color: AppColors.pink.withValues(alpha: 0.2), width: 1)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -5)),
-              BoxShadow(color: Colors.pink.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 0)),
+              BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, -5)),
+              BoxShadow(color: AppColors.pink.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 0)),
             ],
           ),
           child: ClipRect(
@@ -124,7 +117,7 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
 
   Widget _buildCenterButton() {
     final isSelected = widget.selectedPosition == 2;
-    final gradientColors = [Colors.pink.shade400, Colors.pink.shade600, Colors.pink.shade800];
+    final gradientColors = [AppColors.pink400, AppColors.pink, AppColors.pink600];
 
     return GestureDetector(
       onTap: () {
@@ -142,9 +135,9 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
                 shape: BoxShape.circle,
                 gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradientColors),
                 boxShadow: [
-                  BoxShadow(color: Colors.pink.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 3, offset: Offset(0, 4)),
+                  BoxShadow(color: AppColors.pink.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 3, offset: Offset(0, 4)),
                   BoxShadow(
-                    color: Colors.pink.shade800.withValues(alpha: 0.4),
+                    color: AppColors.pink600.withValues(alpha: 0.4),
                     blurRadius: 15,
                     spreadRadius: 0,
                     offset: Offset(0, 2),
@@ -191,11 +184,11 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
                             ? LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [Colors.pink.shade300.withValues(alpha: 0.3), Colors.pink.shade500.withValues(alpha: 0.2)],
+                                colors: [AppColors.pinkLight.withValues(alpha: 0.3), AppColors.pinkDark.withValues(alpha: 0.2)],
                               )
                             : null,
                         boxShadow: isSelected
-                            ? [BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 2)]
+                            ? [BoxShadow(color: AppColors.pink.withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 2)]
                             : null,
                       ),
                       child: Icon(
@@ -212,7 +205,7 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                      color: isSelected ? Colors.pink.shade300 : Colors.white.withValues(alpha: 0.6),
+                      color: isSelected ? AppColors.primary : Colors.white.withValues(alpha: 0.6),
                     ),
                   ),
                 ],

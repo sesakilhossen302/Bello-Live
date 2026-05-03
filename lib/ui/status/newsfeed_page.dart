@@ -11,6 +11,7 @@ import '../../data/remote/firebase/social_media_service.dart';
 import '../../data/remote/firebase/media_services.dart'; // Make sure this path matches your project
 import '../../navigation/routes.dart';
 import 'post_card.dart';
+import '../../theme/app_theme.dart';
 
 class NewsfeedPage extends StatefulWidget {
   const NewsfeedPage({super.key});
@@ -238,16 +239,8 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF000000), Color(0xFF1a0a0a), Color(0xFF2d1b2b), Color(0xFF4a2c4a), Color(0xFFff6b9d)],
-            stops: [0.0, 0.3, 0.6, 0.8, 1.0],
-          ),
-        ),
-        child: SafeArea(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -291,20 +284,20 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
             ],
           ),
         ),
-      ),
     );
   }
 
   // --- UI COMPONENTS ---
 
   Widget _buildAppBar() {
-    return Padding(
+    return Container(
+      color: AppColors.barColor,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(CupertinoIcons.back, size: 28, color: Colors.pink),
+            icon: const Icon(CupertinoIcons.back, size: 28, color: Colors.white),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           const Text(
@@ -312,7 +305,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           IconButton(
-            icon: const Icon(Icons.person_outline, size: 28, color: Colors.pink),
+            icon: const Icon(Icons.person_outline, size: 28, color: Colors.white),
             onPressed: () => context.push(Routes.myFeed.path),
           ),
         ],
@@ -326,8 +319,8 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3)),
+        color: AppColors.white.withValues(alpha: 0.1),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(25),
@@ -362,7 +355,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            gradient: isSelected ? LinearGradient(colors: [Colors.pink.shade300, Colors.pink.shade600]) : null,
+            gradient: isSelected ? LinearGradient(colors: [AppColors.pinkLight, AppColors.pinkDark]) : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -391,8 +384,8 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(25),
-          color: Colors.black.withValues(alpha: 0.3),
-          border: Border.all(color: Colors.pink.withValues(alpha: 0.3)),
+          color: AppColors.white.withValues(alpha: 0.1),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(25),

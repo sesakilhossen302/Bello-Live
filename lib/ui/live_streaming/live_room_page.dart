@@ -49,7 +49,10 @@ class LiveStreamParticipant {
     required this.isOnSeat,
   });
 
-  factory LiveStreamParticipant.fromRTDB(String key, Map<dynamic, dynamic> data) {
+  factory LiveStreamParticipant.fromRTDB(
+    String key,
+    Map<dynamic, dynamic> data,
+  ) {
     return LiveStreamParticipant(
       userId: data['userId'] ?? key,
       userName: data['userName'] ?? 'Unknown',
@@ -67,7 +70,12 @@ class JoinRequest {
   final String userName;
   final String? userPicture;
 
-  JoinRequest({required this.requestId, required this.userId, required this.userName, this.userPicture});
+  JoinRequest({
+    required this.requestId,
+    required this.userId,
+    required this.userName,
+    this.userPicture,
+  });
 
   factory JoinRequest.fromRTDB(String key, Map<dynamic, dynamic> data) {
     return JoinRequest(
@@ -103,7 +111,12 @@ class EmojiEvent {
   final String emojiUrl;
   final String emojiName;
 
-  EmojiEvent({required this.senderId, required this.senderName, required this.emojiUrl, required this.emojiName});
+  EmojiEvent({
+    required this.senderId,
+    required this.senderName,
+    required this.emojiUrl,
+    required this.emojiName,
+  });
 }
 
 // --- PAGE ---
@@ -117,7 +130,8 @@ class LiveStreamPage extends StatefulWidget {
   State<LiveStreamPage> createState() => _LiveStreamPageState();
 }
 
-class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProviderStateMixin {
+class _LiveStreamPageState extends State<LiveStreamPage>
+    with SingleTickerProviderStateMixin {
   late MusicPlayerManager _musicPlayerManager;
 
   final TextEditingController _chatController = TextEditingController();
@@ -158,7 +172,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
   String _currentUserName = "Me";
   final Set<String> _dialogsShownForInviteIds = {};
   String _roomNotice = "";
-  final ZegoVoiceChangerPreset _currentVoicePreset = ZegoVoiceChangerPreset.None;
+  final ZegoVoiceChangerPreset _currentVoicePreset =
+      ZegoVoiceChangerPreset.None;
   final bool _isSpeakerOn = true;
 
   // --- Join Animation Variables ---
@@ -200,7 +215,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     _musicPlayerManager = MusicPlayerManager();
 
     // Initialize Animation Controller
-    _joinAnimationController = AnimationController(duration: welcomeTime, vsync: this);
+    _joinAnimationController = AnimationController(
+      duration: welcomeTime,
+      vsync: this,
+    );
     _joinAnimationOffset = TweenSequence<Offset>([
       TweenSequenceItem(
         tween: Tween<Offset>(
@@ -209,7 +227,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         ).chain(CurveTween(curve: Curves.linear)),
         weight: 1.0,
       ),
-      TweenSequenceItem(tween: ConstantTween<Offset>(const Offset(0.0, 0.0)), weight: 3.0),
+      TweenSequenceItem(
+        tween: ConstantTween<Offset>(const Offset(0.0, 0.0)),
+        weight: 3.0,
+      ),
       TweenSequenceItem(
         tween: Tween<Offset>(
           begin: const Offset(0.0, 0.0),
@@ -227,12 +248,16 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
 
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(statusBarColor: Colors.transparent, systemNavigationBarColor: Colors.transparent),
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+      ),
     );
   }
 
   void _updateChatExpansion() {
-    final shouldExpand = _chatFocusNode.hasFocus || _chatController.text.isNotEmpty;
+    final shouldExpand =
+        _chatFocusNode.hasFocus || _chatController.text.isNotEmpty;
     if (_isChatExpanded != shouldExpand) {
       setState(() {
         _isChatExpanded = shouldExpand;
@@ -270,7 +295,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     if (_isInitialized) {
       if (widget.isHost) {
         if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
-          LiveStreamService.endPKBattle(widget.roomID, _pkState['opponentRoomId']);
+          LiveStreamService.endPKBattle(
+            widget.roomID,
+            _pkState['opponentRoomId'],
+          );
 
           String opponentHostId = _pkState['opponentHostId'] ?? '';
           if (opponentHostId.isNotEmpty) {
@@ -287,13 +315,18 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       ZegoUIKit().logout();
       ZegoUIKit().uninit();
     }
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     super.dispose();
   }
 
   Future<void> _initialize() async {
     try {
-      final permissions = widget.isHost ? [Permission.microphone, Permission.camera] : [Permission.microphone];
+      final permissions = widget.isHost
+          ? [Permission.microphone, Permission.camera]
+          : [Permission.microphone];
       if (!await _checkPermissions(permissions)) {
         if (mounted) context.pop();
         return;
@@ -315,7 +348,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     } catch (e) {
       debugPrint('Error initializing live stream: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
         context.pop();
       }
     }
@@ -406,37 +441,50 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       String opponentRoomId = newPKState['opponentRoomId'] ?? '';
       String opponentHostId = newPKState['opponentHostId'] ?? '';
       if (opponentRoomId.isNotEmpty && opponentHostId.isNotEmpty) {
-        debugPrint("Sender is starting to play opponent's stream: $opponentHostId");
-        ZegoUIKit().startPlayAnotherRoomAudioVideo(opponentRoomId, opponentHostId);
+        debugPrint(
+          "Sender is starting to play opponent's stream: $opponentHostId",
+        );
+        ZegoUIKit().startPlayAnotherRoomAudioVideo(
+          opponentRoomId,
+          opponentHostId,
+        );
       }
     }
 
     final dynamic pkEndTimeValue = newPKState['pkEndTime'];
     if (pkEndTimeValue != null) {
-      final DateTime pkEndTime = DateTime.fromMillisecondsSinceEpoch(pkEndTimeValue as int);
+      final DateTime pkEndTime = DateTime.fromMillisecondsSinceEpoch(
+        pkEndTimeValue as int,
+      );
       _startPKTimer(pkEndTime);
     }
 
     _opponentParticipantsSubscription?.cancel();
-    _opponentParticipantsSubscription = LiveStreamService.getRoomParticipants(newPKState['opponentRoomId']).listen((
-      event,
-    ) {
-      if (!event.snapshot.exists) {
-        if (mounted) setState(() => _opponentParticipants = []);
-        return;
-      }
+    _opponentParticipantsSubscription =
+        LiveStreamService.getRoomParticipants(
+          newPKState['opponentRoomId'],
+        ).listen((event) {
+          if (!event.snapshot.exists) {
+            if (mounted) setState(() => _opponentParticipants = []);
+            return;
+          }
 
-      final participantsMap = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-      final newOpponentParticipants = participantsMap.entries
-          .map((entry) => LiveStreamParticipant.fromRTDB(entry.key, entry.value))
-          .toList();
+          final participantsMap = Map<dynamic, dynamic>.from(
+            event.snapshot.value as Map,
+          );
+          final newOpponentParticipants = participantsMap.entries
+              .map(
+                (entry) =>
+                    LiveStreamParticipant.fromRTDB(entry.key, entry.value),
+              )
+              .toList();
 
-      if (mounted) {
-        setState(() {
-          _opponentParticipants = newOpponentParticipants;
+          if (mounted) {
+            setState(() {
+              _opponentParticipants = newOpponentParticipants;
+            });
+          }
         });
-      }
-    });
 
     setState(() async {
       _isPKMode = true;
@@ -484,7 +532,13 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     color: Colors.black,
                     fontWeight: FontWeight.w900,
                     fontSize: 22,
-                    shadows: [BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 2)],
+                    shadows: [
+                      BoxShadow(
+                        color: Colors.black54,
+                        blurRadius: 4,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -531,7 +585,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
   }
 
   void _setupListeners() {
-    _roomSubscription = LiveStreamService.getRoomStream(widget.roomID).listen((event) {
+    _roomSubscription = LiveStreamService.getRoomStream(widget.roomID).listen((
+      event,
+    ) {
       if (event.snapshot.exists && mounted) {
         final data = Map<String, dynamic>.from(event.snapshot.value as Map);
         setState(() {
@@ -577,7 +633,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       }
     });
 
-    _messageSubscription = ZegoUIKit().getInRoomMessageStream().listen((message) {
+    _messageSubscription = ZegoUIKit().getInRoomMessageStream().listen((
+      message,
+    ) {
       if (mounted) {
         setState(() {
           _messages.insert(
@@ -594,65 +652,83 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       }
     });
 
-    _participantsSubscription = LiveStreamService.getRoomParticipants(widget.roomID).listen((event) {
-      if (!event.snapshot.exists) {
-        if (mounted) setState(() => _participants = []);
-        return;
-      }
-      final participantsMap = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-      final newParticipants = participantsMap.entries
-          .map((entry) => LiveStreamParticipant.fromRTDB(entry.key, entry.value))
-          .toList();
+    _participantsSubscription =
+        LiveStreamService.getRoomParticipants(widget.roomID).listen((event) {
+          if (!event.snapshot.exists) {
+            if (mounted) setState(() => _participants = []);
+            return;
+          }
+          final participantsMap = Map<dynamic, dynamic>.from(
+            event.snapshot.value as Map,
+          );
+          final newParticipants = participantsMap.entries
+              .map(
+                (entry) =>
+                    LiveStreamParticipant.fromRTDB(entry.key, entry.value),
+              )
+              .toList();
 
-      if (_participants.isNotEmpty && _newJoinerName == null) {
-        final oldParticipantIds = _participants.map((p) => p.userId).toSet();
-        final String hostId = roomData['hostId'] ?? '';
+          if (_participants.isNotEmpty && _newJoinerName == null) {
+            final oldParticipantIds = _participants
+                .map((p) => p.userId)
+                .toSet();
+            final String hostId = roomData['hostId'] ?? '';
 
-        final newGuests = newParticipants
-            .where((p) => !oldParticipantIds.contains(p.userId) && p.userId != hostId)
-            .toList();
+            final newGuests = newParticipants
+                .where(
+                  (p) =>
+                      !oldParticipantIds.contains(p.userId) &&
+                      p.userId != hostId,
+                )
+                .toList();
 
-        if (newGuests.isNotEmpty) {
-          _showJoinAnimation(newGuests.first.userName);
-        }
-      }
+            if (newGuests.isNotEmpty) {
+              _showJoinAnimation(newGuests.first.userName);
+            }
+          }
 
-      final currentUser = _auth.currentUser!;
-      final isNowJoined = newParticipants.any((p) => p.userId == currentUser.uid && p.isOnSeat);
+          final currentUser = _auth.currentUser!;
+          final isNowJoined = newParticipants.any(
+            (p) => p.userId == currentUser.uid && p.isOnSeat,
+          );
 
-      if (isNowJoined && !_isJoined) {
-        debugPrint("Join request approved! Starting local audio stream.");
-        ZegoUIKit().turnMicrophoneOn(true);
-      }
+          if (isNowJoined && !_isJoined) {
+            debugPrint("Join request approved! Starting local audio stream.");
+            ZegoUIKit().turnMicrophoneOn(true);
+          }
 
-      if (mounted) {
-        setState(() {
-          _participants = newParticipants;
-          _isJoined = isNowJoined;
+          if (mounted) {
+            setState(() {
+              _participants = newParticipants;
+              _isJoined = isNowJoined;
+            });
+          }
         });
-      }
-    });
 
-    _emojiSubscription = LiveStreamService.getEmojiStream(widget.roomID).listen((event) {
-      if (!mounted || !event.snapshot.exists || event.snapshot.value == null) return;
+    _emojiSubscription = LiveStreamService.getEmojiStream(widget.roomID).listen(
+      (event) {
+        if (!mounted || !event.snapshot.exists || event.snapshot.value == null)
+          return;
 
-      if (event.snapshot.value is! Map) return;
-      final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-      final timestamp = data['timestamp'] as int? ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
+        if (event.snapshot.value is! Map) return;
+        final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        final timestamp = data['timestamp'] as int? ?? 0;
+        final now = DateTime.now().millisecondsSinceEpoch;
 
-      if (now - timestamp < 5000) {
-        _showEmoji(
-          senderId: data['senderId'] ?? '',
-          senderName: data['senderName'] ?? 'Unknown',
-          emojiUrl: data['emojiUrl'] ?? '',
-          emojiName: data['emojiName'] ?? '',
-        );
-      }
-    });
+        if (now - timestamp < 5000) {
+          _showEmoji(
+            senderId: data['senderId'] ?? '',
+            senderName: data['senderName'] ?? 'Unknown',
+            emojiUrl: data['emojiUrl'] ?? '',
+            emojiName: data['emojiName'] ?? '',
+          );
+        }
+      },
+    );
 
     LiveStreamService.getGiftStream(widget.roomID).listen((event) {
-      if (!mounted || !event.snapshot.exists || event.snapshot.value == null) return;
+      if (!mounted || !event.snapshot.exists || event.snapshot.value == null)
+        return;
 
       if (event.snapshot.value is! Map) return;
       final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
@@ -678,7 +754,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           setState(() {
             String giftMessageText;
             if (receiverName != null && receiverName.isNotEmpty) {
-              giftMessageText = '$senderName sent $giftValue diamonds to $receiverName';
+              giftMessageText =
+                  '$senderName sent $giftValue diamonds to $receiverName';
             } else {
               giftMessageText = '$senderName sent $giftValue diamonds';
             }
@@ -712,59 +789,73 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     });
 
     if (widget.isHost) {
-      _joinRequestsSubscription = LiveStreamService.getJoinRequestsStream(widget.roomID).listen((event) {
-        if (!event.snapshot.exists) {
-          if (mounted) setState(() => _joinRequests = []);
-          return;
-        }
-        final requestsMap = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-        final requests = requestsMap.entries.map((entry) => JoinRequest.fromRTDB(entry.key, entry.value)).toList();
-        if (mounted) setState(() => _joinRequests = requests);
-      });
+      _joinRequestsSubscription =
+          LiveStreamService.getJoinRequestsStream(widget.roomID).listen((
+            event,
+          ) {
+            if (!event.snapshot.exists) {
+              if (mounted) setState(() => _joinRequests = []);
+              return;
+            }
+            final requestsMap = Map<dynamic, dynamic>.from(
+              event.snapshot.value as Map,
+            );
+            final requests = requestsMap.entries
+                .map((entry) => JoinRequest.fromRTDB(entry.key, entry.value))
+                .toList();
+            if (mounted) setState(() => _joinRequests = requests);
+          });
 
-      _pkInvitesSubscription = LiveStreamService.getPKInvitesStream(widget.roomID).listen((invites) {
-        debugPrint('Received PK invites: $invites');
-        setState(() {
-          _pendingInvites = invites;
-        });
+      _pkInvitesSubscription =
+          LiveStreamService.getPKInvitesStream(widget.roomID).listen((invites) {
+            debugPrint('Received PK invites: $invites');
+            setState(() {
+              _pendingInvites = invites;
+            });
 
-        final newInvite = invites.firstWhereOrNull((invite) => !_dialogsShownForInviteIds.contains(invite.id));
+            final newInvite = invites.firstWhereOrNull(
+              (invite) => !_dialogsShownForInviteIds.contains(invite.id),
+            );
 
-        if (newInvite != null) {
-          _dialogsShownForInviteIds.add(newInvite.id);
-          _showPKInviteDialog(newInvite);
-        }
-      });
+            if (newInvite != null) {
+              _dialogsShownForInviteIds.add(newInvite.id);
+              _showPKInviteDialog(newInvite);
+            }
+          });
 
-      _globalRandomPKInvitesSubscription = LiveStreamService.getGlobalRandomPKInvitesStream().listen((invites) {
-        if (invites.isEmpty) return;
+      _globalRandomPKInvitesSubscription =
+          LiveStreamService.getGlobalRandomPKInvitesStream().listen((invites) {
+            if (invites.isEmpty) return;
 
-        for (final invite in invites) {
-          if (invite.senderRoomId == widget.roomID) continue;
-          if (_dialogsShownForInviteIds.contains(invite.id)) continue;
+            for (final invite in invites) {
+              if (invite.senderRoomId == widget.roomID) continue;
+              if (_dialogsShownForInviteIds.contains(invite.id)) continue;
 
-          _dialogsShownForInviteIds.add(invite.id);
+              _dialogsShownForInviteIds.add(invite.id);
 
-          if (_currentRandomPKDialogContext != null) {
-            Navigator.of(_currentRandomPKDialogContext!).pop();
-            _currentRandomPKDialogContext = null;
-          }
+              if (_currentRandomPKDialogContext != null) {
+                Navigator.of(_currentRandomPKDialogContext!).pop();
+                _currentRandomPKDialogContext = null;
+              }
 
-          _showGlobalRandomPKInviteDialog(invite);
-        }
-      });
+              _showGlobalRandomPKInviteDialog(invite);
+            }
+          });
 
-      _sentPKInvitesSubscription = LiveStreamService.getSentPKInvitesStream(widget.roomID).listen((acceptedInvites) {
-        debugPrint('Received accepted PK invites: $acceptedInvites');
+      _sentPKInvitesSubscription =
+          LiveStreamService.getSentPKInvitesStream(widget.roomID).listen((
+            acceptedInvites,
+          ) {
+            debugPrint('Received accepted PK invites: $acceptedInvites');
 
-        final newAcceptedInvite = acceptedInvites.firstWhereOrNull(
-          (invite) => !_dialogsShownForInviteIds.contains(invite.id),
-        );
+            final newAcceptedInvite = acceptedInvites.firstWhereOrNull(
+              (invite) => !_dialogsShownForInviteIds.contains(invite.id),
+            );
 
-        if (newAcceptedInvite != null && !_isPKMode) {
-          _dialogsShownForInviteIds.add(newAcceptedInvite.id);
-        }
-      });
+            if (newAcceptedInvite != null && !_isPKMode) {
+              _dialogsShownForInviteIds.add(newAcceptedInvite.id);
+            }
+          });
     }
   }
 
@@ -781,7 +872,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         });
         if (widget.isHost && _isPKMode) {
           debugPrint("PK Timer finished. Ending battle.");
-          LiveStreamService.endPKBattle(widget.roomID, _pkState['opponentRoomId']);
+          LiveStreamService.endPKBattle(
+            widget.roomID,
+            _pkState['opponentRoomId'],
+          );
         }
       } else {
         setState(() {
@@ -825,23 +919,35 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             builderRef = setState;
             return AlertDialog(
               backgroundColor: const Color(0xFF2d1b2b),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: Row(
                 children: [
                   const Text(
                     'Random PK Invitation',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${remainingSeconds}s',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -857,32 +963,48 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     _currentRandomPKDialogContext = null;
                     Navigator.of(dialogContext).pop();
                   },
-                  child: const Text('Ignore', style: TextStyle(color: Colors.white70)),
+                  child: const Text(
+                    'Ignore',
+                    style: TextStyle(color: Colors.white70),
+                  ),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.pink,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: () async {
                     _currentRandomPKDialogContext = null;
                     Navigator.of(dialogContext).pop();
 
                     try {
-                      await LiveStreamService.acceptGlobalRandomPKInvite(widget.roomID, invite);
-                      ZegoUIKit().startPlayAnotherRoomAudioVideo(invite.senderRoomId, invite.senderHostId);
+                      await LiveStreamService.acceptGlobalRandomPKInvite(
+                        widget.roomID,
+                        invite,
+                      );
+                      ZegoUIKit().startPlayAnotherRoomAudioVideo(
+                        invite.senderRoomId,
+                        invite.senderHostId,
+                      );
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            content: Text(
+                              e.toString().replaceAll('Exception: ', ''),
+                            ),
                             backgroundColor: Colors.orange,
                           ),
                         );
                       }
                     }
                   },
-                  child: const Text('Accept', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Accept',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             );
@@ -916,7 +1038,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               Navigator.of(context).pop();
               LiveStreamService.rejectPKInvite(widget.roomID, invite);
             },
-            child: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Reject',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -925,13 +1050,18 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.pink,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () {
               Navigator.of(context).pop();
 
               LiveStreamService.acceptPKInvite(widget.roomID, invite);
-              ZegoUIKit().startPlayAnotherRoomAudioVideo(invite.senderRoomId, invite.senderHostId);
+              ZegoUIKit().startPlayAnotherRoomAudioVideo(
+                invite.senderRoomId,
+                invite.senderHostId,
+              );
             },
             child: const Text('Accept', style: TextStyle(color: Colors.white)),
           ),
@@ -976,7 +1106,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         width: size,
         height: size,
         decoration: BoxDecoration(shape: BoxShape.circle),
-        child: GiftImageWidget(imageUrl: _currentEmojiEvent!.emojiUrl, fit: BoxFit.contain),
+        child: GiftImageWidget(
+          imageUrl: _currentEmojiEvent!.emojiUrl,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -1009,16 +1142,24 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           'Exit Stream',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: const Text('Do you want to exit the live stream?', style: TextStyle(color: Colors.white70)),
+        content: const Text(
+          'Do you want to exit the live stream?',
+          style: TextStyle(color: Colors.white70),
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.pink,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Exit', style: TextStyle(color: Colors.white)),
@@ -1056,13 +1197,24 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.1)),
-                  child: const Icon(Icons.link_off_rounded, size: 60, color: Colors.white70),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                  child: const Icon(
+                    Icons.link_off_rounded,
+                    size: 60,
+                    color: Colors.white70,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
                   "Room Ended",
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -1074,11 +1226,19 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.pink,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
                   ),
                   onPressed: () => context.go(Routes.home.path),
-                  child: const Text("Go to Homepage", style: TextStyle(color: Colors.white, fontSize: 16)),
+                  child: const Text(
+                    "Go to Homepage",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
                 ),
               ],
             ),
@@ -1115,17 +1275,26 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFF000000), Color(0xFF1a0a0a), Color(0xFF2d1b2b)],
+                            colors: [
+                              Color(0xFF000000),
+                              Color(0xFF1a0a0a),
+                              Color(0xFF2d1b2b),
+                            ],
                           ),
                         ),
-                        child: const Center(child: CircularProgressIndicator(color: Colors.pink)),
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.pink),
+                        ),
                       ),
               ),
             if (_isInitialized)
               _isPKMode ? _buildPKModeLayout() : _buildStandardModeOverlay()
             else
               const SizedBox.shrink(),
-            Visibility(visible: _isStartingPKAnimation, child: _buildPKStartingAnimation()),
+            Visibility(
+              visible: _isStartingPKAnimation,
+              child: _buildPKStartingAnimation(),
+            ),
             Center(child: _buildJoinAnimationOverlay()),
             _buildFullScreenGift(),
             _buildGiftOverlay(),
@@ -1164,7 +1333,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         Expanded(
           child: Stack(
             children: [
-              Align(alignment: Alignment.bottomCenter, child: _buildChatSection()),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _buildChatSection(),
+              ),
               _buildJoinCallOverlay(),
             ],
           ),
@@ -1183,7 +1355,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     final bool isGuest = !widget.isHost && hostId != currentUserId;
 
     // Filter out the host to get the list of guests
-    final guestParticipants = _participants.where((p) => p.userId != hostId).toList();
+    final guestParticipants = _participants
+        .where((p) => p.userId != hostId)
+        .toList();
 
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).viewPadding.top),
@@ -1196,12 +1370,20 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               child: GestureDetector(
                 onTap: () {
                   if (hostId == currentUserId) return;
-                  showProfileInfoBottomSheet(context, userId: hostId, hostId: hostId, roomId: widget.roomID);
+                  showProfileInfoBottomSheet(
+                    context,
+                    userId: hostId,
+                    hostId: hostId,
+                    roomId: widget.roomID,
+                  );
                 },
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(20),
@@ -1217,11 +1399,21 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                               clipBehavior: Clip.none,
                               alignment: Alignment.center,
                               children: [
-                                CircleAvatar(radius: 16, backgroundImage: NetworkImage(roomData['hostPicture'] ?? '')),
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundImage: NetworkImage(
+                                    roomData['hostPicture'] ?? '',
+                                  ),
+                                ),
                                 Positioned(
                                   width: 41.6, // 32 * 1.3
                                   height: 41.6,
-                                  child: IgnorePointer(child: ActiveFrameWidget(userId: hostId, size: 41.6)),
+                                  child: IgnorePointer(
+                                    child: ActiveFrameWidget(
+                                      userId: hostId,
+                                      size: 41.6,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1238,10 +1430,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                                     if (_isPKMode)
                                       Container(
                                         margin: const EdgeInsets.only(right: 4),
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: Colors.red,
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: const Text(
                                           'PK',
@@ -1267,7 +1464,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                                 ),
                                 Text(
                                   'ID: $hostDisplayId',
-                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 10),
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    fontSize: 10,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ],
@@ -1279,7 +1479,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                             StreamBuilder<bool>(
                               stream: ProfileService.isFollowing(hostId),
                               builder: (context, snapshot) {
-                                if (!snapshot.hasData) return const SizedBox.shrink();
+                                if (!snapshot.hasData)
+                                  return const SizedBox.shrink();
                                 final bool isFollowing = snapshot.data ?? false;
                                 if (isFollowing) return const SizedBox.shrink();
 
@@ -1293,22 +1494,34 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(
                                             context,
-                                          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Error: $e'),
+                                            ),
+                                          );
                                         }
                                       }
                                     },
                                     child: Container(
-                                      width: 24, // Sized perfectly for the capsule
+                                      width:
+                                          24, // Sized perfectly for the capsule
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         gradient: LinearGradient(
-                                          colors: [Colors.pink.shade400, Colors.pink.shade700],
+                                          colors: [
+                                            Colors.pink.shade400,
+                                            Colors.pink.shade700,
+                                          ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
                                       ),
-                                      child: const Icon(Icons.add, color: Colors.white, size: 14),
+                                      child: const Icon(
+                                        Icons.add,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
                                     ),
                                   ),
                                 );
@@ -1346,7 +1559,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(20),
@@ -1354,11 +1570,19 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(CupertinoIcons.person_2_fill, color: Colors.pink, size: 16),
+                    const Icon(
+                      CupertinoIcons.person_2_fill,
+                      color: Colors.pink,
+                      size: 16,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       _participantCount.toString(),
-                      style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -1368,7 +1592,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
 
             // Exit Button - FIXED AT RIGHT
             IconButton(
-              icon: const Icon(Icons.exit_to_app_rounded, size: 24, color: Colors.grey),
+              icon: const Icon(
+                Icons.exit_to_app_rounded,
+                size: 24,
+                color: Colors.grey,
+              ),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(),
               onPressed: _showExitConfirmationDialog,
@@ -1383,14 +1611,21 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
   Widget _buildStatChip(IconData icon, String label, Color iconColor) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Row(
         children: [
           Icon(icon, color: iconColor, size: 14),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -1407,14 +1642,21 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Row(
             children: [
               const Icon(Icons.access_time, color: Colors.pink, size: 14),
               const SizedBox(width: 4),
               Text(
                 '$hours:$minutes:$seconds',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -1440,7 +1682,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             ),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return Row(children: [_buildStatChip(Icons.diamond_outlined, "...", Colors.grey.shade700)]);
+                return Row(
+                  children: [
+                    _buildStatChip(
+                      Icons.diamond_outlined,
+                      "...",
+                      Colors.grey.shade700,
+                    ),
+                  ],
+                );
               }
 
               final int dailyDiamonds = snapshot.data ?? 0;
@@ -1451,7 +1701,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 },
                 child: Row(
                   children: [
-                    _buildStatChip(Icons.diamond_outlined, formatViewCount(dailyDiamonds), Colors.cyan.shade300),
+                    _buildStatChip(
+                      Icons.diamond_outlined,
+                      formatViewCount(dailyDiamonds),
+                      Colors.cyan.shade300,
+                    ),
                   ],
                 ),
               );
@@ -1487,7 +1741,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildPKScoreChip(_pkScoreBlue.toString(), Colors.blue.shade300),
+                _buildPKScoreChip(
+                  _pkScoreBlue.toString(),
+                  Colors.blue.shade300,
+                ),
                 _buildPKScoreChip(_pkScoreRed.toString(), Colors.red.shade300),
               ],
             ),
@@ -1508,7 +1765,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       child: Center(
         child: Text(
           score,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -1540,16 +1801,27 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         children: [
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.2), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
             child: const Padding(
               padding: EdgeInsets.all(3),
-              child: Icon(Icons.event_seat_rounded, color: Colors.amber, size: 16),
+              child: Icon(
+                Icons.event_seat_rounded,
+                color: Colors.amber,
+                size: 16,
+              ),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             number.toString(),
-            style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.amber,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       );
@@ -1584,9 +1856,14 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * .2),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).size.height * .2,
+              ),
               height: MediaQuery.of(context).size.height / 2,
-              child: Image.asset("assets/animations/pk_start.gif", fit: BoxFit.cover),
+              child: Image.asset(
+                "assets/animations/pk_start.gif",
+                fit: BoxFit.cover,
+              ),
             ),
           ],
         ),
@@ -1598,7 +1875,7 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     if (host.isCameraOn) {
       final zegoUser = ZegoUIKit().getUser(host.userId);
       return ClipRect(child: ZegoAudioVideoView(user: zegoUser));
-        }
+    }
     return ClipRect(
       child: SizedBox.expand(
         child: Container(
@@ -1608,7 +1885,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             children: [
               CircleAvatar(
                 radius: 40,
-                backgroundImage: host.userPicture != null && host.userPicture!.isNotEmpty
+                backgroundImage:
+                    host.userPicture != null && host.userPicture!.isNotEmpty
                     ? NetworkImage(host.userPicture!)
                     : null,
                 child: host.userPicture == null || host.userPicture!.isEmpty
@@ -1616,7 +1894,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     : null,
               ),
               Container(
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
               ),
               const Icon(Icons.videocam_off, color: Colors.white, size: 30),
             ],
@@ -1644,10 +1925,13 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             children: [
               Container(
                 decoration: BoxDecoration(
-                  image: (guest.userPicture != null && guest.userPicture!.isNotEmpty)
+                  image:
+                      (guest.userPicture != null &&
+                          guest.userPicture!.isNotEmpty)
                       ? DecorationImage(
                           image: NetworkImage(guest.userPicture!),
-                          fit: BoxFit.cover, // Ensures the image fills the 3:4 area
+                          fit: BoxFit
+                              .cover, // Ensures the image fills the 3:4 area
                         )
                       : null,
                   color: Colors.grey.shade800,
@@ -1659,7 +1943,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               if (guest.isMuted)
                 Container(
                   color: Colors.black.withValues(alpha: 0.5),
-                  child: const Icon(Icons.mic_off, color: Colors.white, size: 24),
+                  child: const Icon(
+                    Icons.mic_off,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
               // Updated emoji overlay to match the new size
               _buildEmojiOnAvatar(guest.userId, itemWidth),
@@ -1693,8 +1981,13 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                         child: Container(
                           width: 150,
                           height: 150,
-                          decoration: const BoxDecoration(shape: BoxShape.circle),
-                          child: GiftImageWidget(imageUrl: _currentEmojiEvent!.emojiUrl, fit: BoxFit.contain),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                          ),
+                          child: GiftImageWidget(
+                            imageUrl: _currentEmojiEvent!.emojiUrl,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                   ],
@@ -1702,7 +1995,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               : Container(
                   color: Colors.black,
                   child: const Center(
-                    child: Text('Waiting for host...', style: TextStyle(color: Colors.white)),
+                    child: Text(
+                      'Waiting for host...',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ),
         ),
@@ -1723,7 +2019,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     return Row(
       children: [
         Expanded(
-          child: _buildTeamHost(participants: _participants, hostName: roomData['hostName'] ?? 'Host A'),
+          child: _buildTeamHost(
+            participants: _participants,
+            hostName: roomData['hostName'] ?? 'Host A',
+          ),
         ),
         Expanded(
           child: _buildTeamHost(
@@ -1735,12 +2034,18 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     );
   }
 
-  Widget _buildTeamHost({required List<LiveStreamParticipant> participants, required String hostName}) {
+  Widget _buildTeamHost({
+    required List<LiveStreamParticipant> participants,
+    required String hostName,
+  }) {
     if (participants.isEmpty) {
       return Container(
         color: Colors.black,
         child: Center(
-          child: Text('Waiting for $hostName...', style: const TextStyle(color: Colors.white)),
+          child: Text(
+            'Waiting for $hostName...',
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
       );
     }
@@ -1770,7 +2075,7 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           ),
         ),
       );
-        }
+    }
     return Container(
       color: Colors.black,
       child: Center(
@@ -1783,7 +2088,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             children: [
               CircleAvatar(
                 radius: 40,
-                backgroundImage: host.userPicture != null && host.userPicture!.isNotEmpty
+                backgroundImage:
+                    host.userPicture != null && host.userPicture!.isNotEmpty
                     ? NetworkImage(host.userPicture!)
                     : null,
                 child: host.userPicture == null || host.userPicture!.isEmpty
@@ -1793,7 +2099,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               Positioned(
                 width: 104, // 80 * 1.3
                 height: 104,
-                child: IgnorePointer(child: ActiveFrameWidget(userId: host.userId, size: 104)),
+                child: IgnorePointer(
+                  child: ActiveFrameWidget(userId: host.userId, size: 104),
+                ),
               ),
             ],
           ),
@@ -1820,7 +2128,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
         child: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [Colors.pink.withValues(alpha: 0.3), Colors.transparent]),
+            gradient: RadialGradient(
+              colors: [Colors.pink.withValues(alpha: 0.3), Colors.transparent],
+            ),
           ),
           child: GiftImageWidget(
             imageUrl: _fullScreenGiftUrl!,
@@ -1861,10 +2171,19 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.purple.shade900.withValues(alpha: 0.95), Colors.pink.shade700.withValues(alpha: 0.95)],
+                  colors: [
+                    Colors.purple.shade900.withValues(alpha: 0.95),
+                    Colors.pink.shade700.withValues(alpha: 0.95),
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.6), blurRadius: 15, spreadRadius: 1)],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.pink.withValues(alpha: 0.6),
+                    blurRadius: 15,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1885,20 +2204,34 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.pink, width: 1.5),
                             boxShadow: [
-                              BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 4, spreadRadius: 0.5),
+                              BoxShadow(
+                                color: Colors.pink.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                spreadRadius: 0.5,
+                              ),
                             ],
                           ),
                           child: ClipOval(
                             child:
                                 _currentGiftOverlay!.senderPicture != null &&
-                                    _currentGiftOverlay!.senderPicture!.isNotEmpty
+                                    _currentGiftOverlay!
+                                        .senderPicture!
+                                        .isNotEmpty
                                 ? CachedNetworkImage(
-                                    imageUrl: _currentGiftOverlay!.senderPicture!,
+                                    imageUrl:
+                                        _currentGiftOverlay!.senderPicture!,
                                     fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        const Icon(Icons.person, color: Colors.white, size: 18),
+                                    errorWidget: (_, __, ___) => const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
                                   )
-                                : const Icon(Icons.person, color: Colors.white, size: 18),
+                                : const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
                           ),
                         ),
                         if (_currentGiftOverlay!.senderId != null)
@@ -1906,7 +2239,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                             width: 44.2, // 34 * 1.3
                             height: 44.2,
                             child: IgnorePointer(
-                              child: ActiveFrameWidget(userId: _currentGiftOverlay!.senderId!, size: 44.2),
+                              child: ActiveFrameWidget(
+                                userId: _currentGiftOverlay!.senderId!,
+                                size: 44.2,
+                              ),
                             ),
                           ),
                       ],
@@ -1924,7 +2260,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                           color: Colors.white,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          shadows: [Shadow(color: Colors.black45, blurRadius: 3)],
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 3),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1933,7 +2271,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                             ? 'sent ${_currentGiftOverlay!.luckyHitCount} LUCKY gift!'
                             : 'sent a gift',
                         style: TextStyle(
-                          color: _currentGiftOverlay!.luckyHitCount != null ? Colors.yellow.shade200 : Colors.white70,
+                          color: _currentGiftOverlay!.luckyHitCount != null
+                              ? Colors.yellow.shade200
+                              : Colors.white70,
                           fontSize: 9,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1947,7 +2287,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     width: 40,
                     height: 40,
                     fit: BoxFit.contain,
-                    errorWidget: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.white, size: 32),
+                    errorWidget: (_, __, ___) => const Icon(
+                      Icons.card_giftcard,
+                      color: Colors.white,
+                      size: 32,
+                    ),
                   ),
                 ],
               ),
@@ -1979,7 +2323,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: ${e.toString()}')),
+                  );
                 }
               }
             },
@@ -1990,7 +2336,12 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.asset('assets/images/join_call.jpeg', width: 48, height: 48, fit: BoxFit.cover),
+                child: Image.asset(
+                  'assets/images/join_call.jpeg',
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
@@ -2009,7 +2360,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           'assets/images/levels/rank_caifu_cf_$level.png',
           height: 18,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const SizedBox(width: 36, height: 18),
+          errorBuilder: (context, error, stackTrace) =>
+              const SizedBox(width: 36, height: 18),
         ),
       );
     } else {
@@ -2033,7 +2385,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
           'assets/images/levels/rank_caifu_cf_1.png',
           height: 18,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const SizedBox(width: 36, height: 18),
+          errorBuilder: (context, error, stackTrace) =>
+              const SizedBox(width: 36, height: 18),
         ),
       );
     }
@@ -2044,7 +2397,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
       width: MediaQuery.of(context).size.width,
       height: MediaQuery.of(context).size.height * 0.25,
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: Colors.black.withValues(alpha: 0.2)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.black.withValues(alpha: 0.2),
+      ),
       child: ListView.builder(
         reverse: true,
         controller: _chatScrollController,
@@ -2071,16 +2427,27 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                       decoration: BoxDecoration(
                         color: Colors.pink.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.pink.withValues(alpha: 0.5), width: 1),
+                        border: Border.all(
+                          color: Colors.pink.withValues(alpha: 0.5),
+                          width: 1,
+                        ),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.campaign, color: Colors.pink, size: 16),
+                          const Icon(
+                            Icons.campaign,
+                            color: Colors.pink,
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _roomNotice,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
@@ -2092,7 +2459,7 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
             );
           }
 
-        final m = _messages[index];
+          final m = _messages[index];
 
           if (m.isGiftMessage) {
             return Padding(
@@ -2102,7 +2469,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 decoration: BoxDecoration(
                   color: Colors.pink.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
+                  border: Border.all(
+                    color: Colors.pink.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -2112,7 +2482,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     Flexible(
                       child: Text(
                         m.message,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.pink),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.pink,
+                        ),
                       ),
                     ),
                   ],
@@ -2142,14 +2516,21 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                       _buildLevelBadge(m.userId),
                       Text(
                         "${m.username}: ",
-                        style: TextStyle(color: Colors.pink.shade300, fontWeight: FontWeight.w600, fontSize: 15),
+                        style: TextStyle(
+                          color: Colors.pink.shade300,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 0, top: 2),
-                  child: Text(m.message, style: const TextStyle(color: Colors.white)),
+                  child: Text(
+                    m.message,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -2163,7 +2544,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     LiveStreamParticipant? currentUserParticipant;
     if (_isJoined) {
       try {
-        currentUserParticipant = _participants.firstWhere((p) => p.userId == _auth.currentUser!.uid);
+        currentUserParticipant = _participants.firstWhere(
+          (p) => p.userId == _auth.currentUser!.uid,
+        );
       } catch (e) {
         currentUserParticipant = null;
       }
@@ -2176,7 +2559,12 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     const double paddingRight = 6.0;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(10, 8, 10, 8 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        10,
+        8,
+        10,
+        8 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Row(
         children: [
           if (!_isChatExpanded) ...[
@@ -2197,8 +2585,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 child: Container(
                   width: buttonSize,
                   height: buttonSize,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.2)),
-                  child: const Icon(Icons.more_horiz, color: Colors.white, size: iconSize),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  child: const Icon(
+                    Icons.more_horiz,
+                    color: Colors.white,
+                    size: iconSize,
+                  ),
                 ),
               ),
             ),
@@ -2220,8 +2615,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                       Container(
                         width: buttonSize,
                         height: buttonSize,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.2)),
-                        child: const Icon(CupertinoIcons.person_add_solid, color: Colors.white, size: iconSize),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.2),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.person_add_solid,
+                          color: Colors.white,
+                          size: iconSize,
+                        ),
                       ),
                       if (totalRequests > 0)
                         Positioned(
@@ -2229,10 +2631,17 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                           right: -2,
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.pink),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.pink,
+                            ),
                             child: Text(
                               totalRequests.toString(),
-                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -2258,8 +2667,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                     child: Container(
                       width: buttonSize,
                       height: buttonSize,
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
-                      child: const Icon(Icons.call_end, color: Colors.white, size: iconSize),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.red,
+                      ),
+                      child: const Icon(
+                        Icons.call_end,
+                        color: Colors.white,
+                        size: iconSize,
+                      ),
                     ),
                   ),
                 ),
@@ -2268,15 +2684,23 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 child: GestureDetector(
                   onTap: () {
                     final newMuteState = !isCurrentlyMuted;
-                    LiveStreamService.toggleMuteState(widget.roomID, newMuteState);
+                    LiveStreamService.toggleMuteState(
+                      widget.roomID,
+                      newMuteState,
+                    );
                     ZegoUIKit().turnMicrophoneOn(!newMuteState);
                   },
                   child: Container(
                     width: buttonSize,
                     height: buttonSize,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.2)),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.2),
+                    ),
                     child: Icon(
-                      isCurrentlyMuted ? CupertinoIcons.mic_off : CupertinoIcons.mic_fill,
+                      isCurrentlyMuted
+                          ? CupertinoIcons.mic_off
+                          : CupertinoIcons.mic_fill,
                       color: isCurrentlyMuted ? Colors.white : Colors.pink,
                       size: iconSize,
                     ),
@@ -2293,8 +2717,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                   child: Container(
                     width: buttonSize,
                     height: buttonSize,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.2)),
-                    child: const Icon(CupertinoIcons.smiley, color: Colors.white, size: iconSize),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.2),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.smiley,
+                      color: Colors.white,
+                      size: iconSize,
+                    ),
                   ),
                 ),
               ),
@@ -2306,7 +2737,11 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 onTap: () {
                   FocusManager.instance.primaryFocus?.unfocus();
                   final convertedParticipants = _participants.map((p) {
-                    return _ConvertedParticipant(userId: p.userId, userName: p.userName, userPicture: p.userPicture);
+                    return _ConvertedParticipant(
+                      userId: p.userId,
+                      userName: p.userName,
+                      userPicture: p.userPicture,
+                    );
                   }).toList();
 
                   showGiftBottomSheet(
@@ -2319,8 +2754,15 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                 child: Container(
                   width: buttonSize,
                   height: buttonSize,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.2)),
-                  child: const Icon(CupertinoIcons.gift_fill, color: Colors.white, size: 16),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.gift_fill,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
               ),
             ),
@@ -2333,7 +2775,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.0),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1.0,
+                ),
               ),
               child: Center(
                 child: TextField(
@@ -2342,10 +2787,16 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Say something...',
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
                     border: InputBorder.none,
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                   ),
                   onSubmitted: (_) => _sendMessage(),
                 ),
@@ -2360,7 +2811,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
               height: buttonSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]),
+                gradient: LinearGradient(
+                  colors: [Colors.pink.shade400, Colors.pink.shade600],
+                ),
               ),
               child: const Icon(Icons.send, color: Colors.white, size: 16),
             ),
@@ -2420,7 +2873,9 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_chatScrollController.hasClients) {
-        _chatScrollController.jumpTo(_chatScrollController.position.maxScrollExtent);
+        _chatScrollController.jumpTo(
+          _chatScrollController.position.maxScrollExtent,
+        );
       }
     });
   }
@@ -2434,7 +2889,8 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
     const double overlap = 15.0;
 
     final participantsToShow = participants.take(5).toList();
-    final double stackWidth = avatarSize + (participantsToShow.length - 1) * overlap;
+    final double stackWidth =
+        avatarSize + (participantsToShow.length - 1) * overlap;
 
     return SizedBox(
       width: stackWidth,
@@ -2466,11 +2922,19 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                         ),
                         child: CircleAvatar(
                           radius: (avatarSize / 2) - 1,
-                          backgroundImage: participant.userPicture != null && participant.userPicture!.isNotEmpty
+                          backgroundImage:
+                              participant.userPicture != null &&
+                                  participant.userPicture!.isNotEmpty
                               ? NetworkImage(participant.userPicture!)
                               : null,
-                          child: (participant.userPicture == null || participant.userPicture!.isEmpty)
-                              ? const Icon(Icons.person, size: 12, color: Colors.white)
+                          child:
+                              (participant.userPicture == null ||
+                                  participant.userPicture!.isEmpty)
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 12,
+                                  color: Colors.white,
+                                )
                               : null,
                         ),
                       ),
@@ -2478,7 +2942,10 @@ class _LiveStreamPageState extends State<LiveStreamPage> with SingleTickerProvid
                         width: avatarSize * 1.3,
                         height: avatarSize * 1.3,
                         child: IgnorePointer(
-                          child: ActiveFrameWidget(userId: participant.userId, size: avatarSize * 1.3),
+                          child: ActiveFrameWidget(
+                            userId: participant.userId,
+                            size: avatarSize * 1.3,
+                          ),
                         ),
                       ),
                     ],
@@ -2499,5 +2966,9 @@ class _ConvertedParticipant {
   final String userName;
   final String? userPicture;
 
-  _ConvertedParticipant({required this.userId, required this.userName, this.userPicture});
+  _ConvertedParticipant({
+    required this.userId,
+    required this.userName,
+    this.userPicture,
+  });
 }
