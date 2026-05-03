@@ -37,6 +37,7 @@ import '../ui/ranks/ranks_page.dart';
 import '../ui/search/search_page.dart';
 import '../ui/settings/password_settings_page.dart';
 import '../ui/settings/settings_page.dart';
+import '../ui/settings/language_selection_page.dart';
 import '../ui/store-bag/mybag_page.dart';
 import '../ui/store-bag/store_page.dart';
 import '../ui/vip_page/vip_page.dart';
@@ -240,6 +241,18 @@ class MyRouter {
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
                     key: state.pageKey,
                     child: ApplyHostingPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.languageSelection.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: const LanguageSelectionPage(),
                     transitionsBuilder: customPopTransition,
                     transitionDuration: const Duration(milliseconds: 200),
                     reverseTransitionDuration: const Duration(

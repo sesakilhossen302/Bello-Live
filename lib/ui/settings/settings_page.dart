@@ -7,6 +7,7 @@ import '../../core/cubits/app_cubit.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 // Import your AppCubit
 // import '../../cubits/app_cubit.dart';
@@ -33,8 +34,8 @@ class SettingsPage extends StatelessWidget {
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     Text(
-                      'Settings',
-                      style: TextStyle(
+                      AppLocalizations.of(context).settings,
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -56,38 +57,17 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.sun_max,
-                        title: 'Change Theme',
+                        title: AppLocalizations.of(context).changeTheme,
                         onTap: () {
                           debugPrint('Change Theme tapped');
                           // Add your theme change logic
                         },
                       ),
-
                       const SizedBox(height: 12),
-
-                      FutureBuilder<bool>(
-                        future: ProfileService.hasPassword(),
-                        builder: (context, snapshot) {
-                          final hasPassword = snapshot.data ?? false;
-                          final title = hasPassword ? 'Change Password' : 'Create Password';
-
-                          return _buildSettingsItem(
-                            context,
-                            icon: CupertinoIcons.lock_shield,
-                            title: title,
-                            onTap: () {
-                              context.push(Routes.passwordSettings.path);
-                            },
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 12),
-
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.link,
-                        title: 'Linked Accounts',
+                        title: AppLocalizations.of(context).linkedAccounts,
                         onTap: () {
                           debugPrint('Linked Accounts tapped');
                           // Navigate to linked accounts page
@@ -99,7 +79,7 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.tray,
-                        title: 'Inbox',
+                        title: AppLocalizations.of(context).navInbox,
                         onTap: () {
                           debugPrint('Inbox tapped');
                           // Navigate to inbox
@@ -111,10 +91,9 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.globe,
-                        title: 'Language',
+                        title: AppLocalizations.of(context).language,
                         onTap: () {
-                          debugPrint('Language tapped');
-                          // Navigate to language selection
+                          context.push(Routes.languageSelection.path);
                         },
                       ),
 
@@ -123,7 +102,7 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.star,
-                        title: 'Review Us',
+                        title: AppLocalizations.of(context).reviewUs,
                         onTap: () {
                           debugPrint('Review Us tapped');
                           // Open app store review
@@ -135,7 +114,7 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.chat_bubble_text,
-                        title: 'Feedback',
+                        title: AppLocalizations.of(context).feedback,
                         onTap: () {
                           debugPrint('Feedback tapped');
                           context.push(Routes.feedback.path);
@@ -147,7 +126,7 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.refresh_circled,
-                        title: 'Check for Update',
+                        title: AppLocalizations.of(context).checkForUpdate,
                         onTap: () {
                           debugPrint('Check for Update tapped');
                           // Check for app updates
@@ -159,7 +138,7 @@ class SettingsPage extends StatelessWidget {
                       _buildSettingsItem(
                         context,
                         icon: CupertinoIcons.info_circle,
-                        title: 'About',
+                        title: AppLocalizations.of(context).about,
                         onTap: () {
                           debugPrint('About tapped');
                           // Show about dialog or navigate to about page
@@ -201,8 +180,8 @@ class SettingsPage extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: AppColors.primary, size: 24),
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -230,20 +209,20 @@ class SettingsPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(color: Colors.pink.withValues(alpha: 0.3)),
             ),
-            title: const Text(
-              'Logout',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            title: Text(
+              AppLocalizations.of(context).logout,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
-            content: const Text('Are you sure you want to logout?', style: TextStyle(color: Colors.white70)),
+            content: Text(AppLocalizations.of(context).logoutConfirmMsg, style: const TextStyle(color: Colors.white70)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+                child: Text(AppLocalizations.of(context).cancel, style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
                 child: Text(
-                  'Logout',
+                  AppLocalizations.of(context).logout,
                   style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -275,9 +254,9 @@ class SettingsPage extends StatelessWidget {
               child: const Icon(CupertinoIcons.square_arrow_right, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
-            const Text(
-              'Logout',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              AppLocalizations.of(context).logout,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
         ),

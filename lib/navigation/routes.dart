@@ -36,6 +36,7 @@ enum Routes {
   ranks,
   search,
   myFeed,
+  languageSelection,
 }
 
 extension RoutesExtension on Routes {
@@ -115,6 +116,8 @@ extension RoutesExtension on Routes {
         return '/search';
       case Routes.myFeed:
         return '/myFeed';
+      case Routes.languageSelection:
+        return '/languageSelection';
     }
   }
 }

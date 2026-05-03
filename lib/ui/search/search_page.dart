@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/localization/app_localizations.dart';
 
 import '../../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../../data/remote/firebase/profile_services.dart';
@@ -245,9 +246,9 @@ class _SearchPageState extends State<SearchPage> {
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          const Text(
-            'Search Users',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          Text(
+            AppLocalizations.of(context).searchUsers,
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const Spacer(),
           if (_searchResults.isNotEmpty)
@@ -258,7 +259,7 @@ class _SearchPageState extends State<SearchPage> {
                 borderRadius: BorderRadius.circular(15),
               ),
               child: Text(
-                '${_searchResults.length} found',
+                '${_searchResults.length} ${AppLocalizations.of(context).foundSuffix}',
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
@@ -279,7 +280,7 @@ class _SearchPageState extends State<SearchPage> {
         controller: _searchController,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
-          hintText: 'Search by name or ID...',
+          hintText: AppLocalizations.of(context).searchPlaceholder,
           hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
           prefixIcon: const Icon(Icons.search, color: Colors.purple),
           suffixIcon: _searchController.text.isNotEmpty
@@ -311,7 +312,7 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             CircularProgressIndicator(color: AppColors.pink),
             const SizedBox(height: 16),
-            Text('Searching...', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14)),
+            Text(AppLocalizations.of(context).searching, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14)),
           ],
         ),
       );
@@ -324,9 +325,9 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             Icon(Icons.person_search, size: 80, color: Colors.white.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
-            Text('No users found', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16)),
+            Text(AppLocalizations.of(context).noUsersFound, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16)),
             const SizedBox(height: 8),
-            Text('Try a different search term', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14)),
+            Text(AppLocalizations.of(context).tryDifferentSearch, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14)),
           ],
         ),
       );
@@ -444,7 +445,7 @@ class _SearchPageState extends State<SearchPage> {
         elevation: 0,
       ),
       child: Text(
-        user.isFollowing ? 'Unfollow' : 'Follow',
+        user.isFollowing ? AppLocalizations.of(context).unfollow : AppLocalizations.of(context).follow,
         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
     );

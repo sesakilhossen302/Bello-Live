@@ -16,6 +16,7 @@ import '../../core/widgets/auto_scroll_text.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 // Make sure this import path matches where your ProfileInfoBottomSheet is located
 import '../live_streaming/bottomsheets/profile_info_bottomsheet.dart';
@@ -53,9 +54,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   const Spacer(),
-                  const Text(
-                    'Profile',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                  Text(
+                    AppLocalizations.of(context).profile,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const Spacer(),
                   Row(
@@ -76,10 +77,10 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             Expanded(
               child: _userId == null
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Please log in to see your profile.',
-                        style: TextStyle(color: Colors.white),
+                        AppLocalizations.of(context).loginToSeeProfile,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     )
                   : StreamBuilder<DocumentSnapshot>(
@@ -107,10 +108,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
                         // Handle No Data State
                         if (!snapshot.hasData || !snapshot.data!.exists) {
-                          return const Center(
+                          return Center(
                             child: Text(
-                              'Profile not found.',
-                              style: TextStyle(color: Colors.white70),
+                              AppLocalizations.of(context).profileNotFound,
+                              style: const TextStyle(color: Colors.white70),
                             ),
                           );
                         }
@@ -134,12 +135,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
                             // Map Firestore data to our local UserProfile model
                             final userProfile = UserProfile(
-                              name: data['displayName'] ?? 'No Name',
+                              name: data['displayName'] ?? AppLocalizations.of(context).noName,
                               id: uid,
                               displayId: data['displayId'] ?? 'N/A',
                               country: data['country'] ?? 'N/A',
                               countryFlagEmoji: data['countryFlagEmoji'],
-                              bio: data['bio'] ?? 'No bio yet.',
+                              bio: data['bio'] ?? AppLocalizations.of(context).noBio,
                               profileImage: data['photoUrl'] ?? '',
                               followers: data['followerCount'] ?? 0,
                               following: data['followingCount'] ?? 0,
@@ -277,7 +278,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  'ID: ${userProfile.displayId}',
+                  '${AppLocalizations.of(context).idLabel} ${userProfile.displayId}',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14),
                 ),
               ],
@@ -312,7 +313,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Lv ${userProfile.giftSendingLevel}',
+                  '${AppLocalizations.of(context).levelLabel} ${userProfile.giftSendingLevel}',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -363,11 +364,11 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatItem(friendsCount.toString(), 'Friends', onTap: _showFriendsBottomSheet),
+          _buildStatItem(friendsCount.toString(), AppLocalizations.of(context).friends, onTap: _showFriendsBottomSheet),
           _buildVerticalDivider(),
-          _buildStatItem(userProfile.followers.toString(), 'Followers', onTap: _showFollowersBottomSheet),
+          _buildStatItem(userProfile.followers.toString(), AppLocalizations.of(context).followers, onTap: _showFollowersBottomSheet),
           _buildVerticalDivider(),
-          _buildStatItem(userProfile.following.toString(), 'Following', onTap: _showFollowingBottomSheet),
+          _buildStatItem(userProfile.following.toString(), AppLocalizations.of(context).following, onTap: _showFollowingBottomSheet),
         ],
       ),
     );
@@ -431,49 +432,49 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildMenuItem(
             icon: Icons.card_giftcard,
             iconColor: Colors.blueAccent,
-            title: 'Claim 10,000 coins',
+            title: AppLocalizations.of(context).claimCoins,
             onTap: () {},
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.account_balance_wallet_outlined,
             iconColor: Colors.orange,
-            title: 'Top-up',
+            title: AppLocalizations.of(context).topUp,
             onTap: () => context.push(Routes.topUp.path),
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.trending_up,
             iconColor: Colors.redAccent,
-            title: 'Earning',
+            title: AppLocalizations.of(context).earning,
             onTap: () => context.push(Routes.earnings.path),
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.stars,
             iconColor: Colors.amber,
-            title: 'VIP',
+            title: AppLocalizations.of(context).vip,
             onTap: () => context.push(Routes.vip.path),
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.store,
             iconColor: Colors.cyan,
-            title: 'Store',
+            title: AppLocalizations.of(context).store,
             onTap: () => context.push(Routes.store.path),
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.palette,
             iconColor: Colors.deepPurpleAccent,
-            title: 'Theme',
+            title: AppLocalizations.of(context).theme,
             onTap: () {},
           ),
           const SizedBox(height: 12),
           _buildMenuItem(
             icon: Icons.shopping_bag_outlined,
             iconColor: Colors.orangeAccent,
-            title: 'My Bag',
+            title: AppLocalizations.of(context).myBag,
             onTap: () => context.push(Routes.myBag.path),
           ),
         ],
@@ -527,7 +528,7 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => UserListBottomSheet(title: 'Friends', userId: _userId!, listType: UserListType.friends),
+      builder: (context) => UserListBottomSheet(title: AppLocalizations.of(context).friends, userId: _userId!, listType: UserListType.friends),
     );
   }
 
@@ -537,7 +538,7 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => UserListBottomSheet(title: 'Followers', userId: _userId!, listType: UserListType.followers),
+      builder: (context) => UserListBottomSheet(title: AppLocalizations.of(context).followers, userId: _userId!, listType: UserListType.followers),
     );
   }
 
@@ -547,7 +548,7 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => UserListBottomSheet(title: 'Following', userId: _userId!, listType: UserListType.following),
+      builder: (context) => UserListBottomSheet(title: AppLocalizations.of(context).following, userId: _userId!, listType: UserListType.following),
     );
   }
 

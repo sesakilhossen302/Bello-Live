@@ -5,6 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../data/remote/firebase/profile_services.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../theme/app_theme.dart';
 
 class RanksPage extends StatefulWidget {
   const RanksPage({super.key});
@@ -23,7 +25,11 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _categoryController = TabController(length: 3, vsync: this, initialIndex: 1); // Added Gifter
+    _categoryController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: 1,
+    ); // Added Gifter
     _periodController = TabController(length: 3, vsync: this, initialIndex: 1);
 
     _categoryController.addListener(_handleTabSelection);
@@ -33,7 +39,9 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
   }
 
   void _handleTabSelection() {
-    if ((_categoryController.indexIsChanging || _periodController.indexIsChanging) == false) {
+    if ((_categoryController.indexIsChanging ||
+            _periodController.indexIsChanging) ==
+        false) {
       _loadLeaderboard();
     }
   }
@@ -87,13 +95,7 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1a0a1e), Color(0xFF2d1b2b), Color(0xFF1a0a1e)],
-          ),
-        ),
+        decoration: const BoxDecoration(color: AppColors.bg),
         child: SafeArea(
           child: Column(
             children: [
@@ -105,7 +107,9 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                 child: _categoryController.index == 0
                     ? _buildComingSoon()
                     : _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.pink))
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.pink),
+                      )
                     : _leaderboardData.isEmpty
                     ? _buildEmptyState()
                     : _buildRankContent(),
@@ -123,14 +127,22 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(CupertinoIcons.back, color: Colors.white, size: 28),
+            icon: const Icon(
+              CupertinoIcons.back,
+              color: Colors.white,
+              size: 28,
+            ),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Ranks',
+              AppLocalizations.of(context).ranks,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ),
           const SizedBox(width: 48),
@@ -151,20 +163,31 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
       child: TabBar(
         controller: _categoryController,
         indicator: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFFFF1168), Color(0xFFD81B60)]),
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF1168), Color(0xFFD81B60)],
+          ),
           borderRadius: BorderRadius.circular(26),
-          boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.pink.withValues(alpha: 0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-        tabs: const [
-          Tab(text: 'Agency'),
-          Tab(text: 'Host'),
-          Tab(text: 'Gifter'),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
+        tabs: [
+          Tab(text: AppLocalizations.of(context).agency),
+          Tab(text: AppLocalizations.of(context).host),
+          Tab(text: AppLocalizations.of(context).gifter),
         ],
       ),
     );
@@ -182,20 +205,31 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
       child: TabBar(
         controller: _periodController,
         indicator: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFFFF1168), Color(0xFFD81B60)]),
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF1168), Color(0xFFD81B60)],
+          ),
           borderRadius: BorderRadius.circular(26),
-          boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.pink.withValues(alpha: 0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-        tabs: const [
-          Tab(text: 'Today'),
-          Tab(text: 'Weeks'),
-          Tab(text: 'Month'),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
+        tabs: [
+          Tab(text: AppLocalizations.of(context).today),
+          Tab(text: AppLocalizations.of(context).weeks),
+          Tab(text: AppLocalizations.of(context).month),
         ],
       ),
     );
@@ -206,16 +240,27 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.upcoming_outlined, size: 80, color: Colors.white.withValues(alpha: 0.5)),
+          Icon(
+            Icons.upcoming_outlined,
+            size: 80,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 20),
           Text(
-            'Coming Soon',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 24, fontWeight: FontWeight.w600),
+            AppLocalizations.of(context).comingSoon,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Agency rankings will be available soon',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+            AppLocalizations.of(context).agencyRanksSoon,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 14,
+            ),
           ),
         ],
       ),
@@ -227,11 +272,19 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.leaderboard_outlined, size: 80, color: Colors.white.withValues(alpha: 0.5)),
+          Icon(
+            Icons.leaderboard_outlined,
+            size: 80,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 20),
           Text(
-            'No rankings yet',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 18, fontWeight: FontWeight.w500),
+            AppLocalizations.of(context).noRankings,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -280,13 +333,19 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.grey.shade400.withValues(alpha: 0.6), Colors.grey.shade600.withValues(alpha: 0.4)],
+                        colors: [
+                          Colors.grey.shade400.withValues(alpha: 0.6),
+                          Colors.grey.shade600.withValues(alpha: 0.4),
+                        ],
                       ),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(12),
                         topRight: Radius.circular(12),
                       ),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
                     ),
                     child: const Center(
                       child: Text(
@@ -295,7 +354,9 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 4),
+                          ],
                         ),
                       ),
                     ),
@@ -309,14 +370,26 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.amber.shade400.withValues(alpha: 0.8), Colors.amber.shade700.withValues(alpha: 0.6)],
+                        colors: [
+                          Colors.amber.shade400.withValues(alpha: 0.8),
+                          Colors.amber.shade700.withValues(alpha: 0.6),
+                        ],
                       ),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(12),
                         topRight: Radius.circular(12),
                       ),
-                      border: Border.all(color: Colors.amber.shade200, width: 1),
-                      boxShadow: [BoxShadow(color: Colors.amber.withValues(alpha: 0.4), blurRadius: 15, spreadRadius: 2)],
+                      border: Border.all(
+                        color: Colors.amber.shade200,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withValues(alpha: 0.4),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
                     child: const Center(
                       child: Text(
@@ -325,7 +398,9 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                           fontSize: 56,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 4),
+                          ],
                         ),
                       ),
                     ),
@@ -339,13 +414,19 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.orange.shade400.withValues(alpha: 0.6), Colors.orange.shade700.withValues(alpha: 0.4)],
+                        colors: [
+                          Colors.orange.shade400.withValues(alpha: 0.6),
+                          Colors.orange.shade700.withValues(alpha: 0.4),
+                        ],
                       ),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(12),
                         topRight: Radius.circular(12),
                       ),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
                     ),
                     child: const Center(
                       child: Text(
@@ -354,7 +435,9 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                           fontSize: 44,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 4),
+                          ],
                         ),
                       ),
                     ),
@@ -373,19 +456,25 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 15),
-                    child: secondPlace != null ? _buildPodiumUser(secondPlace, 2) : const SizedBox(),
+                    child: secondPlace != null
+                        ? _buildPodiumUser(secondPlace, 2)
+                        : const SizedBox(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 55),
-                    child: firstPlace != null ? _buildPodiumUser(firstPlace, 1) : const SizedBox(),
+                    child: firstPlace != null
+                        ? _buildPodiumUser(firstPlace, 1)
+                        : const SizedBox(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                    child: thirdPlace != null ? _buildPodiumUser(thirdPlace, 3) : const SizedBox()
+                  child: thirdPlace != null
+                      ? _buildPodiumUser(thirdPlace, 3)
+                      : const SizedBox(),
                 ),
               ],
             ),
@@ -424,26 +513,42 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                 height: avatarSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [borderColor, borderColor.withValues(alpha: 0.6)]),
-                  boxShadow: [BoxShadow(color: borderColor.withValues(alpha: 0.5), blurRadius: 12, spreadRadius: 2)],
+                  gradient: LinearGradient(
+                    colors: [borderColor, borderColor.withValues(alpha: 0.6)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: borderColor.withValues(alpha: 0.5),
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
                 padding: const EdgeInsets.all(3),
                 child: ClipOval(
                   child: user.pictureUrl != null && user.pictureUrl!.isNotEmpty
                       ? CachedNetworkImage(
-                    imageUrl: user.pictureUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade800,
-                        child: Icon(Icons.person, color: Colors.white, size: avatarSize * 0.5),
-                      );
-                    },
-                  )
+                          imageUrl: user.pictureUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey.shade800,
+                              child: Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: avatarSize * 0.5,
+                              ),
+                            );
+                          },
+                        )
                       : Container(
-                    color: Colors.grey.shade800,
-                    child: Icon(Icons.person, color: Colors.white, size: avatarSize * 0.5),
-                  ),
+                          color: Colors.grey.shade800,
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: avatarSize * 0.5,
+                          ),
+                        ),
                 ),
               ),
               // Overlay the Frame based on 1.3x size logic
@@ -460,18 +565,30 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
         const SizedBox(height: 8),
         Text(
           user.name,
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 2),
-        Text('ID: ${user.displayId}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10)),
+        Text(
+          '${AppLocalizations.of(context).idLabel} ${user.displayId}',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 10,
+          ),
+        ),
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]),
+            gradient: LinearGradient(
+              colors: [Colors.pink.shade400, Colors.pink.shade600],
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -481,7 +598,11 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
               const SizedBox(width: 3),
               Text(
                 _formatNumber(user.totalValue),
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -507,7 +628,8 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
             physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             itemCount: users.length,
-            separatorBuilder: (context, index) => Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
+            separatorBuilder: (context, index) =>
+                Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
             itemBuilder: (context, index) {
               return _buildRankListItem(index + 4, users[index]);
             },
@@ -531,12 +653,19 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.black.withValues(alpha: 0.3),
-              border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
+              border: Border.all(
+                color: Colors.pink.withValues(alpha: 0.3),
+                width: 1,
+              ),
             ),
             child: Center(
               child: Text(
                 '$rank',
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -553,26 +682,43 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
                   height: avatarSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]),
-                    boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
+                    gradient: LinearGradient(
+                      colors: [Colors.pink.shade400, Colors.pink.shade600],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pink.withValues(alpha: 0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   padding: const EdgeInsets.all(2),
                   child: ClipOval(
-                    child: user.pictureUrl != null && user.pictureUrl!.isNotEmpty
+                    child:
+                        user.pictureUrl != null && user.pictureUrl!.isNotEmpty
                         ? CachedNetworkImage(
-                      imageUrl: user.pictureUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey.shade800,
-                          child: const Icon(Icons.person, color: Colors.white, size: 25),
-                        );
-                      },
-                    )
+                            imageUrl: user.pictureUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey.shade800,
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 25,
+                                ),
+                              );
+                            },
+                          )
                         : Container(
-                      color: Colors.grey.shade800,
-                      child: const Icon(Icons.person, color: Colors.white, size: 25),
-                    ),
+                            color: Colors.grey.shade800,
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 25,
+                            ),
+                          ),
                   ),
                 ),
                 // Overlay the Frame based on 1.3x size logic
@@ -593,12 +739,22 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
               children: [
                 Text(
                   user.name,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text('ID: ${user.displayId}', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
+                Text(
+                  '${AppLocalizations.of(context).idLabel} ${user.displayId}',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
           ),
@@ -607,19 +763,33 @@ class _RanksPageState extends State<RanksPage> with TickerProviderStateMixin {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.pink.shade400.withValues(alpha: 0.6), Colors.pink.shade600.withValues(alpha: 0.4)],
+                colors: [
+                  Colors.pink.shade400.withValues(alpha: 0.6),
+                  Colors.pink.shade600.withValues(alpha: 0.4),
+                ],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
+              border: Border.all(
+                color: Colors.pink.withValues(alpha: 0.3),
+                width: 1,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.monetization_on, color: Colors.amber, size: 14),
+                const Icon(
+                  Icons.monetization_on,
+                  color: Colors.amber,
+                  size: 14,
+                ),
                 const SizedBox(width: 3),
                 Text(
                   _formatNumber(user.totalValue),
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),

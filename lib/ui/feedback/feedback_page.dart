@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'dart:io';
 
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class FeedbackPage extends StatefulWidget {
   const FeedbackPage({super.key});
@@ -25,29 +26,35 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
   // final ImagePicker _picker = ImagePicker();
 
   // Dummy feedback data for "My Feedback" tab
-  final List<FeedbackItem> _myFeedbackList = [
-    FeedbackItem(
-      type: 'App Error',
-      message: 'The app crashes when I try to open the store page...',
-      status: 'Resolved',
-      date: DateTime.now().subtract(const Duration(days: 2)),
-      response: 'Thank you for reporting this issue. We have fixed the bug in the latest update.',
-    ),
-    FeedbackItem(
-      type: 'Suggestions',
-      message: 'It would be great if you could add dark mode to the app...',
-      status: 'In Progress',
-      date: DateTime.now().subtract(const Duration(days: 5)),
-      response: 'We appreciate your suggestion and are currently working on implementing dark mode.',
-    ),
-    FeedbackItem(
-      type: 'Earning Info',
-      message: 'I have questions about how the earning system works...',
-      status: 'Pending',
-      date: DateTime.now().subtract(const Duration(days: 7)),
-      response: null,
-    ),
-  ];
+  late List<FeedbackItem> _myFeedbackList;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _myFeedbackList = [
+      FeedbackItem(
+        type: AppLocalizations.of(context).appError,
+        message: 'The app crashes when I try to open the store page...',
+        status: AppLocalizations.of(context).statusResolved,
+        date: DateTime.now().subtract(const Duration(days: 2)),
+        response: 'Thank you for reporting this issue. We have fixed the bug in the latest update.',
+      ),
+      FeedbackItem(
+        type: AppLocalizations.of(context).suggestions,
+        message: 'It would be great if you could add dark mode to the app...',
+        status: AppLocalizations.of(context).statusInProgress,
+        date: DateTime.now().subtract(const Duration(days: 5)),
+        response: 'We appreciate your suggestion and are currently working on implementing dark mode.',
+      ),
+      FeedbackItem(
+        type: AppLocalizations.of(context).earningInfo,
+        message: 'I have questions about how the earning system works...',
+        status: AppLocalizations.of(context).statusPending,
+        date: DateTime.now().subtract(const Duration(days: 7)),
+        response: null,
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -82,7 +89,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     Text(
-                      'Feedback',
+                      AppLocalizations.of(context).feedback,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -135,9 +142,9 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
             labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            tabs: const [
-              Tab(text: 'Feedback'),
-              Tab(text: 'My Feedback'),
+            tabs: [
+              Tab(text: AppLocalizations.of(context).feedback),
+              Tab(text: AppLocalizations.of(context).myFeedback),
             ],
           ),
         ),
@@ -154,14 +161,14 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
           const SizedBox(height: 20),
 
           // Feedback Type Selection
-          _buildSectionTitle('Feedback Type'),
+          _buildSectionTitle(AppLocalizations.of(context).feedbackType),
           const SizedBox(height: 15),
           _buildFeedbackTypeButtons(),
 
           const SizedBox(height: 30),
 
           // Contact Information
-          _buildSectionTitle('Contact Information'),
+          _buildSectionTitle(AppLocalizations.of(context).contactInformation),
           const SizedBox(height: 15),
           _buildContactTypeSelection(),
 
@@ -171,14 +178,14 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
           const SizedBox(height: 30),
 
           // Feedback Message
-          _buildSectionTitle('Your Feedback'),
+          _buildSectionTitle(AppLocalizations.of(context).yourFeedbackTitle),
           const SizedBox(height: 15),
           _buildFeedbackField(),
 
           const SizedBox(height: 30),
 
           // File Upload
-          _buildSectionTitle('Attach File (Optional)'),
+          _buildSectionTitle(AppLocalizations.of(context).attachFileOptional),
           const SizedBox(height: 15),
           _buildFileUploadSection(),
 
@@ -219,7 +226,12 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
   }
 
   Widget _buildFeedbackTypeButtons() {
-    final feedbackTypes = ['App Error', 'Suggestions', 'Earning Info', 'Other'];
+    final feedbackTypes = [
+      AppLocalizations.of(context).appError,
+      AppLocalizations.of(context).suggestions,
+      AppLocalizations.of(context).earningInfo,
+      AppLocalizations.of(context).otherType
+    ];
     final colors = [Colors.red, Colors.blue, Colors.green, Colors.purple];
 
     return Wrap(
@@ -304,7 +316,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Email',
+                        AppLocalizations.of(context).email,
                         style: TextStyle(
                           color: selectedContactType == 'email' ? Colors.pink : Colors.white.withValues(alpha: 0.7),
                           fontSize: 16,
@@ -354,7 +366,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Phone',
+                        AppLocalizations.of(context).phone,
                         style: TextStyle(
                           color: selectedContactType == 'phone' ? Colors.blue : Colors.white.withValues(alpha: 0.7),
                           fontSize: 16,
@@ -388,7 +400,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
             keyboardType: selectedContactType == 'email' ? TextInputType.emailAddress : TextInputType.phone,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: selectedContactType == 'email' ? 'Enter your email address' : 'Enter your phone number',
+              hintText: selectedContactType == 'email' ? AppLocalizations.of(context).enterEmailHint : AppLocalizations.of(context).enterPhoneHint,
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
               prefixIcon: Icon(
                 selectedContactType == 'email' ? Icons.email_outlined : Icons.phone_outlined,
@@ -419,7 +431,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
             maxLines: 5,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Please describe your feedback in detail...',
+              hintText: AppLocalizations.of(context).feedbackDetailHint,
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.all(20),
@@ -449,18 +461,18 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
                   Icon(Icons.cloud_upload_outlined, color: Colors.white.withValues(alpha: 0.7), size: 40),
                   const SizedBox(height: 10),
                   Text(
-                    'Upload Image or Video',
+                    AppLocalizations.of(context).uploadMediaHint,
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 15),
                   Row(
                     children: [
                       Expanded(
-                        child: _buildUploadButton('Image', Icons.image_rounded, Colors.purple, () => _pickFile()),
+                        child: _buildUploadButton(AppLocalizations.of(context).image, Icons.image_rounded, Colors.purple, () => _pickFile()),
                       ),
                       const SizedBox(width: 15),
                       Expanded(
-                        child: _buildUploadButton('Video', Icons.videocam_rounded, Colors.orange, () => _pickVideo()),
+                        child: _buildUploadButton(AppLocalizations.of(context).video, Icons.videocam_rounded, Colors.orange, () => _pickVideo()),
                       ),
                     ],
                   ),
@@ -543,12 +555,36 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
         ),
         child: Center(
           child: Text(
-            'Submit Feedback',
+            AppLocalizations.of(context).submitFeedback,
             style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    if (status == AppLocalizations.of(context).statusResolved) {
+      return Colors.green;
+    } else if (status == AppLocalizations.of(context).statusInProgress) {
+      return Colors.orange;
+    } else if (status == AppLocalizations.of(context).statusPending) {
+      return Colors.grey;
+    }
+    return Colors.grey;
+  }
+
+  Color _getFeedbackTypeColor(String type) {
+    if (type == AppLocalizations.of(context).appError) {
+      return Colors.red;
+    } else if (type == AppLocalizations.of(context).suggestions) {
+      return Colors.blue;
+    } else if (type == AppLocalizations.of(context).earningInfo) {
+      return Colors.green;
+    } else if (type == AppLocalizations.of(context).otherType) {
+      return Colors.purple;
+    }
+    return Colors.grey;
   }
 
   Widget _buildFeedbackItem(FeedbackItem feedback) {
@@ -627,7 +663,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
                           Icon(Icons.support_agent_rounded, color: Colors.green, size: 16),
                           const SizedBox(width: 8),
                           Text(
-                            'Response',
+                            AppLocalizations.of(context).response,
                             style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -659,44 +695,18 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Resolved':
-        return Colors.green;
-      case 'In Progress':
-        return Colors.orange;
-      case 'Pending':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
-  }
 
-  Color _getFeedbackTypeColor(String type) {
-    switch (type) {
-      case 'App Error':
-        return Colors.red;
-      case 'Suggestions':
-        return Colors.blue;
-      case 'Earning Info':
-        return Colors.green;
-      case 'Other':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
 
     if (difference.inDays == 0) {
-      return 'Today';
+      return AppLocalizations.of(context).today;
     } else if (difference.inDays == 1) {
-      return 'Yesterday';
+      return AppLocalizations.of(context).yesterday;
     } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
+      return '${difference.inDays} ${AppLocalizations.of(context).daysAgo}';
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
@@ -724,7 +734,7 @@ class _FeedbackPageState extends State<FeedbackPage> with TickerProviderStateMix
     // Handle feedback submission logic here
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Feedback submitted successfully!'),
+        content: Text(AppLocalizations.of(context).feedbackSubmittedSuccess),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

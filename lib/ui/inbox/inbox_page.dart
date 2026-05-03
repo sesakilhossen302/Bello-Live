@@ -11,6 +11,7 @@ import '../../data/remote/firebase/inbox_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class InboxPage extends StatelessWidget {
   const InboxPage({super.key});
@@ -32,9 +33,9 @@ class InboxPage extends StatelessWidget {
                       icon: const Icon(CupertinoIcons.back, color: Colors.white),
                       onPressed: () => context.pop(),
                     ),
-                    const Text(
-                      'Inbox',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                     Text(
+                      AppLocalizations.of(context).navInbox,
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ],
                 ),
@@ -56,9 +57,9 @@ class InboxPage extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.chat_bubble_outline, size: 60, color: Colors.white.withValues(alpha: 0.3)),
+                             Icon(Icons.chat_bubble_outline, size: 60, color: Colors.white.withValues(alpha: 0.3)),
                             const SizedBox(height: 10),
-                            Text("No messages yet", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                            Text(AppLocalizations.of(context).noMessagesYet, style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
                           ],
                         ),
                       );
@@ -89,16 +90,16 @@ class _InboxTile extends StatelessWidget {
   const _InboxTile({required this.summary});
 
   // Helper to get the display text with icon based on message type
-  String _getLastMessageDisplay() {
+  String _getLastMessageDisplay(BuildContext context) {
     switch (summary.lastMessageType) {
       case MessageType.emoji:
-        return '😊 Sticker';
+        return '😊 ${AppLocalizations.of(context).stickerMsg}';
       case MessageType.image:
-        return '📷 Photo';
+        return '📷 ${AppLocalizations.of(context).photoMsg}';
       case MessageType.video:
-        return '🎥 Video';
+        return '🎥 ${AppLocalizations.of(context).videoMsg}';
       case MessageType.voice:
-        return '🎤 Voice message';
+        return '🎤 ${AppLocalizations.of(context).voiceMsg}';
       case MessageType.text:
       default:
         return summary.lastMessage;
@@ -112,12 +113,12 @@ class _InboxTile extends StatelessWidget {
     return FutureBuilder<DocumentSnapshot>(
       future: ProfileService.getUserProfile(summary.peerId),
       builder: (context, snapshot) {
-        String name = "Loading...";
+        String name = AppLocalizations.of(context).loading;
         String photoUrl = "";
 
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          name = data['displayName'] ?? "Unknown User";
+          name = data['displayName'] ?? AppLocalizations.of(context).unknownUser;
           photoUrl = data['photoUrl'] ?? "";
         }
 
@@ -184,10 +185,10 @@ class _InboxTile extends StatelessWidget {
                 children: [
                   if (isMe)
                     TextSpan(
-                      text: "You: ",
+                      text: "${AppLocalizations.of(context).you}: ",
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontWeight: FontWeight.normal),
                     ),
-                  TextSpan(text: _getLastMessageDisplay()),
+                  TextSpan(text: _getLastMessageDisplay(context)),
                 ],
               ),
             ),

@@ -12,6 +12,7 @@ import '../../data/remote/firebase/media_services.dart'; // Make sure this path 
 import '../../navigation/routes.dart';
 import 'post_card.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class NewsfeedPage extends StatefulWidget {
   const NewsfeedPage({super.key});
@@ -139,7 +140,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
             children: [
               ListTile(
                 leading: const Icon(Icons.photo_library, color: Colors.blue),
-                title: const Text('Gallery Photo', style: TextStyle(color: Colors.white)),
+                title: Text(AppLocalizations.of(context).galleryPhoto, style: const TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _handleImagePick(ImageSource.gallery);
@@ -147,7 +148,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
               ),
               ListTile(
                 leading: const Icon(Icons.camera_alt, color: Colors.green),
-                title: const Text('Camera', style: TextStyle(color: Colors.white)),
+                title: Text(AppLocalizations.of(context).camera, style: const TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _handleImagePick(ImageSource.camera);
@@ -155,7 +156,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
               ),
               ListTile(
                 leading: const Icon(Icons.video_library, color: Colors.purple),
-                title: const Text('Video (max 15s)', style: TextStyle(color: Colors.white)),
+                title: Text(AppLocalizations.of(context).videoLimit, style: const TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _handleVideoPick();
@@ -259,8 +260,8 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                   onRefresh: _loadInitialPosts,
                   color: Colors.pink,
                   child: _posts.isEmpty
-                      ? const Center(
-                    child: Text("No posts yet. Say Hi!", style: TextStyle(color: Colors.white54)),
+                      ? Center(
+                    child: Text(AppLocalizations.of(context).noPostsYet, style: const TextStyle(color: Colors.white54)),
                   )
                       : ListView.builder(
                     controller: _scrollController,
@@ -300,9 +301,9 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
             icon: const Icon(CupertinoIcons.back, size: 28, color: Colors.white),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          const Text(
-            'Status',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+          Text(
+            AppLocalizations.of(context).status,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           IconButton(
             icon: const Icon(Icons.person_outline, size: 28, color: Colors.white),
@@ -328,9 +329,9 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Row(
             children: [
-              _buildTabItem('Hot', 0, Icons.whatshot),
-              _buildTabItem('New', 1, Icons.fiber_new),
-              _buildTabItem('Followed', 2, Icons.favorite),
+              _buildTabItem(AppLocalizations.of(context).hot, 0, Icons.whatshot),
+              _buildTabItem(AppLocalizations.of(context).newTab, 1, Icons.fiber_new),
+              _buildTabItem(AppLocalizations.of(context).followed, 2, Icons.favorite),
             ],
           ),
         ),
@@ -400,7 +401,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                   maxLines: null, // Allows expanding if text gets long
                   keyboardType: TextInputType.multiline,
                   decoration: InputDecoration(
-                    hintText: "What's on your mind?",
+                    hintText: AppLocalizations.of(context).whatsOnYourMind,
                     hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                     prefixIcon: Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -502,8 +503,8 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                                 color: Colors.black.withValues(alpha: 0.5),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Center(
-                                child: Text('Uploading Media...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              child: Center(
+                                child: Text(AppLocalizations.of(context).uploadingMedia, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               ),
                             ),
                           ),

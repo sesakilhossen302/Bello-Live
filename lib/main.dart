@@ -2,8 +2,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:picture_live/theme/app_theme.dart';
 import 'core/cubits/app_cubit.dart';
+import 'core/localization/app_localizations.dart';
 import 'data/remote/firebase/notification_service.dart';
 import 'di/get_it.dart';
 import 'firebase_options.dart';
@@ -36,6 +38,20 @@ class MyApp extends StatelessWidget {
             routerConfig: MyRouter.router,
             debugShowCheckedModeBanner: false,
             title: 'PICTURE LIVE',
+            locale: state.locale,
+            localizationsDelegates: const [
+              AppLocalizationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en'),
+              Locale('bn'),
+              Locale('hi'),
+              Locale('ur'),
+              Locale('es'),
+            ],
             themeMode: ThemeMode.light,
             theme: AppTheme.themeData(),
           );

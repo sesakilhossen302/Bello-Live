@@ -13,6 +13,7 @@ import 'package:country_picker/country_picker.dart';
 
 import '../../data/remote/firebase/profile_services.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -97,7 +98,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocalizations.of(context).errorLoadingProfile} $e')));
     } finally {
       setState(() {
         _isFetching = false;
@@ -135,13 +136,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
         imageFile: _selectedImageFile,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).profileUpdatedSuccess)));
 
       if (mounted) {
         context.pop();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocalizations.of(context).errorSavingProfile} $e')));
     } finally {
       setState(() {
         _isLoading = false;
@@ -168,7 +169,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     Text(
-                      'Edit Profile',
+                      AppLocalizations.of(context).editProfile,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -189,7 +190,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         : TextButton(
                             onPressed: _saveProfile,
                             child: Text(
-                              'Save',
+                              AppLocalizations.of(context).save,
                               style: TextStyle(color: AppColors.pink, fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -210,9 +211,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               const SizedBox(height: 30),
                               _buildGlassyTextField(
                                 controller: _nameController,
-                                label: 'Name',
+                                label: AppLocalizations.of(context).nameLabel,
                                 icon: CupertinoIcons.person_fill,
-                                validator: (value) => (value == null || value.isEmpty) ? 'Name cannot be empty' : null,
+                                validator: (value) => (value == null || value.isEmpty) ? AppLocalizations.of(context).nameEmptyError : null,
                                 maxLines: 1,
                               ),
                               const SizedBox(height: 20),
@@ -227,7 +228,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               const SizedBox(height: 20),
                               _buildGlassyTextField(
                                 controller: _bioController,
-                                label: 'Bio',
+                                label: AppLocalizations.of(context).bioLabel,
                                 icon: CupertinoIcons.book_fill,
                                 minLines: 2,
                                 maxLines: 4,
@@ -374,7 +375,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   // New Widget: Country Picker
   Widget _buildCountryPicker() {
-    String countryText = _selectedCountryName ?? 'Select Location (Country)';
+    String countryText = _selectedCountryName ?? AppLocalizations.of(context).selectLocation;
 
     // Use the flag emoji if it exists, otherwise use the location icon
     Widget prefixWidget = _selectedCountryFlagEmoji != null
@@ -400,8 +401,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
             borderRadius: const BorderRadius.only(topLeft: Radius.circular(20.0), topRight: Radius.circular(20.0)),
             // Style the search field
             inputDecoration: InputDecoration(
-              labelText: 'Search',
-              hintText: 'Start typing to search',
+              labelText: AppLocalizations.of(context).search,
+              hintText: AppLocalizations.of(context).searchStartTyping,
               labelStyle: TextStyle(color: AppColors.pinkLight),
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               prefixIcon: Icon(Icons.search, color: AppColors.pinkLight),
@@ -458,14 +459,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget _buildGenderPicker() {
-    final genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+    final genders = [
+      AppLocalizations.of(context).male,
+      AppLocalizations.of(context).female,
+      AppLocalizations.of(context).other,
+      AppLocalizations.of(context).preferNotToSay
+    ];
 
     // 2. Define the icon and color mapping
     final Map<String, (IconData, Color)> genderDetails = {
-      'Male': (Icons.male, Colors.blue.shade400),
-      'Female': (Icons.female, Colors.pink.shade400),
-      'Other': (Icons.transgender, AppColors.pinkLight),
-      'Prefer not to say': (CupertinoIcons.question_circle, Colors.grey.shade400),
+      AppLocalizations.of(context).male: (Icons.male, Colors.blue.shade400),
+      AppLocalizations.of(context).female: (Icons.female, Colors.pink.shade400),
+      AppLocalizations.of(context).other: (Icons.transgender, AppColors.pinkLight),
+      AppLocalizations.of(context).preferNotToSay: (CupertinoIcons.question_circle, Colors.grey.shade400),
     };
 
     return ClipRRect(
@@ -487,7 +493,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 children: [
                   Icon(CupertinoIcons.heart_fill, color: AppColors.pinkLight, size: 20),
                   SizedBox(width: 15),
-                  Text('Select Gender', style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+                  Text(AppLocalizations.of(context).selectGender, style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
                 ],
               ),
               dropdownColor: Colors.grey[900],
@@ -536,7 +542,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget _buildDobPicker() {
-    String dobText = _selectedDob != null ? DateFormat('MMMM d, yyyy').format(_selectedDob!) : 'Select Date of Birth';
+    String dobText = _selectedDob != null ? DateFormat('MMMM d, yyyy').format(_selectedDob!) : AppLocalizations.of(context).selectDob;
 
     return GestureDetector(
       onTap: () async {

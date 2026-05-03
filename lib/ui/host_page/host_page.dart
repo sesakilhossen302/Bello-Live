@@ -8,6 +8,7 @@ import '../../data/remote/firebase/room_services.dart';
 import '../../data/remote/firebase/video_room_services.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 // Enum to manage the selected party type
 enum PartyType { voice, video, stream }
@@ -71,7 +72,7 @@ class _HostPageState extends State<HostPage> {
         icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 24),
         onPressed: () => context.go(Routes.home.path),
       ),
-      title: Text("Start live", style: TextStyle(color: Colors.white)),
+      title: Text(AppLocalizations.of(context).startLive, style: TextStyle(color: Colors.white)),
     );
   }
 
@@ -169,9 +170,9 @@ class _HostPageState extends State<HostPage> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   ),
                 )
-              : const Center(
+              : Center(
                   child: Text(
-                    'Start Live',
+                    AppLocalizations.of(context).startLive,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -212,7 +213,7 @@ class _HostPageState extends State<HostPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error creating room: ${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${AppLocalizations.of(context).errorCreatingRoom}${e.toString()}")));
       setState(() {
         _isLoading = false;
       });

@@ -19,6 +19,7 @@ class SecureStorage {
   }
 
   static const String userKey = 'current_user';
+  static const String localeKey = 'app_locale';
 
   // Save user data - having a user implies being logged in
   Future<void> setUser(User user) async {
@@ -44,5 +45,15 @@ class SecureStorage {
   // Logout by removing user data
   Future<void> logout() async {
     return await storage.delete(key: userKey);
+  }
+
+  // Save locale
+  Future<void> setLocale(String languageCode) async {
+    return await storage.write(key: localeKey, value: languageCode);
+  }
+
+  // Get locale
+  Future<String?> getLocale() async {
+    return await storage.read(key: localeKey);
   }
 }

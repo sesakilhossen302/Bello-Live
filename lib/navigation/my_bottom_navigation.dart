@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import '../core/localization/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class MyBottomNavBar extends StatefulWidget {
@@ -133,18 +134,31 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradientColors),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradientColors,
+                ),
                 boxShadow: [
-                  BoxShadow(color: AppColors.pink.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 3, offset: Offset(0, 4)),
+                  BoxShadow(
+                    color: AppColors.pink.withValues(alpha: 0.6),
+                    blurRadius: 20,
+                    spreadRadius: 3,
+                    offset: const Offset(0, 4),
+                  ),
                   BoxShadow(
                     color: AppColors.pink600.withValues(alpha: 0.4),
                     blurRadius: 15,
                     spreadRadius: 0,
-                    offset: Offset(0, 2),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Icon(isSelected ? Icons.videocam : Icons.videocam, color: Colors.white, size: 30),
+              child: Icon(
+                isSelected ? Icons.videocam : Icons.videocam,
+                color: Colors.white,
+                size: 30,
+              ),
             ),
           );
         },
@@ -201,7 +215,7 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
 
                   const SizedBox(height: 4),
                   Text(
-                    item.label,
+                    _getLocalizedLabel(context, index),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
@@ -215,6 +229,24 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
         },
       ),
     );
+  }
+
+  String _getLocalizedLabel(BuildContext context, int index) {
+    final l10n = AppLocalizations.of(context);
+    switch (index) {
+      case 0:
+        return l10n.navHome;
+      case 1:
+        return l10n.navSocial;
+      case 2:
+        return l10n.liveNow;
+      case 3:
+        return l10n.navInbox;
+      case 4:
+        return l10n.navMe;
+      default:
+        return "";
+    }
   }
 }
 

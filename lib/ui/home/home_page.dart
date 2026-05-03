@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/localization/app_localizations.dart';
+import '../../core/cubits/app_cubit.dart';
 import '../../core/widgets/big_winner_overlay.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
@@ -136,16 +138,28 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
-          tabs: const [
-            Tab(text: 'Popular'),
-            Tab(text: 'Freshers'),
-            Tab(text: 'Party'),
-            Tab(text: 'PK'),
-            Tab(text: 'Games'),
+          tabs: [
+            Tab(text: AppLocalizations.of(context).popular),
+            Tab(text: AppLocalizations.of(context).freshers),
+            Tab(text: AppLocalizations.of(context).party),
+            Tab(text: AppLocalizations.of(context).pk),
+            Tab(text: AppLocalizations.of(context).games),
           ],
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.language, color: Colors.white, size: 24),
+          onPressed: () {
+            _showLanguageBottomSheet();
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.public, color: Colors.white, size: 24),
+          onPressed: () {
+            _showRegionBottomSheet();
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.search, color: Colors.white, size: 24),
           onPressed: () {
@@ -195,7 +209,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 Icon(Icons.videocam_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
                 const SizedBox(height: 16),
                 Text(
-                  "No room is currently active",
+                  AppLocalizations.of(context).noActiveRooms,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
                 ),
               ],
@@ -292,7 +306,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               SizedBox(height: MediaQuery.of(context).size.height * 0.15),
               Icon(Icons.videocam_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
               const SizedBox(height: 16),
-              Text("No room is currently active", style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16)),
+              Text(AppLocalizations.of(context).noActiveRooms, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16)),
             ],
           );
         }
@@ -362,7 +376,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 Icon(Icons.mic_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
                 const SizedBox(height: 16),
                 Text(
-                  "No audio room is currently active",
+                  AppLocalizations.of(context).noAudioRooms,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
                 ),
               ],
@@ -577,9 +591,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Featured Games',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                Text(
+                  AppLocalizations.of(context).featuredGames,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 GridView.builder(
@@ -659,12 +673,270 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
-                child: const Text('Play Now', style: TextStyle(color: Colors.white, fontSize: 12)),
+                child: Text(AppLocalizations.of(context).playNow, style: const TextStyle(color: Colors.white, fontSize: 12)),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showLanguageBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: const Color(0xFF1E1418), // Dark dusty rose background
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final List<Map<String, String>> languages = [
+              {'name': 'English', 'code': 'en', 'native': 'English'},
+              {'name': 'Hindi', 'code': 'hi', 'native': 'हिन्दी'},
+              {'name': 'Bangla', 'code': 'bn', 'native': 'বাংলা'},
+              {'name': 'Spanish', 'code': 'es', 'native': 'Español'},
+              {'name': 'Urdu', 'code': 'ur', 'native': 'اردو'},
+            ];
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    AppLocalizations.of(context).chooseLanguage,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ...languages.map((lang) {
+                    final currentLocale = context.read<AppCubit>().state.locale;
+                    final isSelected = currentLocale.languageCode == lang['code'];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        onTap: () {
+                          context.read<AppCubit>().changeLocale(Locale(lang['code']!));
+                          setModalState(() {});
+                          Future.delayed(const Duration(milliseconds: 200), () {
+                            if (context.mounted) Navigator.pop(context);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFFFFB6C1).withValues(alpha: 0.6) : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.language,
+                                color: isSelected ? Colors.white : Colors.white54,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                lang['native']!,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.white70,
+                                  fontSize: 17,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (isSelected)
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFFFFB6C1),
+                                  size: 22,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showRegionBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: const Color(0xFF1E1418), // Dark dusty rose background
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final List<Map<String, String>> regions = [
+              {'name': 'Global', 'count': '0'},
+              {'name': 'Bangladesh', 'count': '2'},
+              {'name': 'India', 'count': '1'},
+              {'name': 'Pakistan', 'count': '0'},
+              {'name': 'USA', 'count': '0'},
+            ];
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    AppLocalizations.of(context).filterByCountry,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Search Bar
+                  Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).searchCountries,
+                              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ...regions.map((reg) {
+                    final regionName = reg['name']!;
+                    final liveCount = reg['count']!;
+                    final isSelected = regionName == 'Global'; // Hardcoded for demonstration
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFFFFB6C1).withValues(alpha: 0.6) : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.public,
+                                color: isSelected ? Colors.white : Colors.white54,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                regionName,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.white70,
+                                  fontSize: 17,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (liveCount != '0')
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '$liveCount ${AppLocalizations.of(context).liveSuffix}',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              if (isSelected && liveCount == '0')
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFFFFB6C1),
+                                  size: 22,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/remote/firebase/social_media_service.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class CommentBottomSheet {
   static void show(BuildContext context, String postId) {
@@ -67,7 +68,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
               ),
-              const Text("Comments", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(AppLocalizations.of(context).comments, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const Divider(color: Colors.white24),
 
               // Comments List
@@ -77,7 +78,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
                     final comments = snapshot.data!;
-                    if (comments.isEmpty) return const Center(child: Text("No comments yet.", style: TextStyle(color: Colors.white54)));
+                    if (comments.isEmpty) return Center(child: Text(AppLocalizations.of(context).noCommentsYet, style: const TextStyle(color: Colors.white54)));
 
                     return ListView.builder(
                       controller: controller,
@@ -132,7 +133,7 @@ class _CommentSheetContentState extends State<_CommentSheetContent> {
                         controller: _commentController,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: "Add a comment...",
+                          hintText: AppLocalizations.of(context).addCommentHint,
                           hintStyle: const TextStyle(color: Colors.white54),
                           filled: true,
                           fillColor: Colors.white.withValues(alpha: 0.1),

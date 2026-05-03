@@ -10,6 +10,7 @@ import '../../data/remote/firebase/social_media_service.dart';
 import '../../data/remote/firebase/media_services.dart';
 import 'comment_bottom_sheet.dart';
 import '../../theme/app_theme.dart';
+import '../../core/localization/app_localizations.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -94,7 +95,7 @@ class _PostCardState extends State<PostCard> {
 
           return AlertDialog(
             backgroundColor: AppColors.bg,
-            title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
+            title: Text(AppLocalizations.of(context).editPost, style: const TextStyle(color: Colors.white)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -166,7 +167,7 @@ class _PostCardState extends State<PostCard> {
                           icon: const Icon(Icons.videocam, color: Colors.purple),
                           onPressed: () => pickMedia(ImageSource.gallery, true),
                         ),
-                        const Text("Attach file", style: TextStyle(color: Colors.white54, fontSize: 12))
+                        Text(AppLocalizations.of(context).attachFile, style: const TextStyle(color: Colors.white54, fontSize: 12))
                       ],
                     ),
                 ],
@@ -176,7 +177,7 @@ class _PostCardState extends State<PostCard> {
               if (!isSaving)
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                  child: Text(AppLocalizations.of(context).cancel, style: const TextStyle(color: Colors.white54)),
                 ),
               isSaving
                   ? const Padding(padding: EdgeInsets.all(8.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.pink)))
@@ -210,7 +211,7 @@ class _PostCardState extends State<PostCard> {
                   if (mounted) Navigator.pop(context);
                   widget.onPostChanged(); // Trigger parent refresh
                 },
-                child: const Text('Save', style: TextStyle(color: AppColors.primary)),
+                child: Text(AppLocalizations.of(context).save, style: const TextStyle(color: AppColors.primary)),
               ),
             ],
           );
@@ -224,12 +225,12 @@ class _PostCardState extends State<PostCard> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.bg,
-        title: const Text('Delete Post?', style: TextStyle(color: Colors.white)),
-        content: const Text('This action cannot be undone.', style: TextStyle(color: Colors.white70)),
+        title: Text(AppLocalizations.of(context).deletePostTitle, style: const TextStyle(color: Colors.white)),
+        content: Text(AppLocalizations.of(context).deleteConfirmMsg, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text(AppLocalizations.of(context).cancel, style: const TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () async {
@@ -237,7 +238,7 @@ class _PostCardState extends State<PostCard> {
               if (mounted) Navigator.pop(context);
               widget.onPostChanged(); // Trigger parent refresh
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(AppLocalizations.of(context).delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -250,23 +251,23 @@ class _PostCardState extends State<PostCard> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.bg,
-        title: const Text('Share Post', style: TextStyle(color: Colors.white)),
-        content: const Text('Do you want to share this post on your feed?', style: TextStyle(color: Colors.white70)),
+        title: Text(AppLocalizations.of(context).sharePost, style: const TextStyle(color: Colors.white)),
+        content: Text(AppLocalizations.of(context).shareConfirmMsg, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text(AppLocalizations.of(context).cancel, style: const TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context); // Close dialog
               await SocialMediaService.sharePost(widget.post);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post Shared!')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).postSharedToast)));
                 widget.onPostChanged(); // Refresh feed to see the new share
               }
             },
-            child: const Text('Yes, Share', style: TextStyle(color: Colors.pink)),
+            child: Text(AppLocalizations.of(context).yesShare, style: const TextStyle(color: Colors.pink)),
           ),
         ],
       ),
@@ -275,10 +276,10 @@ class _PostCardState extends State<PostCard> {
 
   String _getTimeAgo(DateTime dateTime) {
     final difference = DateTime.now().difference(dateTime);
-    if (difference.inDays > 0) return '${difference.inDays}d ago';
-    if (difference.inHours > 0) return '${difference.inHours}h ago';
-    if (difference.inMinutes > 0) return '${difference.inMinutes}m ago';
-    return 'Just now';
+    if (difference.inDays > 0) return '${difference.inDays}d ${AppLocalizations.of(context).ago}';
+    if (difference.inHours > 0) return '${difference.inHours}h ${AppLocalizations.of(context).ago}';
+    if (difference.inMinutes > 0) return '${difference.inMinutes}m ${AppLocalizations.of(context).ago}';
+    return AppLocalizations.of(context).justNow;
   }
 
   Widget _buildInteractionButton({
@@ -358,7 +359,7 @@ class _PostCardState extends State<PostCard> {
                       children: [
                         const Icon(Icons.repeat, color: Colors.white54, size: 16),
                         const SizedBox(width: 6),
-                        Text('Shared a post', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
+                        Text(AppLocalizations.of(context).sharedPostMsg, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
@@ -401,8 +402,8 @@ class _PostCardState extends State<PostCard> {
                             if (value == 'delete') _showDeleteDialog();
                           },
                           itemBuilder: (context) => [
-                            const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(color: Colors.white))),
-                            const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                            PopupMenuItem(value: 'edit', child: Text(AppLocalizations.of(context).edit, style: const TextStyle(color: Colors.white))),
+                            PopupMenuItem(value: 'delete', child: Text(AppLocalizations.of(context).delete, style: const TextStyle(color: Colors.red))),
                           ],
                         ),
                       ),
@@ -429,9 +430,9 @@ class _PostCardState extends State<PostCard> {
                       border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: widget.post.originalPost == null
-                        ? const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('This post has been deleted or is unavailable.', style: TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
+                        ? Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(AppLocalizations.of(context).postDeletedMsg, style: const TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
                     )
                         : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

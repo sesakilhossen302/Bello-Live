@@ -9,7 +9,10 @@ class AppTheme {
     applyElevationOverlayColor: false,
 
     // Apply Google Fonts Inter everywhere
-    textTheme: GoogleFonts.interTextTheme().apply(bodyColor: AppColors.text, displayColor: AppColors.text),
+    textTheme: GoogleFonts.interTextTheme().apply(
+      bodyColor: AppColors.text,
+      displayColor: AppColors.text,
+    ),
 
     scaffoldBackgroundColor: AppColors.bg,
     colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
@@ -70,18 +73,30 @@ class AppColors {
   );
 
   // Tab indicator gradient
-  static LinearGradient tabIndicatorGradient = LinearGradient(colors: [pink400, pink600]);
+  static LinearGradient tabIndicatorGradient = LinearGradient(
+    colors: [pink400, pink600],
+  );
 
   // Button gradient
-  static LinearGradient buttonGradient = LinearGradient(colors: [pink400, pink600]);
+  static LinearGradient buttonGradient = LinearGradient(
+    colors: [pink400, pink600],
+  );
 
   // Shadows
   static List<BoxShadow> logoShadow = [
-    BoxShadow(color: pink.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10)),
+    BoxShadow(
+      color: pink.withValues(alpha: 0.3),
+      blurRadius: 20,
+      offset: const Offset(0, 10),
+    ),
   ];
 
   static List<BoxShadow> buttonShadow = [
-    BoxShadow(color: pink.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 6)),
+    BoxShadow(
+      color: pink.withValues(alpha: 0.4),
+      blurRadius: 12,
+      offset: const Offset(0, 6),
+    ),
   ];
 
   // Input decoration colors
@@ -89,8 +104,12 @@ class AppColors {
   static Color inputBackground = Colors.black.withValues(alpha: 0.2);
 
   // Divider gradients
-  static Gradient dividerLeft = LinearGradient(colors: [Colors.transparent, Colors.white.withValues(alpha: 0.3)]);
-  static Gradient dividerRight = LinearGradient(colors: [Colors.white.withValues(alpha: 0.3), Colors.transparent]);
+  static Gradient dividerLeft = LinearGradient(
+    colors: [Colors.transparent, Colors.white.withValues(alpha: 0.3)],
+  );
+  static Gradient dividerRight = LinearGradient(
+    colors: [Colors.white.withValues(alpha: 0.3), Colors.transparent],
+  );
 
   // Shader for texts
   static Shader textGradientShader(Rect bounds) {
