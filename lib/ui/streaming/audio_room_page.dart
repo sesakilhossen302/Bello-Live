@@ -11,6 +11,8 @@ import 'package:picture_live/core/utils/view_count.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/cubits/app_cubit.dart';
 
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../core/widgets/GiftImageWidget.dart';
@@ -248,6 +250,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   late Animation<Offset> _joinAnimationOffset;
 
   String? _fullScreenGiftUrl;
+  bool _isMinimizing = false;
 
   @override
   void initState() {
@@ -321,7 +324,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _joinAnimationController.dispose();
     _musicPlayerManager.dispose();
 
-    if (_isInitialized) {
+    if (_isInitialized && !_isMinimizing) {
       if (widget.isHost) {
         RoomService.deleteRoom(widget.roomID);
       } else {
@@ -1060,36 +1063,62 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   Future<bool?> _showExitConfirmationDialog() async {
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2d1b2b),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Exit Room',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Do you want to exit the room?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
+      barrierDismissible: true,
+      builder: (context) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: 110,
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF212121).withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(55),
+              border: Border.all(color: Colors.amber, width: 2),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildExitDialogOption(
+                  icon: Icons.keyboard_arrow_down,
+                  color: Colors.purple,
+                  label: 'Minimize',
+                  onTap: () {
+                    _isMinimizing = true;
+                    context.read<AppCubit>().minimizeRoom(
+                          MinimizedRoomData(
+                            roomId: widget.roomID,
+                            hostPicture: roomData['hostPicture'] ?? '',
+                            hostName: roomData['hostName'] ?? 'Host',
+                            isAudioRoom: true,
+                            isHost: widget.isHost,
+                          ),
+                        );
+                    Navigator.of(context).pop(false);
+                    context.go(Routes.home.path); // Always go to Home when minimizing
+                  },
+                ),
+                const SizedBox(height: 24),
+                _buildExitDialogOption(
+                  icon: Icons.power_settings_new,
+                  color: Colors.red,
+                  label: 'Exit',
+                  onTap: () {
+                    Navigator.of(context).pop(true);
+                  },
+                ),
+                const SizedBox(height: 24),
+                _buildExitDialogOption(
+                  icon: Icons.close,
+                  color: Colors.white.withValues(alpha: 0.2),
+                  label: 'Cancel',
+                  onTap: () {
+                    Navigator.of(context).pop(false);
+                  },
+                ),
+              ],
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pink,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Exit', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+        ),
       ),
     ).then((shouldExit) {
       if (shouldExit == true) {
@@ -1102,6 +1131,40 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       }
       return shouldExit;
     });
+  }
+
+  Widget _buildExitDialogOption({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+            ),
+            child: Icon(icon, color: Colors.white, size: 26),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1201,9 +1264,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               children: [
                 // Solid Background Color
                 Positioned.fill(
-                  child: Container(
-                    color: const Color(0xFF2d1b2b),
-                  ),
+                  child: Container(color: const Color(0xFF2d1b2b)),
                 ),
 
                 SafeArea(
@@ -1644,18 +1705,6 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               );
             },
           ),
-          if (widget.isHost)
-            IconButton(
-              icon: Icon(
-                (roomData['isLocked'] ?? false) ? Icons.lock : Icons.lock_open,
-                color: (roomData['isLocked'] ?? false)
-                    ? Colors.pink
-                    : Colors.white,
-                size: 16,
-              ),
-              onPressed: _showPasswordManagementDialog,
-              tooltip: 'Room Security',
-            ),
           const Spacer(),
         ],
       ),
@@ -1904,60 +1953,59 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               right: MediaQuery.of(context).size.width * 0.18,
               top: 5,
               child: GestureDetector(
-                onTap:
-                    coHost == null
-                        ? null
-                        : () {
-                          showProfileInfoBottomSheet(
-                            context,
-                            userId: coHost!.userId,
-                            hostId: roomData['hostId'],
-                            roomId: widget.roomID,
-                            isSeated: true,
-                            isCoHost: true,
-                          );
-                        },
+                onTap: coHost == null
+                    ? null
+                    : () {
+                        showProfileInfoBottomSheet(
+                          context,
+                          userId: coHost!.userId,
+                          hostId: roomData['hostId'],
+                          roomId: widget.roomID,
+                          isSeated: true,
+                          isCoHost: true,
+                        );
+                      },
                 child: Column(
                   children: [
                     coHost != null
                         ? Transform.scale(
-                          scale: 0.8, // Slightly smaller than host
-                          child: buildStreamerSeat(
-                            imageUrl: coHost.userPicture,
-                            name: coHost.userName,
-                            isMuted: coHost.isMuted,
-                            userId: coHost.userId,
-                            isHost: false,
-                          ),
-                        )
+                            scale: 0.8, // Slightly smaller than host
+                            child: buildStreamerSeat(
+                              imageUrl: coHost.userPicture,
+                              name: coHost.userName,
+                              isMuted: coHost.isMuted,
+                              userId: coHost.userId,
+                              isHost: false,
+                            ),
+                          )
                         : Column(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.1),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.2),
+                            children: [
+                              Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.event_seat,
+                                  color: Colors.white70,
+                                  size: 24,
                                 ),
                               ),
-                              child: const Icon(
-                                Icons.event_seat,
-                                color: Colors.white70,
-                                size: 24,
+                              const SizedBox(height: 4),
+                              const Text(
+                                "Co-Host",
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 10,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "Co-Host",
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                   ],
                 ),
               ),
@@ -2757,55 +2805,53 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 ),
               ),
             ),
-            if (widget.isHost)
+            Padding(
+              padding: const EdgeInsets.only(right: paddingRight),
+              child: GestureDetector(
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  showGiftBottomSheet(
+                    context,
+                    roomId: widget.roomID,
+                    participants: _participants,
+                    hostId: roomData['hostId'] ?? '',
+                  );
+                },
+                child: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.gift_fill,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+            ),
+            if (isSpeakerOrCoHost)
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
-                  onTap: () => showAllRequestsBottomSheet(
-                    context,
-                    coHostRequests: _coHostRequests,
-                    speakerRequests: _speakerRequests,
-                    roomID: widget.roomID,
-                    isMoveAllowed: _isMoveAllowed,
-                    isSeatApprovalRequired: _isSeatApprovalRequired,
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: buttonSize,
-                        height: buttonSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.2),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.person_add_solid,
-                          color: Colors.white,
-                          size: iconSize,
-                        ),
-                      ),
-                      if (totalRequests > 0)
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.pink,
-                            ),
-                            child: Text(
-                              totalRequests.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    showEmojiBottomSheet(context, widget.roomID);
+                  },
+                  child: Container(
+                    width: buttonSize,
+                    height: buttonSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.2),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.smiley,
+                      color: Colors.white,
+                      size: iconSize,
+                    ),
                   ),
                 ),
               ),
@@ -2835,56 +2881,58 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   ),
                 ),
               ),
-            if (isSpeakerOrCoHost)
+            if (widget.isHost)
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    showEmojiBottomSheet(context, widget.roomID);
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.smiley,
-                      color: Colors.white,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(right: paddingRight),
-              child: GestureDetector(
-                onTap: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  showGiftBottomSheet(
+                  onTap: () => showAllRequestsBottomSheet(
                     context,
-                    roomId: widget.roomID,
-                    participants: _participants,
-                    hostId: roomData['hostId'] ?? '',
-                  );
-                },
-                child: Container(
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
+                    coHostRequests: _coHostRequests,
+                    speakerRequests: _speakerRequests,
+                    roomID: widget.roomID,
+                    isMoveAllowed: _isMoveAllowed,
+                    isSeatApprovalRequired: _isSeatApprovalRequired,
                   ),
-                  child: const Icon(
-                    CupertinoIcons.gift_fill,
-                    color: Colors.white,
-                    size: 16,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: buttonSize,
+                        height: buttonSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.2),
+                        ),
+                        child: const Icon(
+                          Icons.call,
+                          color: Colors.white,
+                          size: iconSize,
+                        ),
+                      ),
+                      if (totalRequests > 0)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.pink,
+                            ),
+                            child: Text(
+                              totalRequests.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-            ),
           ],
           Expanded(
             child: AnimatedContainer(

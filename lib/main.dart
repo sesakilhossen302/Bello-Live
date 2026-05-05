@@ -10,6 +10,7 @@ import 'data/remote/firebase/notification_service.dart';
 import 'di/get_it.dart';
 import 'firebase_options.dart';
 import 'navigation/my_router.dart';
+import 'ui/widgets/floating_minimized_room.dart';
 
 
 Future<void> main() async {
@@ -54,6 +55,14 @@ class MyApp extends StatelessWidget {
             ],
             themeMode: ThemeMode.light,
             theme: AppTheme.themeData(),
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  if (child != null) child,
+                  const FloatingMinimizedRoom(),
+                ],
+              );
+            },
           );
         },
       ),

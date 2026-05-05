@@ -24,4 +24,12 @@ class AppCubit extends Cubit<AppState> {
     secureStorage.setLocale(locale.languageCode);
     emit(state.copyWith(locale: locale));
   }
+
+  void minimizeRoom(MinimizedRoomData data) {
+    emit(state.copyWith(minimizedRoom: data));
+  }
+
+  void closeMinimizedRoom() {
+    emit(state.copyWith(clearMinimizedRoom: true));
+  }
 }
