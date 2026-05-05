@@ -71,7 +71,7 @@ class RoomService {
       'isActive': true,
       'participantCount': 1,
       'isMoveAllowed': true,
-      'isSeatApprovalRequired': true,
+      'isSeatApprovalRequired': false,
       'isLocked': isLocked,
       'password': isLocked ? password : null,
       'lastActive': ServerValue.timestamp,
@@ -84,7 +84,7 @@ class RoomService {
       'displayId': displayId,
       'userName': hostName,
       'userPicture': hostPicture,
-      'isCoHost': true,
+      'isCoHost': false,
       'seatNo': 0,
       'joinedAt': ServerValue.timestamp,
       'isOnline': true,
@@ -334,9 +334,7 @@ class RoomService {
     if (!roomSnapshot.exists) throw Exception('Room not found.');
 
     final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
-    if (roomData['isSeatApprovalRequired'] ?? true) {
-      throw Exception('Seat approval is required. Please send a request.');
-    }
+    // Removed seat approval check as requested
 
     final participantsSnapshot = await _participantsRef.child(roomId).get();
     if (participantsSnapshot.exists) {
@@ -441,6 +439,69 @@ class RoomService {
 
     await participantRef.update({'isCoHost': true, 'seatNo': -1, 'isMuted': false});
     await requestRef.remove();
+  }
+
+  static Future<void> promoteToCoHost(String roomId, String userId) async {
+    final participantRef = _participantsRef.child('$roomId/$userId');
+
+    final roomSnapshot = await _roomsRef.child(roomId).get();
+    if (!roomSnapshot.exists) throw Exception('Room not found.');
+
+    final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+    final hostId = roomData['hostId'];
+
+    final participantsSnapshot = await _participantsRef.child(roomId).get();
+    if (participantsSnapshot.exists) {
+      final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+      for (var entry in participants.entries) {
+        if (entry.key != hostId && entry.value is Map) {
+          final participant = entry.value as Map<dynamic, dynamic>;
+          if (participant['isCoHost'] == true) {
+            throw Exception('Co-host seat is already occupied.');
+          }
+        }
+      }
+    }
+
+    await participantRef.update({'isCoHost': true, 'seatNo': -1, 'isMuted': false});
+    // Also remove any existing requests from this user if any
+    await _requestsRef.child('$roomId/cohost_requests/$userId').remove();
+    await _requestsRef.child('$roomId/speaker_requests/$userId').remove();
+  }
+
+  static Future<void> removeCoHost(String roomId, String userId) async {
+    final participantRef = _participantsRef.child('$roomId/$userId');
+
+    // Find first available seat (1-8)
+    final participantsSnapshot = await _participantsRef.child(roomId).get();
+    final occupiedSeats = <int>{};
+
+    if (participantsSnapshot.exists) {
+      final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+      for (var participant in participants.values) {
+        if (participant is Map) {
+          final seatNo = participant['seatNo'] as int?;
+          if (seatNo != null && seatNo > 0) {
+            occupiedSeats.add(seatNo);
+          }
+        }
+      }
+    }
+
+    int targetSeatNo = -1; // Default to listener if no seats available
+    for (int i = 1; i <= 8; i++) {
+      if (!occupiedSeats.contains(i)) {
+        targetSeatNo = i;
+        break;
+      }
+    }
+
+    await participantRef.update({
+      'isCoHost': false,
+      'seatNo': targetSeatNo,
+      'isMuted': targetSeatNo == -1, // Mute if they become a listener, otherwise keep/unmute? 
+                                     // Usually speakers are unmuted by default in this app.
+    });
   }
 
   static Future<void> rejectCoHostRequest(String roomId, String requestId) async {

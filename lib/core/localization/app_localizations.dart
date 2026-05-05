@@ -18,6 +18,8 @@ class AppLocalizations {
       'choose_language': 'Choose Language',
       'choose_region': 'Choose Region',
       'live_now': 'Live Now',
+      'video_live': 'Video Live',
+      'no_followed_live': 'No one you follow is live now',
       'search': 'Search',
       'no_active_rooms': 'No room is currently active',
       'no_audio_rooms': 'No audio room is currently active',
@@ -169,7 +171,9 @@ class AppLocalizations {
       'games': 'গেমস',
       'choose_language': 'ভাষা নির্বাচন করুন',
       'choose_region': 'অঞ্চল নির্বাচন করুন',
-      'live_now': 'লাইভ এখন',
+      'live_now': 'লাইভ নাও',
+      'video_live': 'ভিডিও লাইভ',
+      'no_followed_live': 'আপনার অনুসরণ করা কেউ এখন লাইভ নেই',
       'search': 'অনুসন্ধান',
       'no_active_rooms': 'বর্তমানে কোন রুম সক্রিয় নেই',
       'no_audio_rooms': 'বর্তমানে কোন অডিও রুম সক্রিয় নেই',
@@ -779,6 +783,8 @@ class AppLocalizations {
   String get chooseLanguage => translate('choose_language');
   String get chooseRegion => translate('choose_region');
   String get liveNow => translate('live_now');
+  String get videoLive => translate('video_live');
+  String get noFollowedLive => translate('no_followed_live');
   String get search => translate('search');
   String get noActiveRooms => translate('no_active_rooms');
   String get noAudioRooms => translate('no_audio_rooms');

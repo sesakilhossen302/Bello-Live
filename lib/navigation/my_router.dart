@@ -21,6 +21,7 @@ import 'package:picture_live/ui/auth/verify_otp/verify_otp_page.dart';
 // Make sure this import path matches where you put the overlay in the new app
 import '../core/widgets/big_winner_overlay.dart';
 import '../data/local/secure_storage/secure_storage.dart';
+import '../ui/streaming/live_now_page.dart';
 import '../ui/feedback/feedback_page.dart';
 import '../ui/games/greedy_game.dart';
 import '../ui/games/spinner_game.dart';
@@ -265,6 +266,18 @@ class MyRouter {
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
                     key: state.pageKey,
                     child: ApplyAgencyPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.liveNow.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: const LiveNowPage(),
                     transitionsBuilder: customPopTransition,
                     transitionDuration: const Duration(milliseconds: 200),
                     reverseTransitionDuration: const Duration(

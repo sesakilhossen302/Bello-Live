@@ -1199,29 +1199,12 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
             return Stack(
               children: [
-                // Always show gradient background
-                if (backgroundUrl == null)
-                  Positioned.fill(
-                    child: Image.asset(
-                      'assets/room_bg/audio.jpeg',
-                      fit: BoxFit.cover,
-                      color: Colors.black.withValues(alpha: 0.5),
-                      colorBlendMode: BlendMode.darken,
-                    ),
-                  )
-                else
-                  // Show custom skin background if set
-                  Positioned.fill(
-                    child: CachedNetworkImage(
-                      imageUrl: backgroundUrl,
-                      fit: BoxFit.cover,
-                      color: Colors.black.withValues(alpha: 0.3),
-                      colorBlendMode: BlendMode.darken,
-                      placeholder: (context, url) => const SizedBox.shrink(),
-                      errorWidget: (context, url, error) =>
-                          const SizedBox.shrink(),
-                    ),
+                // Solid Background Color
+                Positioned.fill(
+                  child: Container(
+                    color: const Color(0xFF2d1b2b),
                   ),
+                ),
 
                 SafeArea(
                   child: _isInitialized
@@ -1879,39 +1862,114 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       );
     }
 
+    RoomParticipant? coHost;
+    try {
+      coHost = _participants.firstWhere(
+        (p) => p.isCoHost && p.userId != roomData['hostId'],
+      );
+    } catch (e) {
+      coHost = null;
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Host Seat Only
-          GestureDetector(
-            onTap: roomData['hostId'] == _auth.currentUser!.uid
-                ? null
-                : () {
-                    showProfileInfoBottomSheet(
-                      context,
-                      userId: roomData['hostId'],
-                      hostId: roomData['hostId'],
-                      roomId: widget.roomID,
-                    );
-                  },
-            child: buildStreamerSeat(
-              imageUrl: roomData['hostPicture'],
-              name: roomData['hostName'],
-              isMuted: host?.isMuted ?? true,
-              userId: roomData['hostId'],
-              isHost: true,
+      child: SizedBox(
+        height: 120, // Enough height for the avatars and names
+        width: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Host Seat (Centered)
+            GestureDetector(
+              onTap: roomData['hostId'] == _auth.currentUser!.uid
+                  ? null
+                  : () {
+                      showProfileInfoBottomSheet(
+                        context,
+                        userId: roomData['hostId'],
+                        hostId: roomData['hostId'],
+                        roomId: widget.roomID,
+                      );
+                    },
+              child: buildStreamerSeat(
+                imageUrl: roomData['hostPicture'],
+                name: roomData['hostName'],
+                isMuted: host?.isMuted ?? true,
+                userId: roomData['hostId'],
+                isHost: true,
+              ),
             ),
-          ),
-        ],
+            // Co-Host Seat
+            Positioned(
+              right: MediaQuery.of(context).size.width * 0.18,
+              top: 5,
+              child: GestureDetector(
+                onTap:
+                    coHost == null
+                        ? null
+                        : () {
+                          showProfileInfoBottomSheet(
+                            context,
+                            userId: coHost!.userId,
+                            hostId: roomData['hostId'],
+                            roomId: widget.roomID,
+                            isSeated: true,
+                            isCoHost: true,
+                          );
+                        },
+                child: Column(
+                  children: [
+                    coHost != null
+                        ? Transform.scale(
+                          scale: 0.8, // Slightly smaller than host
+                          child: buildStreamerSeat(
+                            imageUrl: coHost.userPicture,
+                            name: coHost.userName,
+                            isMuted: coHost.isMuted,
+                            userId: coHost.userId,
+                            isHost: false,
+                          ),
+                        )
+                        : Column(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.1),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.event_seat,
+                                color: Colors.white70,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Co-Host",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSeatsGrid() {
-    const int seatCount = 12;
+    const int seatCount = 8;
     final String currentUserId = _auth.currentUser!.uid;
 
     return GridView.builder(
@@ -1977,19 +2035,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
         try {
           if (isListener) {
-            if (_isSeatApprovalRequired) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Tap the \'Join Call\' button to request a seat.',
-                  ),
-                  backgroundColor: Colors.pink,
-                ),
-              );
-            } else {
-              await RoomService.takeSeat(widget.roomID, seatNo);
-              ZegoUIKit().turnMicrophoneOn(true);
-            }
+            await RoomService.takeSeat(widget.roomID, seatNo);
+            ZegoUIKit().turnMicrophoneOn(true);
           } else if (isSpeakerOrCoHost) {
             if (_isMoveAllowed) {
               await RoomService.moveSeat(widget.roomID, seatNo);
@@ -2047,11 +2094,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                       ),
                     ],
                   ),
-                  child: Icon(
-                    _isSeatApprovalRequired ? Icons.lock : Icons.add,
-                    color: Colors.white,
-                    size: _isSeatApprovalRequired ? 10 : 14,
-                  ),
+                  child: const Icon(Icons.add, color: Colors.white, size: 14),
                 ),
               ],
             ),
@@ -2079,10 +2122,11 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 userId: participant.userId,
                 hostId: roomData['hostId'],
                 roomId: widget.roomID,
+                isSeated: true,
               );
             }
           : () async {
-              // Show confirmation dialog before leaving
+              // Show confirmation dialog before leaving as requested
               final bool? shouldLeave =
                   await _showLeaveSeatConfirmationDialog();
               if (shouldLeave == true) {

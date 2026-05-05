@@ -981,6 +981,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
 class StreamerModel {
   final String id;
+  final String? hostId;
   final String name;
   final String? imageUrl;
   final String bio;
@@ -993,6 +994,7 @@ class StreamerModel {
 
   const StreamerModel({
     required this.id,
+    this.hostId,
     required this.name,
     this.imageUrl,
     required this.bio,

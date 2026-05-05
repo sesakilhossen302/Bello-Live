@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:go_router/go_router.dart';
 import '../core/localization/app_localizations.dart';
 import '../theme/app_theme.dart';
+import 'routes.dart';
 
 class MyBottomNavBar extends StatefulWidget {
   final int selectedPosition;
@@ -79,40 +81,101 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.bottomCenter,
-      children: [
-        // Bottom Navigation Bar
-        Container(
-          height: 70,
-          decoration: BoxDecoration(
-            color: AppColors.barColor,
-            border: Border(top: BorderSide(color: AppColors.pink.withValues(alpha: 0.2), width: 1)),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, -5)),
-              BoxShadow(color: AppColors.pink.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 0)),
-            ],
-          ),
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: SafeArea(
-                top: false,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(_navItems.length, (index) {
-                    return _buildNavItem(index, _navItems[index]);
-                  }),
+    return SizedBox(
+      height: 160, // Increased height to encompass the floating buttons for hit testing
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          // Bottom Navigation Bar
+          Container(
+            height: 85, // Increased height to prevent overflow on devices with bottom safe area
+            decoration: BoxDecoration(
+              color: AppColors.barColor,
+              border: Border(top: BorderSide(color: AppColors.pink.withValues(alpha: 0.2), width: 1)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, -5)),
+                BoxShadow(color: AppColors.pink.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 0)),
+              ],
+            ),
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(_navItems.length, (index) {
+                      return _buildNavItem(index, _navItems[index]);
+                    }),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+  
+          // Elevated Center Button
+          Positioned(bottom: 25, child: _buildCenterButton()),
+  
+          // Live Now Button above the nav bar
+          Positioned(
+            bottom: 100, // Adjusted to float above the 85px bar
+            child: _buildLiveNowButton(context),
+          ),
+        ],
+      ),
+    );
+  }
 
-        // Elevated Center Button
-        Positioned(bottom: 20, child: _buildCenterButton()),
-      ],
+  Widget _buildLiveNowButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        context.push(Routes.liveNow.path);
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(35),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE3A9B3).withValues(alpha: 0.6), // Matched lighter pink from image
+              borderRadius: BorderRadius.circular(35),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.podcasts_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  AppLocalizations.of(context).liveNow,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

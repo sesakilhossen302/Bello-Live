@@ -37,6 +37,7 @@ enum Routes {
   search,
   myFeed,
   languageSelection,
+  liveNow,
 }
 
 extension RoutesExtension on Routes {
@@ -118,6 +119,8 @@ extension RoutesExtension on Routes {
         return '/myFeed';
       case Routes.languageSelection:
         return '/languageSelection';
+      case Routes.liveNow:
+        return '/liveNow';
     }
   }
 }

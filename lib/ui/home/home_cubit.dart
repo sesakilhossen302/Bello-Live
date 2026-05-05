@@ -260,6 +260,7 @@ class HomeCubit extends Cubit<HomeState> {
   StreamerModel _mapToStreamerModel(String id, Map<dynamic, dynamic> data, {required bool isVideo}) {
     return StreamerModel(
       id: id,
+      hostId: data['hostId']?.toString(),
       name: data['hostName']?.toString() ?? 'Unknown',
       imageUrl: data['hostPicture']?.toString(),
       bio: data['notice']?.toString() ?? '',

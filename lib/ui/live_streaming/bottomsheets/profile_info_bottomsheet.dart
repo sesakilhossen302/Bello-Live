@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/active_frame_widget.dart';
 import '../../../core/widgets/auto_scroll_text.dart';
 import '../../../data/remote/firebase/profile_services.dart';
+import '../../../data/remote/firebase/room_services.dart';
 import '../../../navigation/routes.dart';
 import '../../profile/profile_page.dart';
 import 'follow_list_bottomsheet.dart';
@@ -15,10 +16,19 @@ import 'report_user_bottomsheet.dart';
 /// A bottom sheet that displays detailed info about a user.
 class ProfileInfoBottomSheet extends StatelessWidget {
   final String userId;
-  final String? hostId; // Changed to optional
-  final String? roomId; // Changed to optional
+  final String? hostId;
+  final String? roomId;
+  final bool isSeated;
+  final bool isCoHost;
 
-  const ProfileInfoBottomSheet({super.key, required this.userId, this.hostId, this.roomId});
+  const ProfileInfoBottomSheet({
+    super.key,
+    required this.userId,
+    this.hostId,
+    this.roomId,
+    this.isSeated = false,
+    this.isCoHost = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -294,6 +304,50 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                           ],
                         ),
                       ),
+
+                    // --- Co-Host Actions (Host Only) ---
+                    if (!isCurrentUser && isCurrentUserTheHost && roomId != null && (isSeated || isCoHost))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isCoHost ? Colors.red.shade700 : Colors.purple.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 4,
+                            ),
+                            onPressed: () async {
+                              try {
+                                if (isCoHost) {
+                                  await RoomService.removeCoHost(roomId!, userId);
+                                } else {
+                                  await RoomService.promoteToCoHost(roomId!, userId);
+                                }
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$userName is ${isCoHost ? 'no longer' : 'now'} a Co-Host!')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(
+                                    context,
+                                  ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+                                }
+                              }
+                            },
+                            icon: Icon(isCoHost ? Icons.star_outline_rounded : Icons.star_border_rounded),
+                            label: Text(
+                              isCoHost ? 'Remove Co-Host' : 'Make Co-Host',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
                     // Add bottom padding if the buttons are visible
                     if (!isCurrentUser) const SizedBox(height: 10),
                   ],
@@ -311,8 +365,10 @@ class ProfileInfoBottomSheet extends StatelessWidget {
 void showProfileInfoBottomSheet(
   BuildContext context, {
   required String userId,
-  String? hostId, // Changed to optional
-  String? roomId, // Changed to optional
+  String? hostId,
+  String? roomId,
+  bool isSeated = false,
+  bool isCoHost = false,
 }) {
   // Record the profile visit to Firestore
   _recordProfileVisit(userId);
@@ -322,7 +378,13 @@ void showProfileInfoBottomSheet(
     backgroundColor: const Color(0xFF2d1b2b),
     isScrollControlled: true,
     builder: (context) {
-      return ProfileInfoBottomSheet(userId: userId, hostId: hostId, roomId: roomId);
+      return ProfileInfoBottomSheet(
+        userId: userId,
+        hostId: hostId,
+        roomId: roomId,
+        isSeated: isSeated,
+        isCoHost: isCoHost,
+      );
     },
   );
 }

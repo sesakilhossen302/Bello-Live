@@ -21,13 +21,11 @@ final List<_ToolItem> _hostTools = [
   _ToolItem(label: 'Share', icon: Icons.share, iconBgColor: Colors.blue.shade700),
   _ToolItem(label: 'Inbox', icon: CupertinoIcons.mail_solid, iconBgColor: Colors.red.shade700),
   _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, iconBgColor: Colors.blue.shade600),
-  _ToolItem(label: 'Funny voice', icon: Icons.tag_faces_outlined, iconBgColor: Colors.purple.shade600),
   _ToolItem(label: 'Room skin', icon: Icons.color_lens_outlined, iconBgColor: Colors.teal.shade600),
   _ToolItem(label: 'Notice', icon: Icons.campaign_outlined, iconBgColor: Colors.indigo.shade600),
   _ToolItem(label: 'Play music', icon: Icons.music_note_outlined, iconBgColor: Colors.pink.shade600),
   _ToolItem(label: 'Games', icon: Icons.games_outlined, iconBgColor: Colors.green.shade700),
   _ToolItem(label: 'Block', icon: Icons.block, iconBgColor: Colors.grey.shade700),
-  _ToolItem(label: 'Voice Control', icon: Icons.record_voice_over_outlined, iconBgColor: Colors.lightBlue.shade700),
 ];
 
 final List<_ToolItem> _guestTools = [
@@ -54,10 +52,8 @@ class AudioToolsBottomSheet extends StatefulWidget {
   @override
   State<AudioToolsBottomSheet> createState() => _AudioToolsBottomSheetState();
 }
-
 class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
   bool _isSpeakerMuted = false;
-  ZegoVoiceChangerPreset _currentVoicePreset = ZegoVoiceChangerPreset.None;
 
   @override
   void initState() {
@@ -127,10 +123,6 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
                       await ZegoExpressEngine.instance.muteSpeaker(_isSpeakerMuted);
-                    };
-                  } else if (tool.label == 'Funny voice') {
-                    onTapLogic = () {
-                      _showVoiceChangerBottomSheet(context);
                     };
                   } else if (tool.label == 'Notice') {
                     onTapLogic = () {
@@ -205,119 +197,6 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
     );
   }
 
-  void _showVoiceChangerBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF2d1b2b),
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
-                    child: Text(
-                      'Voice Changer',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const Divider(color: Colors.white24, height: 1, thickness: 1),
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          _buildVoiceOption(context, setModalState, 'None', ZegoVoiceChangerPreset.None),
-                          _buildVoiceOption(context, setModalState, 'Male to Child', ZegoVoiceChangerPreset.MenToChild),
-                          _buildVoiceOption(
-                            context,
-                            setModalState,
-                            'Male to Female',
-                            ZegoVoiceChangerPreset.MenToWomen,
-                          ),
-                          _buildVoiceOption(
-                            context,
-                            setModalState,
-                            'Female to Child',
-                            ZegoVoiceChangerPreset.WomenToChild,
-                          ),
-                          _buildVoiceOption(
-                            context,
-                            setModalState,
-                            'Female to Male',
-                            ZegoVoiceChangerPreset.WomenToMen,
-                          ),
-                          _buildVoiceOption(context, setModalState, 'Foreigner', ZegoVoiceChangerPreset.Foreigner),
-                          _buildVoiceOption(
-                            context,
-                            setModalState,
-                            'Optimus Prime',
-                            ZegoVoiceChangerPreset.OptimusPrime,
-                          ),
-                          _buildVoiceOption(context, setModalState, 'Robot (Android)', ZegoVoiceChangerPreset.Android),
-                          _buildVoiceOption(context, setModalState, 'Ethereal', ZegoVoiceChangerPreset.Ethereal),
-                          _buildVoiceOption(
-                            context,
-                            setModalState,
-                            'Male Magnetic',
-                            ZegoVoiceChangerPreset.MaleMagnetic,
-                          ),
-                          _buildVoiceOption(context, setModalState, 'Female Fresh', ZegoVoiceChangerPreset.FemaleFresh),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildVoiceOption(
-    BuildContext context,
-    StateSetter setModalState,
-    String label,
-    ZegoVoiceChangerPreset preset,
-  ) {
-    final bool isSelected = _currentVoicePreset == preset;
-
-    return ListTile(
-      title: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? Colors.pink : Colors.white,
-          fontSize: 16,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.pink, size: 24) : null,
-      onTap: () {
-        ZegoExpressEngine.instance.setVoiceChangerPreset(preset);
-        setState(() {
-          _currentVoicePreset = preset;
-        });
-        setModalState(() {
-          _currentVoicePreset = preset;
-        });
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Voice changed to: $label'),
-            backgroundColor: Colors.pink,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      },
-    );
-  }
 
   void _showNoticeDialog(BuildContext context) {
     final noticeController = TextEditingController();
