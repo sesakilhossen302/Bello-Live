@@ -34,12 +34,14 @@ class VideoRoomService {
     final String hostName = userData['displayName'] ?? 'Anonymous';
     final String? hostPicture = userData['photoUrl'];
     final String displayId = userData['displayId'] ?? '';
+    final String hostCountry = userData['country'] ?? 'Unknown';
 
     await roomRef.set({
       'hostId': user.uid,
       'hostDisplayId': displayId,
       'hostName': hostName,
       'hostPicture': hostPicture,
+      'hostCountry': hostCountry,
       'createdAt': ServerValue.timestamp,
       'isActive': true,
       'participantCount': 1,

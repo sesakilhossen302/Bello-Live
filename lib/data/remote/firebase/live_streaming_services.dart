@@ -57,12 +57,15 @@ class LiveStreamService {
     final String? hostPicture = userData['photoUrl'];
     final String displayId = userData['displayId'] ?? '';
 
+    final String hostCountry = userData['country'] ?? 'Unknown';
+
     // 1. Static Room Data
     await roomRef.set({
       'hostId': user.uid,
       'hostDisplayId': displayId,
       'hostName': hostName,
       'hostPicture': hostPicture,
+      'hostCountry': hostCountry,
       'createdAt': ServerValue.timestamp,
       'isActive': true,
       'participantCount': 1,

@@ -22,6 +22,12 @@ class HomeCubit extends Cubit<HomeState> {
   final _freshersSubject = BehaviorSubject<List<StreamerModel>>.seeded([]);
   final _pkBattlesSubject = BehaviorSubject<List<PKBattleCard>>.seeded([]);
 
+  // Internal storage for unfiltered rooms to allow dynamic filtering
+  List<StreamerModel> _allRoomsRaw = [];
+  List<StreamerModel> _audioRoomsRaw = [];
+  List<StreamerModel> _freshersRaw = [];
+  List<PKBattleCard> _pkBattlesRaw = [];
+
   // Exposed Streams for the UI
   Stream<List<StreamerModel>> get allRoomsStream => _allRoomsSubject.stream;
   Stream<List<StreamerModel>> get audioRoomsStream => _audioRoomsSubject.stream;
@@ -39,56 +45,87 @@ class HomeCubit extends Cubit<HomeState> {
     Rx.combineLatest2(
       audioRoomsStreamRaw,
       liveStreamsStreamRaw,
-          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
-        return await _processRoomsWithDiamonds(audioEvent, liveEvent);
-      },
-    ).asyncExpand((future) async* {
-      yield await future;
+          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) => (audioEvent, liveEvent),
+    ).debounceTime(const Duration(milliseconds: 500)).asyncExpand((events) async* {
+      yield await _processRoomsWithDiamonds(events.$1, events.$2);
     }).listen((rooms) {
-      _allRoomsSubject.add(rooms);
+      _allRoomsRaw = rooms;
+      _updateCountryCounts(rooms);
+      _emitFilteredRooms();
     });
 
     // 3. Freshers Tab: Combine Audio + Video, sort by host's creation date (newest first)
     Rx.combineLatest2(
       audioRoomsStreamRaw,
       liveStreamsStreamRaw,
-          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
-        return await _processRoomsWithHostCreationDate(audioEvent, liveEvent);
-      },
-    ).asyncExpand((future) async* {
-      yield await future;
+          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) => (audioEvent, liveEvent),
+    ).debounceTime(const Duration(milliseconds: 500)).asyncExpand((events) async* {
+      yield await _processRoomsWithHostCreationDate(events.$1, events.$2);
     }).listen((rooms) {
-      _freshersSubject.add(rooms);
+      _freshersRaw = rooms;
+      _emitFilteredRooms();
     });
 
     // 4. Party Tab: Audio rooms only, sort by host diamonds
-    audioRoomsStreamRaw.asyncExpand((audioEvent) async* {
+    audioRoomsStreamRaw.debounceTime(const Duration(milliseconds: 500)).asyncExpand((audioEvent) async* {
       yield await _processAudioRooms(audioEvent);
     }).listen((rooms) {
-      _audioRoomsSubject.add(rooms);
+      _audioRoomsRaw = rooms;
+      _emitFilteredRooms();
     });
 
     // 5. PK Tab: Extract PK Battles directly from live_streams node
-    liveStreamsStreamRaw.listen((event) {
+    liveStreamsStreamRaw.debounceTime(const Duration(milliseconds: 500)).listen((event) {
       _extractAndEmitPKBattles(event);
     });
+  }
+
+  void _updateCountryCounts(List<StreamerModel> rooms) {
+    final Map<String, int> counts = {};
+    for (var room in rooms) {
+      counts[room.country] = (counts[room.country] ?? 0) + 1;
+    }
+    emit(state.copyWith(countryCounts: counts));
+  }
+
+  void _emitFilteredRooms() {
+    final country = state.selectedCountry;
+    if (country == 'Global') {
+      _allRoomsSubject.add(_allRoomsRaw);
+      _audioRoomsSubject.add(_audioRoomsRaw);
+      _freshersSubject.add(_freshersRaw);
+      _pkBattlesSubject.add(_pkBattlesRaw);
+    } else {
+      _allRoomsSubject.add(_allRoomsRaw.where((r) => r.country == country).toList());
+      _audioRoomsSubject.add(_audioRoomsRaw.where((r) => r.country == country).toList());
+      _freshersSubject.add(_freshersRaw.where((r) => r.country == country).toList());
+      _pkBattlesSubject.add(_pkBattlesRaw.where((r) => r.hostACountry == country).toList());
+    }
+  }
+
+  void setCountry(String country) {
+    emit(state.copyWith(selectedCountry: country));
+    _emitFilteredRooms();
   }
 
   // --- Processing Functions ---
 
   Future<List<StreamerModel>> _processRoomsWithDiamonds(DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
-    final List<_RoomWithDiamonds> roomsWithDiamonds = [];
+    final List<Future<_RoomWithDiamonds>> futures = [];
 
     // Parse Audio
     if (audioEvent.snapshot.exists && audioEvent.snapshot.value != null) {
       final data = audioEvent.snapshot.value as Map<dynamic, dynamic>;
       for (var entry in data.entries) {
+        final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
-        int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
-        roomsWithDiamonds.add(_RoomWithDiamonds(
-          streamer: _mapToStreamerModel(entry.key.toString(), roomData, isVideo: false),
-          diamonds: hostDiamonds,
-        ));
+        futures.add(() async {
+          int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          return _RoomWithDiamonds(
+            streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
+            diamonds: hostDiamonds,
+          );
+        }());
       }
     }
 
@@ -96,51 +133,62 @@ class HomeCubit extends Cubit<HomeState> {
     if (liveEvent.snapshot.exists && liveEvent.snapshot.value != null) {
       final data = liveEvent.snapshot.value as Map<dynamic, dynamic>;
       for (var entry in data.entries) {
+        final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
-        int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
-        roomsWithDiamonds.add(_RoomWithDiamonds(
-          streamer: _mapToStreamerModel(entry.key.toString(), roomData, isVideo: true),
-          diamonds: hostDiamonds,
-        ));
+        futures.add(() async {
+          int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          return _RoomWithDiamonds(
+            streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
+            diamonds: hostDiamonds,
+          );
+        }());
       }
     }
 
-    roomsWithDiamonds.sort((a, b) => b.diamonds.compareTo(a.diamonds));
-    return roomsWithDiamonds.map((e) => e.streamer).toList();
+    final results = await Future.wait(futures);
+    results.sort((a, b) => b.diamonds.compareTo(a.diamonds));
+    return results.map((e) => e.streamer).toList();
   }
 
   Future<List<StreamerModel>> _processAudioRooms(DatabaseEvent audioEvent) async {
-    final List<_RoomWithDiamonds> roomsWithDiamonds = [];
+    final List<Future<_RoomWithDiamonds>> futures = [];
 
     if (audioEvent.snapshot.exists && audioEvent.snapshot.value != null) {
       final data = audioEvent.snapshot.value as Map<dynamic, dynamic>;
       for (var entry in data.entries) {
+        final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
-        int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
-        roomsWithDiamonds.add(_RoomWithDiamonds(
-          streamer: _mapToStreamerModel(entry.key.toString(), roomData, isVideo: false),
-          diamonds: hostDiamonds,
-        ));
+        futures.add(() async {
+          int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          return _RoomWithDiamonds(
+            streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
+            diamonds: hostDiamonds,
+          );
+        }());
       }
     }
 
-    roomsWithDiamonds.sort((a, b) => b.diamonds.compareTo(a.diamonds));
-    return roomsWithDiamonds.map((e) => e.streamer).toList();
+    final results = await Future.wait(futures);
+    results.sort((a, b) => b.diamonds.compareTo(a.diamonds));
+    return results.map((e) => e.streamer).toList();
   }
 
   Future<List<StreamerModel>> _processRoomsWithHostCreationDate(DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
-    final List<_RoomWithTimestamp> roomsWithTimestamp = [];
+    final List<Future<_RoomWithTimestamp>> futures = [];
 
     // Parse Audio
     if (audioEvent.snapshot.exists && audioEvent.snapshot.value != null) {
       final data = audioEvent.snapshot.value as Map<dynamic, dynamic>;
       for (var entry in data.entries) {
+        final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
-        int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
-        roomsWithTimestamp.add(_RoomWithTimestamp(
-          streamer: _mapToStreamerModel(entry.key.toString(), roomData, isVideo: false),
-          timestamp: hostCreatedAt,
-        ));
+        futures.add(() async {
+          int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
+          return _RoomWithTimestamp(
+            streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
+            timestamp: hostCreatedAt,
+          );
+        }());
       }
     }
 
@@ -148,22 +196,27 @@ class HomeCubit extends Cubit<HomeState> {
     if (liveEvent.snapshot.exists && liveEvent.snapshot.value != null) {
       final data = liveEvent.snapshot.value as Map<dynamic, dynamic>;
       for (var entry in data.entries) {
+        final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
-        int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
-        roomsWithTimestamp.add(_RoomWithTimestamp(
-          streamer: _mapToStreamerModel(entry.key.toString(), roomData, isVideo: true),
-          timestamp: hostCreatedAt,
-        ));
+        futures.add(() async {
+          int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
+          return _RoomWithTimestamp(
+            streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
+            timestamp: hostCreatedAt,
+          );
+        }());
       }
     }
 
-    roomsWithTimestamp.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return roomsWithTimestamp.map((e) => e.streamer).toList();
+    final results = await Future.wait(futures);
+    results.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return results.map((e) => e.streamer).toList();
   }
 
   void _extractAndEmitPKBattles(DatabaseEvent liveEvent) {
     if (!liveEvent.snapshot.exists || liveEvent.snapshot.value == null) {
-      _pkBattlesSubject.add([]);
+      _pkBattlesRaw = [];
+      _emitFilteredRooms();
       return;
     }
 
@@ -191,13 +244,15 @@ class HomeCubit extends Cubit<HomeState> {
               participantCountA: roomData['participantCount'] ?? 0,
               participantCountB: 0,
               pkEndTime: pkState['pkEndTime'] as int?,
+              hostACountry: roomData['hostCountry']?.toString() ?? 'Unknown',
             ));
           }
         }
       }
     });
 
-    _pkBattlesSubject.add(pkBattles);
+    _pkBattlesRaw = pkBattles;
+    _emitFilteredRooms();
   }
 
   // --- Helper Methods ---
@@ -213,29 +268,72 @@ class HomeCubit extends Cubit<HomeState> {
       isVideo: isVideo,
       isLiveStream: isVideo,
       isLocked: data['isLocked'] == true,
+      country: data['hostCountry']?.toString() ?? 'Unknown',
     );
   }
 
+  // --- Caching for host data to improve performance ---
+  final Map<String, int> _diamondsCache = {};
+  final Map<String, int> _createdAtCache = {};
+  final Map<String, Future<int>> _diamondsFetchFutures = {};
+  final Map<String, Future<int>> _createdAtFetchFutures = {};
+
   Future<int> _fetchHostDiamonds(String? hostId) async {
     if (hostId == null) return 0;
-    try {
-      final userDoc = await _firestore.collection('users').doc(hostId).get();
-      if (userDoc.exists) return userDoc.data()?['diamonds'] ?? 0;
-    } catch (_) {}
-    return 0;
+    if (_diamondsCache.containsKey(hostId)) return _diamondsCache[hostId]!;
+    
+    if (_diamondsFetchFutures.containsKey(hostId)) {
+      return await _diamondsFetchFutures[hostId]!;
+    }
+
+    final Future<int> future = () async {
+      try {
+        final userDoc = await _firestore.collection('users').doc(hostId).get();
+        if (userDoc.exists) {
+          final diamonds = userDoc.data()?['diamonds'] ?? 0;
+          _diamondsCache[hostId] = diamonds;
+          return diamonds as int;
+        }
+      } catch (_) {}
+      return 0;
+    }();
+
+    _diamondsFetchFutures[hostId] = future;
+    final result = await future;
+    _diamondsFetchFutures.remove(hostId);
+    return result;
   }
 
   Future<int> _fetchHostCreatedAt(String? hostId) async {
     if (hostId == null) return DateTime.now().millisecondsSinceEpoch;
-    try {
-      final userDoc = await _firestore.collection('users').doc(hostId).get();
-      if (userDoc.exists) {
-        final createdAtData = userDoc.data()?['createdAt'];
-        if (createdAtData is Timestamp) return createdAtData.millisecondsSinceEpoch;
-        if (createdAtData is int) return createdAtData;
-      }
-    } catch (_) {}
-    return DateTime.now().millisecondsSinceEpoch;
+    if (_createdAtCache.containsKey(hostId)) return _createdAtCache[hostId]!;
+
+    if (_createdAtFetchFutures.containsKey(hostId)) {
+      return await _createdAtFetchFutures[hostId]!;
+    }
+
+    final Future<int> future = () async {
+      try {
+        final userDoc = await _firestore.collection('users').doc(hostId).get();
+        if (userDoc.exists) {
+          final createdAtData = userDoc.data()?['createdAt'];
+          int timestamp = DateTime.now().millisecondsSinceEpoch;
+          if (createdAtData is Timestamp) {
+            timestamp = createdAtData.millisecondsSinceEpoch;
+          } else if (createdAtData is int) {
+            timestamp = createdAtData;
+          }
+          _createdAtCache[hostId] = timestamp;
+          return timestamp;
+        }
+      } catch (_) {}
+      return DateTime.now().millisecondsSinceEpoch;
+    }();
+
+    _createdAtFetchFutures[hostId] = future;
+    final result = await future;
+    _createdAtFetchFutures.remove(hostId);
+    return result;
   }
 
   void init() async {

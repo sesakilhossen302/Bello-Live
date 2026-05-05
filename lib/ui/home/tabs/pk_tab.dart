@@ -408,6 +408,7 @@ class PKBattleCard {
   final int participantCountA;
   final int participantCountB;
   final int? pkEndTime;
+  final String hostACountry;
 
   PKBattleCard({
     required this.roomAId,
@@ -419,5 +420,6 @@ class PKBattleCard {
     required this.participantCountA,
     required this.participantCountB,
     this.pkEndTime,
+    this.hostACountry = 'Unknown',
   });
 }
