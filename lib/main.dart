@@ -12,12 +12,13 @@ import 'firebase_options.dart';
 import 'navigation/my_router.dart';
 import 'ui/widgets/floating_minimized_room.dart';
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await registerDI();
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint("Firebase initialization error: $e");
   }
@@ -38,7 +39,7 @@ class MyApp extends StatelessWidget {
           return MaterialApp.router(
             routerConfig: MyRouter.router,
             debugShowCheckedModeBanner: false,
-            title: 'PICTURE LIVE',
+            title: 'MP LIVE',
             locale: state.locale,
             localizationsDelegates: const [
               AppLocalizationsDelegate(),

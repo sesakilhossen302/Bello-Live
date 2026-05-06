@@ -24,7 +24,8 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -42,34 +43,47 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<bool> _showExitConfirmationDialog() async {
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Exit App',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Do you really want to close the application?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pink,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: AppColors.bg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Exit', style: TextStyle(color: Colors.white)),
+            title: const Text(
+              'Exit App',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const Text(
+              'Do you really want to close the application?',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pink,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  'Exit',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ??
+        ) ??
         false;
   }
 
@@ -100,7 +114,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         controller: _tabController,
                         children: [
                           _buildPopularTab(cubit),
-                          SingleChildScrollView(child: _buildFresherGrid(cubit)),
+                          SingleChildScrollView(
+                            child: _buildFresherGrid(cubit),
+                          ),
                           _buildPartyTab(cubit),
                           PKTab(cubit: cubit),
                           _buildGamesTab(),
@@ -137,8 +153,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           dividerColor: Colors.transparent,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 16,
+          ),
           tabs: [
             Tab(text: AppLocalizations.of(context).popular),
             Tab(text: AppLocalizations.of(context).freshers),
@@ -173,7 +195,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           },
           child: Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: Icon(Icons.emoji_events_outlined, color: Colors.amber[700], size: 24),
+            child: Icon(
+              Icons.emoji_events_outlined,
+              color: Colors.amber[700],
+              size: 24,
+            ),
           ),
         ),
       ],
@@ -184,12 +210,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.allRoomsStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white)),
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: const TextStyle(color: Colors.white),
+            ),
           );
         }
 
@@ -207,11 +237,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   },
                 ),
                 SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-                Icon(Icons.videocam_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
+                Icon(
+                  Icons.videocam_off,
+                  size: 60,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   AppLocalizations.of(context).noActiveRooms,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 16,
+                  ),
                 ),
               ],
             ),
@@ -258,7 +295,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.freshersStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return Column(
             children: [
               CarouselBanner(
@@ -286,7 +324,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
               const SizedBox(height: 100),
               Center(
-                child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  'Error: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
             ],
           );
@@ -305,9 +346,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 },
               ),
               SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-              Icon(Icons.videocam_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
+              Icon(
+                Icons.videocam_off,
+                size: 60,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 16),
-              Text(AppLocalizations.of(context).noActiveRooms, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16)),
+              Text(
+                AppLocalizations.of(context).noActiveRooms,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 16,
+                ),
+              ),
             ],
           );
         }
@@ -350,13 +401,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.audioRoomsStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white)),
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: const TextStyle(color: Colors.white),
+            ),
           );
         }
 
@@ -374,11 +429,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   },
                 ),
                 SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-                Icon(Icons.mic_off, size: 60, color: Colors.white.withValues(alpha: 0.5)),
+                Icon(
+                  Icons.mic_off,
+                  size: 60,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   AppLocalizations.of(context).noAudioRooms,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 16,
+                  ),
                 ),
               ],
             ),
@@ -405,15 +467,27 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               child: GestureDetector(
                 onTap: () {
                   if (streamer.isLiveStream) {
-                    context.push(Routes.liveStream.path, extra: {"roomId": streamer.id, "isHost": false});
+                    context.push(
+                      Routes.liveStream.path,
+                      extra: {"roomId": streamer.id, "isHost": false},
+                    );
                   } else if (!streamer.isVideo) {
-                    context.push(Routes.audioRoom.path, extra: {"roomId": streamer.id, "isHost": false});
+                    context.push(
+                      Routes.audioRoom.path,
+                      extra: {"roomId": streamer.id, "isHost": false},
+                    );
                   } else {
-                    context.push(Routes.videoRoom.path, extra: {"roomId": streamer.id, "isHost": false});
+                    context.push(
+                      Routes.videoRoom.path,
+                      extra: {"roomId": streamer.id, "isHost": false},
+                    );
                   }
                 },
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Stack(
                     children: [
                       if (index <= 3)
@@ -431,7 +505,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           gradient: LinearGradient(
-                            colors: [AppColors.black.withValues(alpha: 0.7), AppColors.black.withValues(alpha: 0.3), Colors.transparent],
+                            colors: [
+                              AppColors.black.withValues(alpha: 0.7),
+                              AppColors.black.withValues(alpha: 0.3),
+                              Colors.transparent,
+                            ],
                             stops: const [0.0, 0.6, 1.0],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
@@ -450,11 +528,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.1),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        width: 0.5,
+                                      ),
                                     ),
                                     child: Text(
                                       streamer.name,
@@ -462,7 +550,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                         color: Colors.white,
-                                        shadows: [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black54)],
+                                        shadows: [
+                                          Shadow(
+                                            offset: Offset(1, 1),
+                                            blurRadius: 3,
+                                            color: Colors.black54,
+                                          ),
+                                        ],
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -474,11 +568,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                       streamer.bio,
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
                                         fontWeight: FontWeight.w400,
                                         height: 1.3,
                                         shadows: const [
-                                          Shadow(offset: Offset(0.5, 0.5), blurRadius: 2, color: Colors.black54),
+                                          Shadow(
+                                            offset: Offset(0.5, 0.5),
+                                            blurRadius: 2,
+                                            color: Colors.black54,
+                                          ),
                                         ],
                                       ),
                                       maxLines: 1,
@@ -486,22 +586,40 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                     ),
                                   const Spacer(),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.3),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.3,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        width: 0.5,
+                                      ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.visibility, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+                                        Icon(
+                                          Icons.visibility,
+                                          size: 14,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                        ),
                                         const SizedBox(width: 4),
                                         Text(
                                           '${streamer.viewCount}',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.white.withValues(alpha: 0.8),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -515,7 +633,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  width: 2,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.3),
@@ -529,31 +650,46 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 borderRadius: BorderRadius.circular(10),
                                 child: streamer.imageUrl != null
                                     ? Image.network(
-                                  streamer.imageUrl!,
-                                  width: 80,
-                                  height: 80,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 80,
-                                      height: 80,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(Icons.person, color: Colors.white.withValues(alpha: 0.7), size: 40),
-                                    );
-                                  },
-                                )
+                                        streamer.imageUrl!,
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                              return Container(
+                                                width: 80,
+                                                height: 80,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[800],
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(
+                                                  Icons.person,
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.7),
+                                                  size: 40,
+                                                ),
+                                              );
+                                            },
+                                      )
                                     : Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[800],
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(Icons.person, color: Colors.white.withValues(alpha: 0.7), size: 40),
-                                ),
+                                        width: 80,
+                                        height: 80,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[800],
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.person,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                          size: 40,
+                                        ),
+                                      ),
                               ),
                             ),
                           ],
@@ -572,8 +708,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Widget _buildGamesTab() {
     final List<Map<String, String>> games = [
-      {'name': 'Greedy', 'image': 'assets/greedy/greedy.jpeg', 'path': Routes.greedy.path},
-      {'name': 'Fruits King', 'image': 'assets/spinner/fruits.jpeg', 'path': Routes.spinner.path},
+      {
+        'name': 'Greedy',
+        'image': 'assets/greedy/greedy.jpeg',
+        'path': Routes.greedy.path,
+      },
+      {
+        'name': 'Fruits King',
+        'image': 'assets/spinner/fruits.jpeg',
+        'path': Routes.spinner.path,
+      },
       {'name': 'Tin Patti', 'image': 'assets/icons/tin_patti_icon.png'},
     ];
 
@@ -594,7 +738,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               children: [
                 Text(
                   AppLocalizations.of(context).featuredGames,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 GridView.builder(
@@ -647,7 +795,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       color: AppColors.pinkDark.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.gamepad, color: Colors.white, size: 40),
+                    child: const Icon(
+                      Icons.gamepad,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                 ),
               ),
@@ -655,7 +807,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             const SizedBox(height: 8),
             Text(
               name,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -671,10 +827,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.pinkLight,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
-                child: Text(AppLocalizations.of(context).playNow, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                child: Text(
+                  AppLocalizations.of(context).playNow,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ),
             ),
           ],
@@ -731,27 +892,45 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     ),
                     const SizedBox(height: 20),
                     ...languages.map((lang) {
-                      final currentLocale = context.read<AppCubit>().state.locale;
-                      final isSelected = currentLocale.languageCode == lang['code'];
+                      final currentLocale = context
+                          .read<AppCubit>()
+                          .state
+                          .locale;
+                      final isSelected =
+                          currentLocale.languageCode == lang['code'];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: InkWell(
                           onTap: () {
-                            context.read<AppCubit>().changeLocale(Locale(lang['code']!));
+                            context.read<AppCubit>().changeLocale(
+                              Locale(lang['code']!),
+                            );
                             setModalState(() {});
-                            Future.delayed(const Duration(milliseconds: 200), () {
-                              if (context.mounted) Navigator.pop(context);
-                            });
+                            Future.delayed(
+                              const Duration(milliseconds: 200),
+                              () {
+                                if (context.mounted) Navigator.pop(context);
+                              },
+                            );
                           },
                           borderRadius: BorderRadius.circular(16),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
                             decoration: BoxDecoration(
-                              color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: isSelected ? const Color(0xFFFFB6C1).withValues(alpha: 0.6) : Colors.transparent,
+                                color: isSelected
+                                    ? const Color(
+                                        0xFFFFB6C1,
+                                      ).withValues(alpha: 0.6)
+                                    : Colors.transparent,
                                 width: 1.5,
                               ),
                             ),
@@ -759,16 +938,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               children: [
                                 Icon(
                                   Icons.language,
-                                  color: isSelected ? Colors.white : Colors.white54,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.white54,
                                   size: 22,
                                 ),
                                 const SizedBox(width: 16),
                                 Text(
                                   lang['native']!,
                                   style: TextStyle(
-                                    color: isSelected ? Colors.white : Colors.white70,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.white70,
                                     fontSize: 17,
-                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
                                   ),
                                 ),
                                 const Spacer(),
@@ -813,24 +998,46 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               return StatefulBuilder(
                 builder: (context, setModalState) {
                   // Get all countries that have live users, plus Global
-                  final liveCountries = state.countryCounts.keys.where((c) => c != 'Unknown').toList();
+                  final liveCountries = state.countryCounts.keys
+                      .where((c) => c != 'Unknown')
+                      .toList();
 
                   // Sort live countries by count descending
-                  liveCountries.sort((a, b) => (state.countryCounts[b] ?? 0).compareTo(state.countryCounts[a] ?? 0));
+                  liveCountries.sort(
+                    (a, b) => (state.countryCounts[b] ?? 0).compareTo(
+                      state.countryCounts[a] ?? 0,
+                    ),
+                  );
 
                   List<Map<String, dynamic>> regions = [
-                    {'name': 'Global', 'count': state.countryCounts.values.fold(0, (sum, count) => sum + count)},
-                    ...liveCountries.map((c) => {'name': c, 'count': state.countryCounts[c] ?? 0}),
+                    {
+                      'name': 'Global',
+                      'count': state.countryCounts.values.fold(
+                        0,
+                        (sum, count) => sum + count,
+                      ),
+                    },
+                    ...liveCountries.map(
+                      (c) => {'name': c, 'count': state.countryCounts[c] ?? 0},
+                    ),
                   ];
 
                   // Apply search filter
                   if (searchQuery.isNotEmpty) {
-                    regions = regions.where((r) => (r['name'] as String).toLowerCase().contains(searchQuery.toLowerCase())).toList();
+                    regions = regions
+                        .where(
+                          (r) => (r['name'] as String).toLowerCase().contains(
+                            searchQuery.toLowerCase(),
+                          ),
+                        )
+                        .toList();
                   }
 
                   return Container(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -862,19 +1069,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Row(
                             children: [
-                              Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                              Icon(
+                                Icons.search,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                size: 20,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: TextField(
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
-                                    hintText: AppLocalizations.of(context).searchCountries,
-                                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                                    hintText: AppLocalizations.of(
+                                      context,
+                                    ).searchCountries,
+                                    hintStyle: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
                                     border: InputBorder.none,
                                   ),
                                   onChanged: (value) {
@@ -896,7 +1115,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               final reg = regions[index];
                               final regionName = reg['name'] as String;
                               final liveCount = reg['count'] as int;
-                              final isSelected = regionName == state.selectedCountry;
+                              final isSelected =
+                                  regionName == state.selectedCountry;
 
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
@@ -907,12 +1127,23 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   },
                                   borderRadius: BorderRadius.circular(16),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
+                                      color: isSelected
+                                          ? Colors.white.withValues(alpha: 0.1)
+                                          : Colors.white.withValues(
+                                              alpha: 0.05,
+                                            ),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                        color: isSelected ? const Color(0xFFFFB6C1).withValues(alpha: 0.6) : Colors.transparent,
+                                        color: isSelected
+                                            ? const Color(
+                                                0xFFFFB6C1,
+                                              ).withValues(alpha: 0.6)
+                                            : Colors.transparent,
                                         width: 1.5,
                                       ),
                                     ),
@@ -920,30 +1151,44 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                       children: [
                                         Icon(
                                           Icons.public,
-                                          color: isSelected ? Colors.white : Colors.white54,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.white54,
                                           size: 22,
                                         ),
                                         const SizedBox(width: 16),
                                         Text(
                                           regionName,
                                           style: TextStyle(
-                                            color: isSelected ? Colors.white : Colors.white70,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : Colors.white70,
                                             fontSize: 17,
-                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
                                           ),
                                         ),
                                         const Spacer(),
                                         if (liveCount != 0)
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.3),
-                                              borderRadius: BorderRadius.circular(20),
+                                              color: Colors.black.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                             ),
                                             child: Text(
                                               '$liveCount ${AppLocalizations.of(context).liveSuffix}',
                                               style: TextStyle(
-                                                color: Colors.white.withValues(alpha: 0.7),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.7,
+                                                ),
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w500,
                                               ),

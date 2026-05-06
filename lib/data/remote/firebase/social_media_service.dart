@@ -52,7 +52,10 @@ class Post {
       authorAvatar: data['authorAvatar'] ?? '',
       content: data['content'] ?? '',
       mediaUrl: data['mediaUrl'],
-      mediaType: PostMediaType.values.firstWhere((e) => e.name == data['mediaType'], orElse: () => PostMediaType.text),
+      mediaType: PostMediaType.values.firstWhere(
+        (e) => e.name == data['mediaType'],
+        orElse: () => PostMediaType.text,
+      ),
       thumbnailUrl: data['thumbnailUrl'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       reactionCount: data['reactionCount'] ?? 0,
@@ -132,18 +135,33 @@ class SocialMediaService {
       } else if (tabType == 'hot') {
         final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
         query = query
-            .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo))
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo),
+            )
             .orderBy('createdAt', descending: true)
             .orderBy('reactionCount', descending: true);
       } else if (tabType == 'my_feed') {
-        query = query.where('authorId', isEqualTo: currentUserId).orderBy('createdAt', descending: true);
+        query = query
+            .where('authorId', isEqualTo: currentUserId)
+            .orderBy('createdAt', descending: true);
       } else if (tabType == 'followed') {
-        final followingSnapshot = await _db.collection('users').doc(currentUserId).collection('following').get();
-        List<String> followingIds = followingSnapshot.docs.map((e) => e.id).toList();
-        if (followingIds.isEmpty) return {'posts': <Post>[], 'lastDocument': null};
+        final followingSnapshot = await _db
+            .collection('users')
+            .doc(currentUserId)
+            .collection('following')
+            .get();
+        List<String> followingIds = followingSnapshot.docs
+            .map((e) => e.id)
+            .toList();
+        if (followingIds.isEmpty)
+          return {'posts': <Post>[], 'lastDocument': null};
 
-        if (followingIds.length > 30) followingIds = followingIds.sublist(0, 30);
-        query = query.where('authorId', whereIn: followingIds).orderBy('createdAt', descending: true);
+        if (followingIds.length > 30)
+          followingIds = followingIds.sublist(0, 30);
+        query = query
+            .where('authorId', whereIn: followingIds)
+            .orderBy('createdAt', descending: true);
       }
 
       query = query.limit(limit);
@@ -152,7 +170,9 @@ class SocialMediaService {
       }
 
       final snapshot = await query.get();
-      List<Post> posts = snapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
+      List<Post> posts = snapshot.docs
+          .map((doc) => Post.fromFirestore(doc))
+          .toList();
 
       if (posts.isEmpty) return {'posts': posts, 'lastDocument': null};
 
@@ -168,22 +188,28 @@ class SocialMediaService {
 
       // NEW: Fetch original posts
       if (originalPostIds.isNotEmpty) {
-        await Future.wait(originalPostIds.map((id) async {
-          final doc = await _db.collection('posts').doc(id).get();
-          if (doc.exists) {
-            fetchedOriginalPosts[id] = Post.fromFirestore(doc);
-            uniqueAuthorIds.add(fetchedOriginalPosts[id]!.authorId); // Need author data for the embedded post too
-          }
-        }));
+        await Future.wait(
+          originalPostIds.map((id) async {
+            final doc = await _db.collection('posts').doc(id).get();
+            if (doc.exists) {
+              fetchedOriginalPosts[id] = Post.fromFirestore(doc);
+              uniqueAuthorIds.add(
+                fetchedOriginalPosts[id]!.authorId,
+              ); // Need author data for the embedded post too
+            }
+          }),
+        );
       }
 
       Map<String, Map<String, dynamic>> freshAuthorData = {};
-      await Future.wait(uniqueAuthorIds.map((authorId) async {
-        final userDoc = await _db.collection('users').doc(authorId).get();
-        if (userDoc.exists) {
-          freshAuthorData[authorId] = userDoc.data() as Map<String, dynamic>;
-        }
-      }));
+      await Future.wait(
+        uniqueAuthorIds.map((authorId) async {
+          final userDoc = await _db.collection('users').doc(authorId).get();
+          if (userDoc.exists) {
+            freshAuthorData[authorId] = userDoc.data() as Map<String, dynamic>;
+          }
+        }),
+      );
 
       for (var post in posts) {
         // Inject fresh author data for main post
@@ -194,17 +220,26 @@ class SocialMediaService {
         }
 
         // NEW: Inject embedded original post and its fresh author data
-        if (post.isShare && post.originalPostId != null && fetchedOriginalPosts.containsKey(post.originalPostId)) {
+        if (post.isShare &&
+            post.originalPostId != null &&
+            fetchedOriginalPosts.containsKey(post.originalPostId)) {
           Post origPost = fetchedOriginalPosts[post.originalPostId]!;
           if (freshAuthorData.containsKey(origPost.authorId)) {
             final origAuthorData = freshAuthorData[origPost.authorId]!;
-            origPost.authorName = origAuthorData['displayName'] ?? origPost.authorName;
-            origPost.authorAvatar = origAuthorData['photoUrl'] ?? origPost.authorAvatar;
+            origPost.authorName =
+                origAuthorData['displayName'] ?? origPost.authorName;
+            origPost.authorAvatar =
+                origAuthorData['photoUrl'] ?? origPost.authorAvatar;
           }
           post.originalPost = origPost;
         }
 
-        final likeDoc = await _db.collection('posts').doc(post.id).collection('reactions').doc(currentUserId).get();
+        final likeDoc = await _db
+            .collection('posts')
+            .doc(post.id)
+            .collection('reactions')
+            .doc(currentUserId)
+            .get();
         post.isLikedByMe = likeDoc.exists;
       }
 
@@ -244,13 +279,13 @@ class SocialMediaService {
 
   // UPDATED: Now supports modifying media
   static Future<void> updatePost(
-      String postId,
-      String newContent, {
-        bool removeMedia = false,
-        String? newMediaUrl,
-        PostMediaType? newMediaType,
-        String? newThumbnailUrl,
-      }) async {
+    String postId,
+    String newContent, {
+    bool removeMedia = false,
+    String? newMediaUrl,
+    PostMediaType? newMediaType,
+    String? newThumbnailUrl,
+  }) async {
     final Map<String, dynamic> updates = {'content': newContent};
 
     if (removeMedia) {
@@ -270,7 +305,10 @@ class SocialMediaService {
     await _db.collection('posts').doc(postId).delete();
   }
 
-  static Future<bool> toggleReaction(String postId, bool isCurrentlyLiked) async {
+  static Future<bool> toggleReaction(
+    String postId,
+    bool isCurrentlyLiked,
+  ) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return isCurrentlyLiked;
 
@@ -283,10 +321,16 @@ class SocialMediaService {
 
         if (reactionDoc.exists) {
           transaction.delete(reactionRef);
-          transaction.update(postRef, {'reactionCount': FieldValue.increment(-1)});
+          transaction.update(postRef, {
+            'reactionCount': FieldValue.increment(-1),
+          });
         } else {
-          transaction.set(reactionRef, {'timestamp': FieldValue.serverTimestamp()});
-          transaction.update(postRef, {'reactionCount': FieldValue.increment(1)});
+          transaction.set(reactionRef, {
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          transaction.update(postRef, {
+            'reactionCount': FieldValue.increment(1),
+          });
         }
       });
       return !isCurrentlyLiked;
@@ -303,7 +347,11 @@ class SocialMediaService {
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final userData = userDoc.data() as Map<String, dynamic>;
 
-    final commentRef = _db.collection('posts').doc(postId).collection('comments').doc();
+    final commentRef = _db
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .doc();
     final postRef = _db.collection('posts').doc(postId);
 
     final commentData = {
@@ -327,7 +375,10 @@ class SocialMediaService {
         .collection('comments')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Comment.fromFirestore(doc)).toList());
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) => Comment.fromFirestore(doc)).toList(),
+        );
   }
 
   static Future<void> sharePost(Post originalPost) async {
@@ -340,7 +391,8 @@ class SocialMediaService {
     final shareRef = _db.collection('posts').doc();
 
     // Fix: If sharing a shared post, point to the root original post.
-    final rootOriginalId = originalPost.isShare && originalPost.originalPostId != null
+    final rootOriginalId =
+        originalPost.isShare && originalPost.originalPostId != null
         ? originalPost.originalPostId!
         : originalPost.id;
 

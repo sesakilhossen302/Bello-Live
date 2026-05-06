@@ -35,49 +35,74 @@ class HomeCubit extends Cubit<HomeState> {
   Stream<List<PKBattleCard>> get pkBattlesStream => _pkBattlesSubject.stream;
 
   void _initStreams() {
-    debugPrint('🔵 [HOME_CUBIT] Initializing optimized streams for Picture Live...');
+    debugPrint(
+      '🔵 [HOME_CUBIT] Initializing optimized streams for Picture Live...',
+    );
 
     // 1. Setup raw broadcast streams for Audio and Video(Live) rooms
-    final audioRoomsStreamRaw = FirebaseDatabase.instance.ref('rooms').orderByChild('isActive').equalTo(true).onValue.asBroadcastStream();
-    final liveStreamsStreamRaw = FirebaseDatabase.instance.ref('live_streams').orderByChild('isActive').equalTo(true).onValue.asBroadcastStream();
+    final audioRoomsStreamRaw = FirebaseDatabase.instance
+        .ref('rooms')
+        .orderByChild('isActive')
+        .equalTo(true)
+        .onValue
+        .asBroadcastStream();
+    final liveStreamsStreamRaw = FirebaseDatabase.instance
+        .ref('live_streams')
+        .orderByChild('isActive')
+        .equalTo(true)
+        .onValue
+        .asBroadcastStream();
 
     // 2. Popular Tab: Combine Audio + Video, sort by host diamonds
     Rx.combineLatest2(
-      audioRoomsStreamRaw,
-      liveStreamsStreamRaw,
-          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) => (audioEvent, liveEvent),
-    ).debounceTime(const Duration(milliseconds: 500)).asyncExpand((events) async* {
-      yield await _processRoomsWithDiamonds(events.$1, events.$2);
-    }).listen((rooms) {
-      _allRoomsRaw = rooms;
-      _updateCountryCounts(rooms);
-      _emitFilteredRooms();
-    });
+          audioRoomsStreamRaw,
+          liveStreamsStreamRaw,
+          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) =>
+              (audioEvent, liveEvent),
+        )
+        .debounceTime(const Duration(milliseconds: 500))
+        .asyncExpand((events) async* {
+          yield await _processRoomsWithDiamonds(events.$1, events.$2);
+        })
+        .listen((rooms) {
+          _allRoomsRaw = rooms;
+          _updateCountryCounts(rooms);
+          _emitFilteredRooms();
+        });
 
     // 3. Freshers Tab: Combine Audio + Video, sort by host's creation date (newest first)
     Rx.combineLatest2(
-      audioRoomsStreamRaw,
-      liveStreamsStreamRaw,
-          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) => (audioEvent, liveEvent),
-    ).debounceTime(const Duration(milliseconds: 500)).asyncExpand((events) async* {
-      yield await _processRoomsWithHostCreationDate(events.$1, events.$2);
-    }).listen((rooms) {
-      _freshersRaw = rooms;
-      _emitFilteredRooms();
-    });
+          audioRoomsStreamRaw,
+          liveStreamsStreamRaw,
+          (DatabaseEvent audioEvent, DatabaseEvent liveEvent) =>
+              (audioEvent, liveEvent),
+        )
+        .debounceTime(const Duration(milliseconds: 500))
+        .asyncExpand((events) async* {
+          yield await _processRoomsWithHostCreationDate(events.$1, events.$2);
+        })
+        .listen((rooms) {
+          _freshersRaw = rooms;
+          _emitFilteredRooms();
+        });
 
     // 4. Party Tab: Audio rooms only, sort by host diamonds
-    audioRoomsStreamRaw.debounceTime(const Duration(milliseconds: 500)).asyncExpand((audioEvent) async* {
-      yield await _processAudioRooms(audioEvent);
-    }).listen((rooms) {
-      _audioRoomsRaw = rooms;
-      _emitFilteredRooms();
-    });
+    audioRoomsStreamRaw
+        .debounceTime(const Duration(milliseconds: 500))
+        .asyncExpand((audioEvent) async* {
+          yield await _processAudioRooms(audioEvent);
+        })
+        .listen((rooms) {
+          _audioRoomsRaw = rooms;
+          _emitFilteredRooms();
+        });
 
     // 5. PK Tab: Extract PK Battles directly from live_streams node
-    liveStreamsStreamRaw.debounceTime(const Duration(milliseconds: 500)).listen((event) {
-      _extractAndEmitPKBattles(event);
-    });
+    liveStreamsStreamRaw.debounceTime(const Duration(milliseconds: 500)).listen(
+      (event) {
+        _extractAndEmitPKBattles(event);
+      },
+    );
   }
 
   void _updateCountryCounts(List<StreamerModel> rooms) {
@@ -96,10 +121,18 @@ class HomeCubit extends Cubit<HomeState> {
       _freshersSubject.add(_freshersRaw);
       _pkBattlesSubject.add(_pkBattlesRaw);
     } else {
-      _allRoomsSubject.add(_allRoomsRaw.where((r) => r.country == country).toList());
-      _audioRoomsSubject.add(_audioRoomsRaw.where((r) => r.country == country).toList());
-      _freshersSubject.add(_freshersRaw.where((r) => r.country == country).toList());
-      _pkBattlesSubject.add(_pkBattlesRaw.where((r) => r.hostACountry == country).toList());
+      _allRoomsSubject.add(
+        _allRoomsRaw.where((r) => r.country == country).toList(),
+      );
+      _audioRoomsSubject.add(
+        _audioRoomsRaw.where((r) => r.country == country).toList(),
+      );
+      _freshersSubject.add(
+        _freshersRaw.where((r) => r.country == country).toList(),
+      );
+      _pkBattlesSubject.add(
+        _pkBattlesRaw.where((r) => r.hostACountry == country).toList(),
+      );
     }
   }
 
@@ -110,7 +143,10 @@ class HomeCubit extends Cubit<HomeState> {
 
   // --- Processing Functions ---
 
-  Future<List<StreamerModel>> _processRoomsWithDiamonds(DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
+  Future<List<StreamerModel>> _processRoomsWithDiamonds(
+    DatabaseEvent audioEvent,
+    DatabaseEvent liveEvent,
+  ) async {
     final List<Future<_RoomWithDiamonds>> futures = [];
 
     // Parse Audio
@@ -150,7 +186,9 @@ class HomeCubit extends Cubit<HomeState> {
     return results.map((e) => e.streamer).toList();
   }
 
-  Future<List<StreamerModel>> _processAudioRooms(DatabaseEvent audioEvent) async {
+  Future<List<StreamerModel>> _processAudioRooms(
+    DatabaseEvent audioEvent,
+  ) async {
     final List<Future<_RoomWithDiamonds>> futures = [];
 
     if (audioEvent.snapshot.exists && audioEvent.snapshot.value != null) {
@@ -173,7 +211,10 @@ class HomeCubit extends Cubit<HomeState> {
     return results.map((e) => e.streamer).toList();
   }
 
-  Future<List<StreamerModel>> _processRoomsWithHostCreationDate(DatabaseEvent audioEvent, DatabaseEvent liveEvent) async {
+  Future<List<StreamerModel>> _processRoomsWithHostCreationDate(
+    DatabaseEvent audioEvent,
+    DatabaseEvent liveEvent,
+  ) async {
     final List<Future<_RoomWithTimestamp>> futures = [];
 
     // Parse Audio
@@ -229,23 +270,28 @@ class HomeCubit extends Cubit<HomeState> {
         if (pkState['isPK'] == true) {
           final opponentRoomId = pkState['opponentRoomId']?.toString() ?? '';
 
-          final alreadyExists = pkBattles.any((b) =>
-          (b.roomAId == roomId.toString() && b.roomBId == opponentRoomId) ||
-              (b.roomAId == opponentRoomId && b.roomBId == roomId.toString()));
+          final alreadyExists = pkBattles.any(
+            (b) =>
+                (b.roomAId == roomId.toString() &&
+                    b.roomBId == opponentRoomId) ||
+                (b.roomAId == opponentRoomId && b.roomBId == roomId.toString()),
+          );
 
           if (!alreadyExists && opponentRoomId.isNotEmpty) {
-            pkBattles.add(PKBattleCard(
-              roomAId: roomId.toString(),
-              roomBId: opponentRoomId,
-              hostAName: roomData['hostName']?.toString() ?? 'Host A',
-              hostBName: pkState['opponentHostName']?.toString() ?? 'Host B',
-              hostAPicture: roomData['hostPicture']?.toString(),
-              hostBPicture: pkState['opponentHostPicture']?.toString(),
-              participantCountA: roomData['participantCount'] ?? 0,
-              participantCountB: 0,
-              pkEndTime: pkState['pkEndTime'] as int?,
-              hostACountry: roomData['hostCountry']?.toString() ?? 'Unknown',
-            ));
+            pkBattles.add(
+              PKBattleCard(
+                roomAId: roomId.toString(),
+                roomBId: opponentRoomId,
+                hostAName: roomData['hostName']?.toString() ?? 'Host A',
+                hostBName: pkState['opponentHostName']?.toString() ?? 'Host B',
+                hostAPicture: roomData['hostPicture']?.toString(),
+                hostBPicture: pkState['opponentHostPicture']?.toString(),
+                participantCountA: roomData['participantCount'] ?? 0,
+                participantCountB: 0,
+                pkEndTime: pkState['pkEndTime'] as int?,
+                hostACountry: roomData['hostCountry']?.toString() ?? 'Unknown',
+              ),
+            );
           }
         }
       }
@@ -257,7 +303,11 @@ class HomeCubit extends Cubit<HomeState> {
 
   // --- Helper Methods ---
 
-  StreamerModel _mapToStreamerModel(String id, Map<dynamic, dynamic> data, {required bool isVideo}) {
+  StreamerModel _mapToStreamerModel(
+    String id,
+    Map<dynamic, dynamic> data, {
+    required bool isVideo,
+  }) {
     return StreamerModel(
       id: id,
       hostId: data['hostId']?.toString(),
@@ -282,7 +332,7 @@ class HomeCubit extends Cubit<HomeState> {
   Future<int> _fetchHostDiamonds(String? hostId) async {
     if (hostId == null) return 0;
     if (_diamondsCache.containsKey(hostId)) return _diamondsCache[hostId]!;
-    
+
     if (_diamondsFetchFutures.containsKey(hostId)) {
       return await _diamondsFetchFutures[hostId]!;
     }

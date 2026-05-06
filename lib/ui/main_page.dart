@@ -55,7 +55,10 @@ class _MainPageState extends State<MainPage> {
       builder: (context, state) {
         return Scaffold(
           extendBody: true,
-          bottomNavigationBar: MyBottomNavBar(selectedPosition: _selectedPosition, onItemTapped: _onItemTapped),
+          bottomNavigationBar: MyBottomNavBar(
+            selectedPosition: _selectedPosition,
+            onItemTapped: _onItemTapped,
+          ),
           body: widget.child,
         );
       },

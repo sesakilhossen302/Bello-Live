@@ -82,7 +82,8 @@ flutter:
     - assets/logo/
 
 
-flutter_icons:
+flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/picture_live.png"
+  image_path: "assets/appicon/play_store_512.png"
+  min_sdk_android: 21

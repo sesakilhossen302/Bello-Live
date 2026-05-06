@@ -406,7 +406,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     ZegoUIKit().login(currentUser.uid, _currentUserName);
     await ZegoUIKit().joinRoom(widget.roomID);
 
-    ZegoUIKit().turnMicrophoneOn(widget.isHost);
+    ZegoUIKit().turnMicrophoneOn(true);
     ZegoUIKit().setAudioOutputToSpeaker(true);
     ZegoUIKit().startPlayAllAudioVideo();
 
@@ -2755,11 +2755,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       currentUserParticipant = null;
     }
 
-    final bool isSpeakerOrCoHost =
-        widget.isHost ||
-        (currentUserParticipant != null &&
-            (currentUserParticipant.isCoHost ||
-                currentUserParticipant.seatNo > 0));
+    // CHANGE: Everyone can speak and use tools, no seat required
+    final bool isSpeakerOrCoHost = true;
 
     final bool isCurrentlyMuted = currentUserParticipant?.isMuted ?? true;
     final int totalRequests = _coHostRequests.length + _speakerRequests.length;
