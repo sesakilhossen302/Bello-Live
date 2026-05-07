@@ -212,6 +212,20 @@ class RoomService {
 
   static Future<void> joinRoom(String roomId) async {
     final user = _auth.currentUser!;
+
+    // Check if blocked
+    final roomSnapshot = await _roomsRef.child(roomId).get();
+    if (roomSnapshot.exists) {
+      final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+      final blockedUsers = roomData['blockedUsers'] as Map<dynamic, dynamic>?;
+      if (blockedUsers != null && blockedUsers.containsKey(user.uid)) {
+        final expiry = blockedUsers[user.uid] as int;
+        if (expiry == -1 || expiry > DateTime.now().millisecondsSinceEpoch) {
+          throw Exception('You are blocked from this room.');
+        }
+      }
+    }
+
     final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
     final userProfileDoc = await _firestore.collection('users').doc(user.uid).get();
@@ -236,7 +250,7 @@ class RoomService {
       'seatNo': -1,
       'joinedAt': ServerValue.timestamp,
       'isOnline': true,
-      'isMuted': true,
+      'isMuted': false,
     });
 
     await _setupPresence(roomId, user.uid, isHost: false);
@@ -323,7 +337,7 @@ class RoomService {
 
   static Future<void> leaveSeat(String roomId) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'seatNo': -1, 'isMuted': true});
+    await _participantsRef.child('$roomId/${user.uid}').update({'seatNo': -1, 'isMuted': false});
   }
 
   static Future<void> takeSeat(String roomId, int newSeatNo) async {
@@ -379,13 +393,43 @@ class RoomService {
     await _participantsRef.child('$roomId/${user.uid}').update({'isMuted': newMuteState});
   }
 
+  static Future<void> muteParticipant(String roomId, String userId, bool isMuted) async {
+    await _participantsRef.child('$roomId/$userId').update({'isMuted': isMuted});
+  }
+
+  static Future<void> lockParticipant(String roomId, String userId, bool isLocked) async {
+    await _participantsRef.child('$roomId/$userId').update({'isLocked': isLocked});
+  }
+
+  static Future<void> kickParticipant(String roomId, String userId) async {
+    await _participantsRef.child('$roomId/$userId').remove();
+    await _requestsRef.child('$roomId/speaker_requests/$userId').remove();
+    await _requestsRef.child('$roomId/cohost_requests/$userId').remove();
+  }
+
+  static Future<void> blockParticipant(String roomId, String userId, {Duration? duration}) async {
+    await kickParticipant(roomId, userId);
+    final expiry = duration != null
+        ? DateTime.now().add(duration).millisecondsSinceEpoch
+        : -1; // -1 for permanent
+    await _roomsRef.child('$roomId/blockedUsers/$userId').set(expiry);
+  }
+
+  static Future<void> unblockUser(String roomId, String userId) async {
+    await _roomsRef.child('$roomId/blockedUsers/$userId').remove();
+  }
+
+  static Stream<DatabaseEvent> getBlockedUsersStream(String roomId) {
+    return _roomsRef.child('$roomId/blockedUsers').onValue;
+  }
+
   // ============================================================================
   // CO-HOST MANAGEMENT
   // ============================================================================
 
   static Future<void> stepDownFromCoHost(String roomId) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'isCoHost': false, 'isMuted': true});
+    await _participantsRef.child('$roomId/${user.uid}').update({'isCoHost': false, 'isMuted': false});
   }
 
   static Future<void> requestToBeCoHost(String roomId) async {
@@ -499,7 +543,7 @@ class RoomService {
     await participantRef.update({
       'isCoHost': false,
       'seatNo': targetSeatNo,
-      'isMuted': targetSeatNo == -1, // Mute if they become a listener, otherwise keep/unmute? 
+      'isMuted': false, 
                                      // Usually speakers are unmuted by default in this app.
     });
   }

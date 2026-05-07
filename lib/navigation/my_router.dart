@@ -36,12 +36,13 @@ import '../ui/profile/profile_page.dart';
 import '../ui/profile_visitors/profile_visitors_page.dart';
 import '../ui/ranks/ranks_page.dart';
 import '../ui/search/search_page.dart';
-import '../ui/settings/password_settings_page.dart';
-import '../ui/settings/settings_page.dart';
-import '../ui/settings/language_selection_page.dart';
 import '../ui/store-bag/mybag_page.dart';
 import '../ui/store-bag/store_page.dart';
 import '../ui/vip_page/vip_page.dart';
+import '../ui/settings/password_settings_page.dart';
+import '../ui/settings/settings_page.dart';
+import '../ui/settings/language_selection_page.dart';
+import '../ui/settings/about_us_page.dart';
 
 class MyRouter {
   static final GlobalKey<NavigatorState> rootNavigatorKey =
@@ -278,6 +279,18 @@ class MyRouter {
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
                     key: state.pageKey,
                     child: const LiveNowPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.aboutUs.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: const AboutUsPage(),
                     transitionsBuilder: customPopTransition,
                     transitionDuration: const Duration(milliseconds: 200),
                     reverseTransitionDuration: const Duration(

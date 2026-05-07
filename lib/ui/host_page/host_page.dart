@@ -72,7 +72,10 @@ class _HostPageState extends State<HostPage> {
         icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 24),
         onPressed: () => context.go(Routes.home.path),
       ),
-      title: Text(AppLocalizations.of(context).startLive, style: TextStyle(color: Colors.white)),
+      title: Text(
+        AppLocalizations.of(context).startLive,
+        style: TextStyle(color: Colors.white),
+      ),
     );
   }
 
@@ -103,7 +106,11 @@ class _HostPageState extends State<HostPage> {
   }
 
   // --- Custom Circular Button Widget ---
-  Widget _buildCircleButton({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircleButton({
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -115,25 +122,41 @@ class _HostPageState extends State<HostPage> {
           // FIX 1: Both are purple gradient now.
           gradient: LinearGradient(
             colors: isSelected
-                ? [const Color(0xFFD96FF8), const Color(0xFF9F42F5)] // Bright when selected
-                : [const Color(0xFFD96FF8).withValues(alpha: 0.3), const Color(0xFF9F42F5).withValues(alpha: 0.3)],
+                ? [
+                    const Color(0xFFD96FF8),
+                    const Color(0xFF9F42F5),
+                  ] // Bright when selected
+                : [
+                    const Color(0xFFD96FF8).withValues(alpha: 0.3),
+                    const Color(0xFF9F42F5).withValues(alpha: 0.3),
+                  ],
             // Dimmed when not
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           // FIX 1: Glow only when selected
           boxShadow: isSelected
-              ? [BoxShadow(color: const Color(0xFF9F42F5).withValues(alpha: 0.6), blurRadius: 15, spreadRadius: 2)]
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF9F42F5).withValues(alpha: 0.6),
+                    blurRadius: 15,
+                    spreadRadius: 2,
+                  ),
+                ]
               : null,
           border: Border.all(
-            color: isSelected ? Colors.white.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.1),
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.8)
+                : Colors.white.withValues(alpha: 0.1),
             width: 1.5,
           ),
         ),
         child: Icon(
           icon,
           // Icon is white when selected, dimmed white when not
-          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.5),
+          color: isSelected
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.5),
           size: 32,
         ),
       ),
@@ -159,7 +182,11 @@ class _HostPageState extends State<HostPage> {
               end: Alignment.centerRight,
             ),
             boxShadow: [
-              BoxShadow(color: const Color(0xFF9152FF).withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4)),
+              BoxShadow(
+                color: const Color(0xFF9152FF).withValues(alpha: 0.4),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
           child: _isLoading
@@ -167,7 +194,10 @@ class _HostPageState extends State<HostPage> {
                   child: SizedBox(
                     height: 24,
                     width: 24,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
                   ),
                 )
               : Center(
@@ -198,22 +228,37 @@ class _HostPageState extends State<HostPage> {
         case PartyType.voice:
           String roomId = await RoomService.createRoom();
           if (!mounted) return;
-          context.pushReplacement(Routes.audioRoom.path, extra: {"roomId": roomId, "isHost": true});
+          context.pushReplacement(
+            Routes.audioRoom.path,
+            extra: {"roomId": roomId, "isHost": true},
+          );
           break;
         case PartyType.video:
           String roomId = await VideoRoomService.createRoom();
           if (!mounted) return;
-          context.pushReplacement(Routes.videoRoom.path, extra: {"roomId": roomId, "isHost": true});
+          context.pushReplacement(
+            Routes.videoRoom.path,
+            extra: {"roomId": roomId, "isHost": true},
+          );
           break;
         case PartyType.stream:
           String roomId = await LiveStreamService.createRoom();
           if (!mounted) return;
-          context.pushReplacement(Routes.liveStream.path, extra: {"roomId": roomId, "isHost": true});
+          context.pushReplacement(
+            Routes.liveStream.path,
+            extra: {"roomId": roomId, "isHost": true},
+          );
           break;
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${AppLocalizations.of(context).errorCreatingRoom}${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "${AppLocalizations.of(context).errorCreatingRoom}${e.toString()}",
+          ),
+        ),
+      );
       setState(() {
         _isLoading = false;
       });

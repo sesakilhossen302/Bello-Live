@@ -140,8 +140,7 @@ class SettingsPage extends StatelessWidget {
                         icon: CupertinoIcons.info_circle,
                         title: AppLocalizations.of(context).about,
                         onTap: () {
-                          debugPrint('About tapped');
-                          // Show about dialog or navigate to about page
+                          context.push(Routes.aboutUs.path);
                         },
                       ),
 

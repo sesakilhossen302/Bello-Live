@@ -848,6 +848,7 @@ class _HomePageState extends State<HomePage>
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E1418), // Dark dusty rose background
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -866,10 +867,14 @@ class _HomePageState extends State<HomePage>
               ];
               return Container(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Center(
                       child: Container(
                         width: 40,
@@ -970,6 +975,7 @@ class _HomePageState extends State<HomePage>
                       );
                     }),
                   ],
+                ),
                 ),
               );
             },

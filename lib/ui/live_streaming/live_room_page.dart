@@ -40,6 +40,7 @@ class LiveStreamParticipant {
   final bool isMuted;
   final bool isCameraOn;
   final bool isOnSeat;
+  final bool isLocked;
 
   LiveStreamParticipant({
     required this.userId,
@@ -48,6 +49,7 @@ class LiveStreamParticipant {
     required this.isMuted,
     required this.isCameraOn,
     required this.isOnSeat,
+    this.isLocked = false,
   });
 
   factory LiveStreamParticipant.fromRTDB(
@@ -61,6 +63,7 @@ class LiveStreamParticipant {
       isMuted: data['isMuted'] ?? true,
       isCameraOn: data['isCameraOn'] ?? false,
       isOnSeat: data['isOnSeat'] ?? false,
+      isLocked: data['isLocked'] ?? false,
     );
   }
 }
@@ -350,10 +353,27 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     } catch (e) {
       debugPrint('Error initializing live stream: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-        context.pop();
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF2d1b2b),
+            title: const Text(
+              'Access Denied',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: Text(
+              e.toString().replaceAll('Exception: ', ''),
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK', style: TextStyle(color: Colors.pink)),
+              ),
+            ],
+          ),
+        );
+        if (mounted) context.pop();
       }
     }
   }
@@ -690,9 +710,43 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           }
 
           final currentUser = _auth.currentUser!;
-          final isNowJoined = newParticipants.any(
-            (p) => p.userId == currentUser.uid && p.isOnSeat,
+          final myParticipant = newParticipants.firstWhere(
+            (p) => p.userId == currentUser.uid,
+            orElse: () => LiveStreamParticipant(
+              userId: '',
+              userName: '',
+              isMuted: true,
+              isCameraOn: false,
+              isOnSeat: false,
+            ),
           );
+
+          if (myParticipant.userId.isEmpty && !widget.isHost) {
+            // We were kicked!
+            if (mounted) {
+              context.pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('You have been removed from the room'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+
+          // Handle remote mute/unmute
+          if (myParticipant.userId.isNotEmpty && _participants.isNotEmpty) {
+            final oldMe = _participants.firstWhere(
+              (p) => p.userId == currentUser.uid,
+              orElse: () => myParticipant,
+            );
+            if (myParticipant.isMuted != oldMe.isMuted) {
+              ZegoUIKit().turnMicrophoneOn(!myParticipant.isMuted);
+            }
+          }
+
+          final isNowJoined = myParticipant.isOnSeat;
 
           if (isNowJoined && !_isJoined) {
             debugPrint("Join request approved! Starting local audio stream.");
@@ -1135,6 +1189,30 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Future<bool?> _showExitConfirmationDialog() async {
+    final currentUserId = _auth.currentUser!.uid;
+    final myParticipant = _participants.firstWhere(
+      (p) => p.userId == currentUserId,
+      orElse: () => LiveStreamParticipant(
+        userId: '',
+        userName: '',
+        isOnSeat: false,
+        isMuted: true,
+        isCameraOn: false,
+      ),
+    );
+
+    if (myParticipant.isLocked && !widget.isHost) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are locked and cannot exit the room.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -1398,7 +1476,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 alignment: Alignment.bottomCenter,
                 child: _buildChatSection(),
               ),
-              _buildJoinCallOverlay(),
             ],
           ),
         ),
@@ -1617,6 +1694,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   participants: _participants,
                   currentUserId: _auth.currentUser!.uid,
                   hostId: roomData['hostId'],
+                  roomId: widget.roomID,
                 );
               },
               child: Container(
@@ -2363,54 +2441,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     );
   }
 
-  Widget _buildJoinCallOverlay() {
-    return Visibility(
-      visible: !_isJoined && !widget.isHost,
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 20, right: 20),
-          child: GestureDetector(
-            onTap: () async {
-              try {
-                await LiveStreamService.requestToJoin(widget.roomID);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Request sent. Wait for host approval.'),
-                      backgroundColor: Colors.pink,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: ${e.toString()}')),
-                  );
-                }
-              }
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.pink, width: 1.5),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  'assets/images/join_call.jpeg',
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // Optimized method to get the level asset safely
   Widget _buildLevelBadge(String userId) {
     if (_userLevelCache.containsKey(userId)) {
@@ -2458,10 +2488,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       width: MediaQuery.of(context).size.width,
       height: MediaQuery.of(context).size.height * 0.25,
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.black.withValues(alpha: 0.2),
-      ),
       child: ListView.builder(
         reverse: true,
         controller: _chatScrollController,
@@ -2527,14 +2553,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               padding: const EdgeInsets.only(bottom: 6),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.pink.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.pink.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2768,7 +2786,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           color: Colors.black.withValues(alpha: 0.2),
                         ),
                         child: const Icon(
-                          CupertinoIcons.person_add_solid,
+                          Icons.call,
                           color: Colors.white,
                           size: iconSize,
                         ),
@@ -2797,11 +2815,73 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ),
                 ),
               ),
+            if (!widget.isHost && !_isJoined)
+              Padding(
+                padding: const EdgeInsets.only(right: paddingRight),
+                child: GestureDetector(
+                  onTap: () async {
+                    if (currentUserParticipant?.isLocked == true) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You are locked and cannot change seats.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    try {
+                      await LiveStreamService.requestToJoin(widget.roomID);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Request sent. Wait for host approval.',
+                            ),
+                            backgroundColor: Colors.pink,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString()}')),
+                        );
+                      }
+                    }
+                  },
+                  child: Container(
+                    width: buttonSize,
+                    height: buttonSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.2),
+                    ),
+                    child: const Icon(
+                      Icons.call,
+                      color: Colors.white,
+                      size: iconSize,
+                    ),
+                  ),
+                ),
+              ),
             if (_isJoined && !widget.isHost)
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
                   onTap: () async {
+                    if (currentUserParticipant?.isLocked == true) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You are locked and cannot change seats.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     FocusManager.instance.primaryFocus?.unfocus();
                     try {
                       ZegoUIKit().turnMicrophoneOn(false);

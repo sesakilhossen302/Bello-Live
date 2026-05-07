@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:zego_uikit/zego_uikit.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 class MusicTrack {
   final String id;
@@ -64,16 +67,33 @@ class MusicPlayerManager extends ChangeNotifier {
 
   Future<void> addMusicFromDevice() async {
     try {
-      final List<ZegoUIKitPlatformFile> result = await ZegoUIKit().pickPureAudioMediaFile();
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'm4a', 'aac'],
+        allowMultiple: true,
+      );
 
-      if (result.isNotEmpty) {
-        for (var file in result) {
-          final track = MusicTrack(
-            id: '${DateTime.now().millisecondsSinceEpoch}_${file.name}',
-            name: file.name ?? 'Unknown',
-            filePath: file.path ?? '',
-          );
-          _playlist.add(track);
+      if (result != null && result.files.isNotEmpty) {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        final musicDir = Directory('${appDocDir.path}/music');
+        if (!await musicDir.exists()) {
+          await musicDir.create(recursive: true);
+        }
+
+        for (var file in result.files) {
+          if (file.path != null) {
+            // Copy file to a persistent location to ensure Zego can access it
+            final fileName = file.name;
+            final targetFile = File('${musicDir.path}/$fileName');
+            await File(file.path!).copy(targetFile.path);
+
+            final track = MusicTrack(
+              id: '${DateTime.now().millisecondsSinceEpoch}_$fileName',
+              name: fileName,
+              filePath: targetFile.path,
+            );
+            _playlist.add(track);
+          }
         }
         notifyListeners();
       }
@@ -86,6 +106,11 @@ class MusicPlayerManager extends ChangeNotifier {
   Future<void> playTrack(int index) async {
     try {
       final track = _playlist[index];
+      final file = File(track.filePath);
+      
+      if (!await file.exists()) {
+        throw Exception('Music file not found at ${track.filePath}');
+      }
 
       // Stop current music if playing
       if (_isPlaying) {
@@ -99,7 +124,7 @@ class MusicPlayerManager extends ChangeNotifier {
         autoStart: true,
       );
 
-      if (playResult.errorCode == ZegoUIKitErrorCode.success) {
+      if (playResult.errorCode == 0) { // Zego success code is 0
         // Set volume to sync with remote (so everyone can hear)
         await ZegoUIKit().setMediaVolume(60, isSyncToRemote: true);
 
@@ -108,7 +133,7 @@ class MusicPlayerManager extends ChangeNotifier {
         _isPlaying = true;
         notifyListeners();
       } else {
-        throw Exception('Failed to play track: ${playResult.message}');
+        throw Exception('Zego Media Error ${playResult.errorCode}: ${playResult.message}');
       }
     } catch (e) {
       debugPrint('Error playing track: $e');

@@ -4,6 +4,7 @@ import 'package:picture_live/ui/live_streaming/bottomsheets/profile_info_bottoms
 import '../../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../../core/widgets/auto_scroll_text.dart';
 import '../audio_room_page.dart';
+import '../../../data/remote/firebase/room_services.dart';
 
 /// A bottom sheet that displays a list of all participants in the room.
 class ParticipantsBottomSheet extends StatelessWidget {
@@ -117,33 +118,25 @@ class ParticipantsBottomSheet extends StatelessWidget {
           color: isCurrentUser ? Colors.pink : Colors.white,
           fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.normal,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(role, style: const TextStyle(color: Colors.white70)),
-      // --- ADDED TRAILING BUTTON ---
-      trailing: isCurrentUser
-          ? null
-          : StreamBuilder<bool>(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!isCurrentUser)
+            StreamBuilder<bool>(
               stream: ProfileService.isFollowing(participant.userId),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const SizedBox(
-                    width: 80,
-                    child: Center(
-                      child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                    ),
-                  );
+                  return const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2));
                 }
 
                 final bool isFollowing = snapshot.data ?? false;
 
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isFollowing ? Colors.grey.shade800 : Colors.pink,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                  onPressed: () async {
+                return GestureDetector(
+                  onTap: () async {
                     try {
                       if (isFollowing) {
                         await ProfileService.unfollowUser(participant.userId);
@@ -152,15 +145,147 @@ class ParticipantsBottomSheet extends StatelessWidget {
                       }
                     } catch (e) {
                       debugPrint('Error following/unfollowing user: $e');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
                     }
                   },
-                  child: Text(isFollowing ? 'Following' : 'Follow'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isFollowing ? Colors.grey.shade800 : Colors.pink,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isFollowing ? 'Following' : 'Follow',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
                 );
               },
             ),
+          if (currentUserId == hostId && participant.userId != hostId) ...[
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white70),
+              color: const Color(0xFF2d1b2b),
+              padding: EdgeInsets.zero,
+              onSelected: (value) async {
+                if (value == 'mute') {
+                  await RoomService.muteParticipant(roomId, participant.userId, !participant.isMuted);
+                } else if (value == 'kick') {
+                  _confirmAction(context, 'Kick', participant.userName, () => RoomService.kickParticipant(roomId, participant.userId));
+                } else if (value == 'block') {
+                  _showBlockOptions(context, participant.userName, participant.userId);
+                } else if (value == 'lock') {
+                  await RoomService.lockParticipant(roomId, participant.userId, !participant.isLocked);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'mute',
+                  child: Row(
+                    children: [
+                      Icon(
+                        participant.isMuted ? Icons.mic_off : Icons.mic,
+                        color: participant.isMuted ? Colors.red : Colors.green,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        participant.isMuted ? 'Unmute' : 'Mute',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'kick',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_remove_outlined, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Kick', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      Icon(Icons.block_flipped, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Block', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'lock',
+                  child: Row(
+                    children: [
+                      Icon(
+                        participant.isLocked ? Icons.lock_open : Icons.lock,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        participant.isLocked ? 'Unlock' : 'Lock',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showBlockOptions(BuildContext context, String userName, String userId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        title: Text('Block $userName', style: const TextStyle(color: Colors.white)),
+        content: const Text('Select block duration:', style: TextStyle(color: Colors.white70)),
+        actions: [
+          _blockOption(context, '5 Minute', userId, const Duration(minutes: 5)),
+          _blockOption(context, '24 Hours', userId, const Duration(hours: 24)),
+          _blockOption(context, '7 Days', userId, const Duration(days: 7)),
+          _blockOption(context, 'Permanent', userId, null),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ],
+      ),
+    );
+  }
+
+  Widget _blockOption(BuildContext context, String label, String userId, Duration? duration) {
+    return TextButton(
+      onPressed: () async {
+        Navigator.pop(context);
+        await RoomService.blockParticipant(roomId, userId, duration: duration);
+      },
+      child: Text(label, style: const TextStyle(color: Colors.pink)),
+    );
+  }
+
+  void _confirmAction(BuildContext context, String action, String userName, Future<void> Function() onConfirm) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        title: Text('$action User', style: const TextStyle(color: Colors.white)),
+        content: Text('Are you sure you want to $action $userName?', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await onConfirm();
+            },
+            child: Text(action, style: const TextStyle(color: Colors.pink)),
+          ),
+        ],
+      ),
     );
   }
 }

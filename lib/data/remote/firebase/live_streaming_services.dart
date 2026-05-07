@@ -208,6 +208,20 @@ class LiveStreamService {
 
   static Future<void> joinRoom(String roomId) async {
     final user = _auth.currentUser!;
+
+    // Check if blocked
+    final roomSnapshot = await _roomsRef.child(roomId).get();
+    if (roomSnapshot.exists) {
+      final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+      final blockedUsers = roomData['blockedUsers'] as Map<dynamic, dynamic>?;
+      if (blockedUsers != null && blockedUsers.containsKey(user.uid)) {
+        final expiry = blockedUsers[user.uid] as int;
+        if (expiry == -1 || expiry > DateTime.now().millisecondsSinceEpoch) {
+          throw Exception('You are blocked from this room.');
+        }
+      }
+    }
+
     final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
     final userDoc = await _usersCollection.doc(user.uid).get();
@@ -231,7 +245,7 @@ class LiveStreamService {
         'userPicture': userPicture,
         'joinedAt': ServerValue.timestamp,
         'isOnline': true,
-        'isMuted': true,
+        'isMuted': false,
         'isCameraOn': false,
         'isOnSeat': false,
       });
@@ -360,7 +374,7 @@ class LiveStreamService {
 
       for (final entry in participants.entries) {
         if (entry.key != hostId) {
-          await pRef.child(entry.key).update({'isMuted': true, 'isCameraOn': false, 'isOnSeat': false});
+          await pRef.child(entry.key).update({'isMuted': false, 'isCameraOn': false, 'isOnSeat': false});
         }
       }
     } catch (e) {
@@ -372,7 +386,7 @@ class LiveStreamService {
     final user = _auth.currentUser!;
     await _participantsRef.child('$roomId/${user.uid}').update({
       'isOnSeat': false,
-      'isMuted': true,
+      'isMuted': false,
       'isCameraOn': false,
     });
   }
@@ -380,6 +394,35 @@ class LiveStreamService {
   static Future<void> toggleMuteState(String roomId, bool newMuteState) async {
     final user = _auth.currentUser!;
     await _participantsRef.child('$roomId/${user.uid}').update({'isMuted': newMuteState});
+  }
+
+  static Future<void> muteParticipant(String roomId, String userId, bool isMuted) async {
+    await _participantsRef.child('$roomId/$userId').update({'isMuted': isMuted});
+  }
+
+  static Future<void> lockParticipant(String roomId, String userId, bool isLocked) async {
+    await _participantsRef.child('$roomId/$userId').update({'isLocked': isLocked});
+  }
+
+  static Future<void> kickParticipant(String roomId, String userId) async {
+    await _participantsRef.child('$roomId/$userId').remove();
+    await _requestsRef.child('$roomId/join_requests/$userId').remove();
+  }
+
+  static Future<void> blockParticipant(String roomId, String userId, {Duration? duration}) async {
+    await kickParticipant(roomId, userId);
+    final expiry = duration != null
+        ? DateTime.now().add(duration).millisecondsSinceEpoch
+        : -1; // -1 for permanent
+    await _roomsRef.child('$roomId/blockedUsers/$userId').set(expiry);
+  }
+
+  static Future<void> unblockUser(String roomId, String userId) async {
+    await _roomsRef.child('$roomId/blockedUsers/$userId').remove();
+  }
+
+  static Stream<DatabaseEvent> getBlockedUsersStream(String roomId) {
+    return _roomsRef.child('$roomId/blockedUsers').onValue;
   }
 
   static Future<void> toggleCameraState(String roomId, bool isCameraOn) async {

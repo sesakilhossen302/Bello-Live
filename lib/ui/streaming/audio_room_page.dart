@@ -83,6 +83,7 @@ class RoomParticipant {
   final int seatNo;
   final bool isCoHost;
   final bool isMuted;
+  final bool isLocked;
   final ZegoUIKitUser? zegoUser;
 
   RoomParticipant({
@@ -92,6 +93,7 @@ class RoomParticipant {
     required this.seatNo,
     required this.isCoHost,
     required this.isMuted,
+    this.isLocked = false,
     this.zegoUser,
   });
 
@@ -103,6 +105,7 @@ class RoomParticipant {
       seatNo: data['seatNo'] ?? -1,
       isCoHost: data['isCoHost'] ?? false,
       isMuted: data['isMuted'] ?? true,
+      isLocked: data['isLocked'] ?? false,
     );
   }
 
@@ -114,6 +117,7 @@ class RoomParticipant {
       seatNo: seatNo,
       isCoHost: isCoHost,
       isMuted: isMuted,
+      isLocked: isLocked,
       zegoUser: zegoUser ?? this.zegoUser,
     );
   }
@@ -349,6 +353,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         return;
       }
       roomData = Map<String, dynamic>.from(roomDoc.value as Map);
+      _roomNotice = roomData['notice'] ?? "";
 
       final bool isLocked = roomData['isLocked'] ?? false;
 
@@ -363,10 +368,27 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     } catch (e) {
       debugPrint('Error initializing audio room: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-        context.pop();
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF2d1b2b),
+            title: const Text(
+              'Access Denied',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: Text(
+              e.toString().replaceAll('Exception: ', ''),
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK', style: TextStyle(color: Colors.pink)),
+              ),
+            ],
+          ),
+        );
+        if (mounted) context.pop();
       }
     }
   }
@@ -682,13 +704,23 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               ),
             );
 
-            final bool wasListener =
-                oldCurrentUser.seatNo == -1 && !oldCurrentUser.isCoHost;
-            final bool isNowSpeaker =
-                newCurrentUser.seatNo > 0 || newCurrentUser.isCoHost;
+            if (newCurrentUser.userId.isEmpty && !widget.isHost) {
+              // We were kicked!
+              if (mounted) {
+                context.pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('You have been removed from the room'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
 
-            if (wasListener && isNowSpeaker && !newCurrentUser.isMuted) {
-              ZegoUIKit().turnMicrophoneOn(true);
+            if (newCurrentUser.isMuted != oldCurrentUser.isMuted &&
+                newCurrentUser.userId.isNotEmpty) {
+              ZegoUIKit().turnMicrophoneOn(!newCurrentUser.isMuted);
             }
           }
 
@@ -1061,6 +1093,30 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   }
 
   Future<bool?> _showExitConfirmationDialog() async {
+    final currentUserId = _auth.currentUser!.uid;
+    final myParticipant = _participants.firstWhere(
+      (p) => p.userId == currentUserId,
+      orElse: () => RoomParticipant(
+        userId: '',
+        userName: '',
+        seatNo: -1,
+        isCoHost: false,
+        isMuted: true,
+      ),
+    );
+
+    if (myParticipant.isLocked && !widget.isHost) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are locked and cannot exit the room.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -1085,16 +1141,18 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   onTap: () {
                     _isMinimizing = true;
                     context.read<AppCubit>().minimizeRoom(
-                          MinimizedRoomData(
-                            roomId: widget.roomID,
-                            hostPicture: roomData['hostPicture'] ?? '',
-                            hostName: roomData['hostName'] ?? 'Host',
-                            isAudioRoom: true,
-                            isHost: widget.isHost,
-                          ),
-                        );
+                      MinimizedRoomData(
+                        roomId: widget.roomID,
+                        hostPicture: roomData['hostPicture'] ?? '',
+                        hostName: roomData['hostName'] ?? 'Host',
+                        isAudioRoom: true,
+                        isHost: widget.isHost,
+                      ),
+                    );
                     Navigator.of(context).pop(false);
-                    context.go(Routes.home.path); // Always go to Home when minimizing
+                    context.go(
+                      Routes.home.path,
+                    ); // Always go to Home when minimizing
                   },
                 ),
                 const SizedBox(height: 24),
@@ -1147,10 +1205,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           Container(
             width: 50,
             height: 50,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
             child: Icon(icon, color: Colors.white, size: 26),
           ),
           const SizedBox(height: 8),
@@ -2080,6 +2135,17 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     return GestureDetector(
       onTap: () async {
         if (!canInteract) return;
+        if (currentUserParticipant?.isLocked == true && !widget.isHost) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('You are locked and cannot change seats.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
 
         try {
           if (isListener) {
@@ -2161,7 +2227,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     RoomParticipant participant, {
     required bool isCurrentUser,
   }) {
-    final canLeaveSeat = isCurrentUser && !widget.isHost;
+    final canLeaveSeat = isCurrentUser && !widget.isHost && !participant.isLocked;
     return GestureDetector(
       onTap: !canLeaveSeat
           ? () {
@@ -2640,12 +2706,12 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       itemCount: _messages.length + 1,
       itemBuilder: (context, index) {
         if (index == _messages.length) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 10, bottom: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 250,
                   child: Text(
                     'Any sexual or violation content is strictly prohibited. All violator will be banned. Do not expose your personal info such phone or location.',
@@ -2653,6 +2719,40 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     maxLines: 3,
                   ),
                 ),
+                if (_roomNotice.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.pink.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.pink.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.campaign,
+                          color: Colors.pink,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _roomNotice,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           );

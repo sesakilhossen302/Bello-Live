@@ -7,6 +7,7 @@ import 'package:zego_express_engine/zego_express_engine.dart';
 
 import '../../../data/remote/firebase/room_services.dart';
 import '../../live_streaming/bottomsheets/share_bottomsheet.dart';
+import '../blocked_users_page.dart';
 import 'game_list_bottomsheet.dart';
 
 class _ToolItem {
@@ -133,6 +134,19 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                     onTapLogic = () {
                       Navigator.pop(context); // Close tools sheet first
                       showRoomSkinSideSheet(context, widget.currentRoomId);
+                    };
+                  } else if (tool.label == 'Block') {
+                    onTapLogic = () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BlockedUsersPage(
+                            roomId: widget.currentRoomId,
+                            roomType: 'audio',
+                          ),
+                        ),
+                      );
                     };
                   } else {
                     onTapLogic = () {
