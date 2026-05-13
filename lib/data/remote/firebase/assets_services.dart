@@ -39,7 +39,7 @@ class GiftModel {
       name: data['name'] ?? '',
       imageUrl: data['imageURL'] ?? '',
       iconUrl: data['iconURL'] ?? '',
-      value: data['value'] ?? 0,
+      value: data['value'] ?? data['price'] ?? 0,
       category: data['category'] ?? 'Uncategorized',
     );
   }
@@ -47,26 +47,35 @@ class GiftModel {
 
 class AssetsService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final CollectionReference _emojisCollection = _firestore.collection('emojis');
-  static final CollectionReference _giftsCollection = _firestore.collection('gifts');
+  static final CollectionReference _storeCollection = _firestore.collection('store');
+  static final CollectionReference _giftsCollection = _firestore.collection('store');
 
   // Stream of Emojis from Firestore
   static Stream<List<EmojiModel>> getEmojis() {
-    return _emojisCollection.snapshots().map((snapshot) {
+    return _storeCollection
+        .where('category', isEqualTo: 'Emoji')
+        .where('tier', isEqualTo: 'free')
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
       return snapshot.docs.map((doc) => EmojiModel.fromFirestore(doc)).toList();
     });
   }
 
   // NEW: Stream of Gifts from Firestore
   static Stream<List<GiftModel>> getGifts() {
-    return _giftsCollection.snapshots().map((snapshot) {
+    return _giftsCollection.where('isActive', isEqualTo: true).snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => GiftModel.fromFirestore(doc)).toList();
     });
   }
 
   // NEW: Get gifts by category
   static Stream<List<GiftModel>> getGiftsByCategory(String category) {
-    return _giftsCollection.where('category', isEqualTo: category).snapshots().map((snapshot) {
+    return _giftsCollection
+        .where('category', isEqualTo: category)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
       return snapshot.docs.map((doc) => GiftModel.fromFirestore(doc)).toList();
     });
   }
@@ -74,12 +83,13 @@ class AssetsService {
   // NEW: Get all unique gift categories
   static Future<List<String>> getGiftCategories() async {
     try {
-      final snapshot = await _giftsCollection.get();
+      final snapshot = await _giftsCollection.where('isActive', isEqualTo: true).get();
       final categories = snapshot.docs
           .map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return data['category'] as String? ?? 'Uncategorized';
           })
+          .where((cat) => cat != 'Emoji' && cat != 'Frame' && cat != 'Entrance')
           .toSet()
           .toList();
       return categories;

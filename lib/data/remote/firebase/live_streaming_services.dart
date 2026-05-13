@@ -82,6 +82,7 @@ class LiveStreamService {
       'displayId': displayId,
       'userName': hostName,
       'userPicture': hostPicture,
+      'gender': userData['gender'],
       'joinedAt': ServerValue.timestamp,
       'isOnline': true,
       'isMuted': false,
@@ -234,21 +235,23 @@ class LiveStreamService {
       userName = userData['displayName'] ?? userName;
       displayId = userData['displayId'] ?? '';
       userPicture = userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
-    }
-
-    final participantSnapshot = await participantRef.get();
-    if (!participantSnapshot.exists) {
-      await participantRef.set({
-        'userId': user.uid,
-        'displayId': displayId,
-        'userName': userName,
-        'userPicture': userPicture,
-        'joinedAt': ServerValue.timestamp,
-        'isOnline': true,
-        'isMuted': false,
-        'isCameraOn': false,
-        'isOnSeat': false,
-      });
+      final gender = userData['gender'];
+      
+      final participantSnapshot = await participantRef.get();
+      if (!participantSnapshot.exists) {
+        await participantRef.set({
+          'userId': user.uid,
+          'displayId': displayId,
+          'userName': userName,
+          'userPicture': userPicture,
+          'gender': gender,
+          'joinedAt': ServerValue.timestamp,
+          'isOnline': true,
+          'isMuted': false,
+          'isCameraOn': false,
+          'isOnSeat': false,
+        });
+      }
 
       await _setupPresence(roomId, user.uid, isHost: false);
     }
@@ -447,15 +450,24 @@ class LiveStreamService {
       userName = userData['displayName'] ?? userName;
       displayId = userData['displayId'] ?? '';
       userPicture = userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
-    }
 
-    await _requestsRef.child('$roomId/join_requests/${user.uid}').set({
-      'userId': user.uid,
-      'displayId': displayId,
-      'userName': userName,
-      'userPicture': userPicture,
-      'requestedAt': ServerValue.timestamp,
-    });
+      await _requestsRef.child('$roomId/join_requests/${user.uid}').set({
+        'userId': user.uid,
+        'displayId': displayId,
+        'userName': userName,
+        'userPicture': userPicture,
+        'gender': userData['gender'],
+        'requestedAt': ServerValue.timestamp,
+      });
+    } else {
+      await _requestsRef.child('$roomId/join_requests/${user.uid}').set({
+        'userId': user.uid,
+        'displayId': displayId,
+        'userName': userName,
+        'userPicture': userPicture,
+        'requestedAt': ServerValue.timestamp,
+      });
+    }
   }
 
   static Stream<DatabaseEvent> getJoinRequestsStream(String roomId) {
@@ -472,7 +484,7 @@ class LiveStreamService {
       seatedCount = participants.values.where((p) => p is Map && p['isOnSeat'] == true).length;
     }
 
-    if (seatedCount >= 5) throw Exception("The call seats are full.");
+    if (seatedCount >= 4) throw Exception("The call seats are full.");
 
     final participantRef = _participantsRef.child('$roomId/$userId');
     await participantRef.update({'isOnSeat': true, 'isMuted': false, 'isCameraOn': true});

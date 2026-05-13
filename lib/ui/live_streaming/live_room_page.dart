@@ -31,6 +31,7 @@ import 'bottomsheets/requests_bottomsheet.dart';
 
 import '../../ui/streaming/bottomsheets/play_music_bottomsheet.dart';
 import 'bottomsheets/video_gifts_bottomsheet.dart';
+import '../../ui/streaming/bottomsheets/fans_ranking_bottomsheet.dart';
 
 // --- MODELS ---
 class LiveStreamParticipant {
@@ -41,6 +42,7 @@ class LiveStreamParticipant {
   final bool isCameraOn;
   final bool isOnSeat;
   final bool isLocked;
+  final String? gender;
 
   LiveStreamParticipant({
     required this.userId,
@@ -50,6 +52,7 @@ class LiveStreamParticipant {
     required this.isCameraOn,
     required this.isOnSeat,
     this.isLocked = false,
+    this.gender,
   });
 
   factory LiveStreamParticipant.fromRTDB(
@@ -64,6 +67,7 @@ class LiveStreamParticipant {
       isCameraOn: data['isCameraOn'] ?? false,
       isOnSeat: data['isOnSeat'] ?? false,
       isLocked: data['isLocked'] ?? false,
+      gender: data['gender'],
     );
   }
 }
@@ -73,12 +77,14 @@ class JoinRequest {
   final String userId;
   final String userName;
   final String? userPicture;
+  final String? gender;
 
   JoinRequest({
     required this.requestId,
     required this.userId,
     required this.userName,
     this.userPicture,
+    this.gender,
   });
 
   factory JoinRequest.fromRTDB(String key, Map<dynamic, dynamic> data) {
@@ -87,6 +93,7 @@ class JoinRequest {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? 'Unknown',
       userPicture: data['userPicture'],
+      gender: data['gender'],
     );
   }
 }
@@ -179,11 +186,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   final ZegoVoiceChangerPreset _currentVoicePreset =
       ZegoVoiceChangerPreset.None;
   final bool _isSpeakerOn = true;
+  bool _isRoomEnded = false;
 
   // --- Join Animation Variables ---
   final Duration welcomeTime = const Duration(milliseconds: 3500);
   Timer? _joinAnimationTimer;
   String? _newJoinerName;
+  String? _newJoinerPicture;
+  String? _newJoinerId;
   late AnimationController _joinAnimationController;
   late Animation<Offset> _joinAnimationOffset;
 
@@ -297,7 +307,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     durationTimer?.cancel();
     _currentDuration.dispose();
 
-    if (_isInitialized && !_isMinimizing) {
+    if (!_isMinimizing) {
       if (widget.isHost) {
         if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
           LiveStreamService.endPKBattle(
@@ -508,25 +518,34 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           }
         });
 
-    setState(() async {
+    setState(() {
       _isPKMode = true;
-      await Future.delayed(Duration(seconds: 1));
       _isStartingPKAnimation = true;
-      await Future.delayed(Duration(seconds: 3));
-      _isStartingPKAnimation = false;
+    });
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _isStartingPKAnimation = false;
+        });
+      }
     });
   }
 
-  void _showJoinAnimation(String userName) {
+  void _showJoinAnimation(String userName, String? userPicture, String userId) {
     _joinAnimationTimer?.cancel();
     _joinAnimationController.forward(from: 0.0);
     setState(() {
       _newJoinerName = userName;
+      _newJoinerPicture = userPicture;
+      _newJoinerId = userId;
     });
     _joinAnimationTimer = Timer(welcomeTime, () {
       if (mounted) {
         setState(() {
           _newJoinerName = null;
+          _newJoinerPicture = null;
+          _newJoinerId = null;
         });
       }
     });
@@ -535,37 +554,97 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   Widget _buildJoinAnimationOverlay() {
     return Visibility(
       visible: _newJoinerName != null,
-      child: Container(
-        width: double.infinity,
-        height: 100,
-        margin: EdgeInsets.zero,
-        color: Colors.transparent,
-        child: SlideTransition(
-          position: _joinAnimationOffset,
-          child: Stack(
-            fit: StackFit.expand,
-            alignment: Alignment.center,
-            children: [
-              Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
-              Center(
-                child: Text(
-                  '${_newJoinerName ?? ''} joined!',
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 22,
-                    shadows: [
-                      BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 4,
-                        spreadRadius: 2,
+      child: SlideTransition(
+        position: _joinAnimationOffset,
+        child: Center(
+          child: Container(
+            width: 140,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFFFD700),
+                          width: 2,
+                        ),
                       ),
-                    ],
+                      child: ClipOval(
+                        child:
+                            _newJoinerPicture != null &&
+                                _newJoinerPicture!.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: _newJoinerPicture!,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 40,
+                                ),
+                                errorWidget: (context, url, error) =>
+                                    const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 40,
+                                    ),
+                              )
+                            : const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                      ),
+                    ),
+                    if (_newJoinerId != null)
+                      Positioned(
+                        width: 91, // 70 * 1.3
+                        height: 91,
+                        child: IgnorePointer(
+                          child: ActiveFrameWidget(
+                            userId: _newJoinerId!,
+                            size: 91,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _newJoinerName ?? '',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                const Text(
+                  'Joined the room!',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -651,7 +730,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           });
         }
       } else {
-        if (mounted) context.pop();
+        if (mounted && !widget.isHost) {
+          _handleRoomEnded();
+        } else if (mounted && widget.isHost) {
+          context.pop();
+        }
       }
     });
 
@@ -694,7 +777,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             final oldParticipantIds = _participants
                 .map((p) => p.userId)
                 .toSet();
-            final String hostId = roomData['hostId'] ?? '';
+            final String hostId = _isInitialized ? (roomData['hostId'] ?? '') : '';
 
             final newGuests = newParticipants
                 .where(
@@ -705,7 +788,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 .toList();
 
             if (newGuests.isNotEmpty) {
-              _showJoinAnimation(newGuests.first.userName);
+              _showJoinAnimation(
+                newGuests.first.userName,
+                newGuests.first.userPicture,
+                newGuests.first.userId,
+              );
             }
           }
 
@@ -724,13 +811,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           if (myParticipant.userId.isEmpty && !widget.isHost) {
             // We were kicked!
             if (mounted) {
-              context.pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('You have been removed from the room'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              _handleKicked();
             }
             return;
           }
@@ -939,6 +1020,90 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         });
       }
     });
+  }
+
+  void _handleRoomEnded() {
+    if (_isRoomEnded || !mounted) return;
+
+    // Immediately stop streaming
+    ZegoUIKit().leaveRoom();
+    ZegoUIKit().logout();
+
+    setState(() {
+      _isRoomEnded = true;
+      _isInitialized = false;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Live Ended',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'The host has ended the live stream.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) context.pop();
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleKicked() {
+    if (_isRoomEnded || !mounted) return;
+
+    // Immediately stop streaming
+    ZegoUIKit().leaveRoom();
+    ZegoUIKit().logout();
+
+    setState(() {
+      _isRoomEnded = true;
+      _isInitialized = false;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Removed',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'You have been removed from the room by the host.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) context.pop();
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDuration(Duration duration) {
@@ -1188,6 +1353,37 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     });
   }
 
+  void _showEndPKConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        title: const Text('End PK Battle', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to end the current PK battle?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              LiveStreamService.endPKBattle(
+                widget.roomID,
+                _pkState['opponentRoomId'] ?? '',
+              );
+            },
+            child: const Text('End Battle', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool?> _showExitConfirmationDialog() async {
     final currentUserId = _auth.currentUser!.uid;
     final myParticipant = _participants.firstWhere(
@@ -1400,46 +1596,52 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         // Keyboard is closed, show exit confirmation
         await _showExitConfirmationDialog();
       },
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            if (!_isPKMode)
-              Positioned.fill(
-                child: _isInitialized
-                    ? _buildVideoLayout()
-                    : Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF000000),
-                              Color(0xFF1a0a0a),
-                              Color(0xFF2d1b2b),
-                            ],
-                          ),
-                        ),
-                        child: const Center(
-                          child: CircularProgressIndicator(color: Colors.pink),
-                        ),
-                      ),
+      child: _isRoomEnded
+          ? const Scaffold(backgroundColor: Colors.black)
+          : Scaffold(
+              resizeToAvoidBottomInset: false,
+              backgroundColor: Colors.black,
+              body: Stack(
+                children: [
+                  if (!_isPKMode)
+                    Positioned.fill(
+                      child: _isInitialized
+                          ? _buildVideoLayout()
+                          : Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF000000),
+                                    Color(0xFF1a0a0a),
+                                    Color(0xFF2d1b2b),
+                                  ],
+                                ),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.pink,
+                                ),
+                              ),
+                            ),
+                    ),
+                  if (_isInitialized)
+                    _isPKMode
+                        ? _buildPKModeLayout()
+                        : _buildStandardModeOverlay()
+                  else
+                    const SizedBox.shrink(),
+                  Visibility(
+                    visible: _isStartingPKAnimation,
+                    child: _buildPKStartingAnimation(),
+                  ),
+                  Center(child: _buildJoinAnimationOverlay()),
+                  _buildFullScreenGift(),
+                  _buildGiftOverlay(),
+                ],
               ),
-            if (_isInitialized)
-              _isPKMode ? _buildPKModeLayout() : _buildStandardModeOverlay()
-            else
-              const SizedBox.shrink(),
-            Visibility(
-              visible: _isStartingPKAnimation,
-              child: _buildPKStartingAnimation(),
             ),
-            Center(child: _buildJoinAnimationOverlay()),
-            _buildFullScreenGift(),
-            _buildGiftOverlay(),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1485,6 +1687,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildAppBar() {
+    if (!_isInitialized) return const SizedBox.shrink();
     final String hostId = roomData['hostId'] ?? '';
     final String hostDisplayId = roomData['hostDisplayId'] ?? '';
     final String currentUserId = _auth.currentUser?.uid ?? '';
@@ -1729,6 +1932,82 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
             const SizedBox(width: 6),
 
+            // Join Request Button (Moved from bottom)
+            if (!widget.isHost && !_isJoined)
+              GestureDetector(
+                onTap: () async {
+                  final currentUserId = _auth.currentUser?.uid ?? '';
+                  final myParticipant = _participants.firstWhere(
+                    (p) => p.userId == currentUserId,
+                    orElse: () => LiveStreamParticipant(
+                      userId: '',
+                      userName: '',
+                      isOnSeat: false,
+                      isMuted: true,
+                      isCameraOn: false,
+                    ),
+                  );
+                  if (myParticipant.isLocked == true) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'You are locked and cannot change seats.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  try {
+                    await LiveStreamService.requestToJoin(widget.roomID);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Request sent. Wait for host approval.',
+                          ),
+                          backgroundColor: Colors.pink,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: ${e.toString()}')),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700), // Gold color
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.person_add_alt_1_outlined,
+                    color: Color(0xFFFFD700),
+                    size: 18,
+                  ),
+                ),
+              ),
+
+            const SizedBox(width: 6),
+
             // Exit Button - FIXED AT RIGHT
             IconButton(
               icon: const Icon(
@@ -1817,7 +2096,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           StreamBuilder<int>(
             stream: _diamondsStreamCache.putIfAbsent(
               hostId,
-              () => ProfileService.getMonthlyReceivedDiamondsStream(hostId),
+              () => ProfileService.getUserDiamondsStream(hostId),
             ),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
@@ -1836,7 +2115,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
               return GestureDetector(
                 onTap: () {
-                  // showGiftRankingBottomSheet(context, hostId);
+                  showFansRankingBottomSheet(context, hostId);
                 },
                 child: Row(
                   children: [
@@ -1869,8 +2148,26 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               color: Colors.black45,
               child: Row(
                 children: [
-                  Expanded(flex: 1, child: Container(color: Colors.blue)),
-                  Expanded(flex: 1, child: Container(color: Colors.red)),
+                  Expanded(
+                    flex: _pkScoreBlue + _pkScoreRed > 0 ? _pkScoreBlue : 1,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue, Color(0xFF64B5F6)],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: _pkScoreBlue + _pkScoreRed > 0 ? _pkScoreRed : 1,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFE57373), Colors.red],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2028,8 +2325,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     host.userPicture != null && host.userPicture!.isNotEmpty
                     ? NetworkImage(host.userPicture!)
                     : null,
-                child: host.userPicture == null || host.userPicture!.isEmpty
-                    ? const Icon(Icons.person, size: 40, color: Colors.white)
+                child: (host.userPicture == null || host.userPicture!.isEmpty)
+                    ? (host.gender != null
+                        ? Icon(
+                            host.gender?.toLowerCase() == 'male'
+                                ? Icons.male
+                                : Icons.female,
+                            color: host.gender?.toLowerCase() == 'male'
+                                ? Colors.blue.shade300
+                                : Colors.pink.shade300,
+                            size: 40,
+                          )
+                        : const Icon(Icons.person, size: 40, color: Colors.white))
                     : null,
               ),
               Container(
@@ -2047,52 +2354,147 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildGuestAvatar(LiveStreamParticipant guest) {
-    final borderRadius = BorderRadius.circular(10.0);
-    const double itemWidth = 70;
-    const double itemHeight = itemWidth * (4 / 3);
+    const double avatarSize = 54;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: SizedBox(
-        width: itemWidth,
-        height: itemHeight,
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: Stack(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
             alignment: Alignment.center,
-            fit: StackFit.expand,
             children: [
               Container(
+                width: avatarSize,
+                height: avatarSize,
                 decoration: BoxDecoration(
-                  image:
-                      (guest.userPicture != null &&
-                          guest.userPicture!.isNotEmpty)
-                      ? DecorationImage(
-                          image: NetworkImage(guest.userPicture!),
-                          fit: BoxFit
-                              .cover, // Ensures the image fills the 3:4 area
-                        )
-                      : null,
-                  color: Colors.grey.shade800,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
-                child: (guest.userPicture == null || guest.userPicture!.isEmpty)
-                    ? const Icon(Icons.person, size: 40, color: Colors.white)
-                    : null,
+                child: ClipOval(
+                  child:
+                      (guest.userPicture != null &&
+                              guest.userPicture!.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: guest.userPicture!,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: Colors.grey.shade900,
+                            child: const Icon(Icons.person, color: Colors.white, size: 30),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: Colors.grey.shade900,
+                            child: const Icon(Icons.person, color: Colors.white, size: 30),
+                          ),
+                        )
+                      : Container(
+                          color: Colors.grey.shade900,
+                          child: Center(
+                            child: (guest.gender != null)
+                                ? Icon(
+                                    guest.gender?.toLowerCase() == 'male'
+                                        ? Icons.male
+                                        : Icons.female,
+                                    color: guest.gender?.toLowerCase() == 'male'
+                                        ? Colors.blue.shade300
+                                        : Colors.pink.shade300,
+                                    size: 30,
+                                  )
+                                : Text(
+                                    guest.userName.isNotEmpty
+                                        ? guest.userName[0].toUpperCase()
+                                        : "?",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                ),
               ),
+              // Video Overlay if camera is on
+              if (guest.isCameraOn)
+                Builder(
+                  builder: (context) {
+                    final zegoUser = ZegoUIKit().getUser(guest.userId);
+                    if (zegoUser == null) return const SizedBox.shrink();
+                    return SizedBox(
+                      width: avatarSize,
+                      height: avatarSize,
+                      child: ClipOval(
+                        child: ZegoAudioVideoView(user: zegoUser),
+                      ),
+                    );
+                  },
+                ),
+              // Muted Indicator
               if (guest.isMuted)
-                Container(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  child: const Icon(
-                    Icons.mic_off,
-                    color: Colors.white,
-                    size: 24,
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.mic_off,
+                      color: Colors.white,
+                      size: 10,
+                    ),
                   ),
                 ),
-              // Updated emoji overlay to match the new size
-              _buildEmojiOnAvatar(guest.userId, itemWidth),
+              // Active Frame
+              Positioned(
+                width: avatarSize * 1.3,
+                height: avatarSize * 1.3,
+                child: IgnorePointer(
+                  child: ActiveFrameWidget(
+                    userId: guest.userId,
+                    size: avatarSize * 1.3,
+                  ),
+                ),
+              ),
+              // Emoji Overlay
+              _buildEmojiOnAvatar(guest.userId, avatarSize),
             ],
           ),
-        ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 65,
+            child: Text(
+              guest.userName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                shadows: [
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 2,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2548,6 +2950,33 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
           final m = _messages[index];
 
+          if (m.message == "Just joined the room!") {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "${m.username}:",
+                    style: TextStyle(
+                      color: Colors.pink.shade300,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const Text(
+                    "Just joined the room!",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           if (m.isGiftMessage) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -2763,7 +3192,39 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 ),
               ),
             ],
-            if (widget.isHost)
+            if (widget.isHost) ...[
+              Padding(
+                padding: const EdgeInsets.only(right: paddingRight),
+                child: GestureDetector(
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    if (_isPKMode) {
+                      // Option to end PK
+                      _showEndPKConfirmation();
+                    } else {
+                      showInvitePKBottomSheet(
+                        context,
+                        pendingInvites: _pendingInvites,
+                        currentRoomId: widget.roomID,
+                      );
+                    }
+                  },
+                  child: Container(
+                    width: buttonSize,
+                    height: buttonSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isPKMode ? Colors.red.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2),
+                      border: _isPKMode ? Border.all(color: Colors.red, width: 1.5) : null,
+                    ),
+                    child: Icon(
+                      _isPKMode ? Icons.stop_circle : Icons.bolt,
+                      color: _isPKMode ? Colors.red : Colors.orange,
+                      size: iconSize,
+                    ),
+                  ),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
@@ -2783,11 +3244,19 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         height: buttonSize,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.2),
+                          color: totalRequests > 0
+                              ? Colors.pink.withValues(alpha: 0.2)
+                              : Colors.black.withValues(alpha: 0.2),
+                          border: totalRequests > 0
+                              ? Border.all(
+                                  color: Colors.pink.withValues(alpha: 0.5),
+                                  width: 1,
+                                )
+                              : null,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.call,
-                          color: Colors.white,
+                          color: totalRequests > 0 ? Colors.pink : Colors.white,
                           size: iconSize,
                         ),
                       ),
@@ -2815,57 +3284,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ),
                 ),
               ),
-            if (!widget.isHost && !_isJoined)
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () async {
-                    if (currentUserParticipant?.isLocked == true) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('You are locked and cannot change seats.'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                      return;
-                    }
-                    try {
-                      await LiveStreamService.requestToJoin(widget.roomID);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Request sent. Wait for host approval.',
-                            ),
-                            backgroundColor: Colors.pink,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error: ${e.toString()}')),
-                        );
-                      }
-                    }
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
-                    child: const Icon(
-                      Icons.call,
-                      color: Colors.white,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
+            ],
             if (_isJoined && !widget.isHost)
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
@@ -2875,7 +3294,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('You are locked and cannot change seats.'),
+                            content: Text(
+                              'You are locked and cannot change seats.',
+                            ),
                             backgroundColor: Colors.red,
                           ),
                         );

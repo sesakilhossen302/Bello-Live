@@ -29,6 +29,7 @@ import 'bottomsheets/participants_bottomsheet.dart';
 import 'bottomsheets/play_music_bottomsheet.dart';
 import 'bottomsheets/requests_bottomsheet.dart';
 import 'bottomsheets/audio_tools_bottomsheet.dart';
+import 'bottomsheets/fans_ranking_bottomsheet.dart';
 
 class CoHostRequest {
   final String requestId;
@@ -248,6 +249,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   // --- Duration Timer Variables ---
   Timer? durationTimer;
+  bool _isRoomEnded = false;
   final ValueNotifier<Duration> _currentDuration = ValueNotifier(Duration.zero);
 
   late AnimationController _joinAnimationController;
@@ -328,7 +330,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _joinAnimationController.dispose();
     _musicPlayerManager.dispose();
 
-    if (_isInitialized && !_isMinimizing) {
+    if (!_isMinimizing) {
       if (widget.isHost) {
         RoomService.deleteRoom(widget.roomID);
       } else {
@@ -608,7 +610,11 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           startDurationTracking();
         }
       } else {
-        if (mounted) context.pop();
+        if (mounted && !widget.isHost) {
+          _handleRoomEnded();
+        } else if (mounted && widget.isHost) {
+          context.pop();
+        }
       }
     });
 
@@ -707,13 +713,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             if (newCurrentUser.userId.isEmpty && !widget.isHost) {
               // We were kicked!
               if (mounted) {
-                context.pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('You have been removed from the room'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                _handleKicked();
               }
               return;
             }
@@ -1303,7 +1303,9 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         // Keyboard is closed, show exit confirmation
         await _showExitConfirmationDialog();
       },
-      child: Scaffold(
+      child: _isRoomEnded
+          ? const Scaffold(backgroundColor: Colors.black)
+          : Scaffold(
         resizeToAvoidBottomInset: false,
         body: StreamBuilder<DatabaseEvent>(
           stream: RoomService.getRoomStream(widget.roomID),
@@ -1727,7 +1729,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           StreamBuilder<int>(
             stream: _diamondsStreamCache.putIfAbsent(
               hostId,
-              () => ProfileService.getMonthlyReceivedDiamondsStream(hostId),
+              () => ProfileService.getUserDiamondsStream(hostId),
             ),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
@@ -1746,7 +1748,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
               return GestureDetector(
                 onTap: () {
-                  // showGiftRankingBottomSheet(context, hostId);
+                  showFansRankingBottomSheet(context, hostId);
                 },
                 child: Row(
                   children: [
@@ -3141,5 +3143,89 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         _chatScrollController.jumpTo(0.0);
       }
     });
+  }
+
+  void _handleRoomEnded() {
+    if (_isRoomEnded || !mounted) return;
+
+    // Immediately stop streaming
+    ZegoUIKit().leaveRoom();
+    ZegoUIKit().logout();
+
+    setState(() {
+      _isRoomEnded = true;
+      _isInitialized = false;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Live Ended',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'The host has ended the live stream.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) context.pop();
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleKicked() {
+    if (_isRoomEnded || !mounted) return;
+
+    // Immediately stop streaming
+    ZegoUIKit().leaveRoom();
+    ZegoUIKit().logout();
+
+    setState(() {
+      _isRoomEnded = true;
+      _isInitialized = false;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Removed',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'You have been removed from the room by the host.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) context.pop();
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

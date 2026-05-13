@@ -22,6 +22,7 @@ class LeaderboardUser {
   final String displayId;
   final String? pictureUrl;
   final int totalValue;
+  final int totalSent;
   final String? country;
   final String? countryFlagEmoji;
 
@@ -31,6 +32,7 @@ class LeaderboardUser {
     required this.displayId,
     required this.pictureUrl,
     required this.totalValue,
+    this.totalSent = 0,
     this.country,
     this.countryFlagEmoji,
   });
@@ -104,6 +106,9 @@ class ProfileService {
             'followerCount': 0,
             'followingCount': 0,
             'balance': 0,
+            'diamonds': 0,
+            'totalSent': 0,
+            'totalReceived': 0,
             'bio': '',
             'country': 'N/A',
             'countryFlagEmoji': null,
@@ -516,6 +521,15 @@ class ProfileService {
     });
   }
 
+  static Stream<int> getUserDiamondsStream(String userId) {
+    if (userId.isEmpty) return Stream.value(0);
+    return _usersCollection.doc(userId).snapshots().map((snapshot) {
+      if (!snapshot.exists) return 0;
+      final data = snapshot.data() as Map<String, dynamic>;
+      return data['diamonds'] ?? 0;
+    });
+  }
+
   static Stream<int> getMonthlyReceivedDiamondsStream(String userId) {
     if (userId.isEmpty) return Stream.value(0);
 
@@ -694,6 +708,79 @@ class ProfileService {
     }
   }
 
+  static Future<List<LeaderboardUser>> getTopFansForHost({
+    required String hostId,
+    required String period,
+    int limit = 10,
+  }) async {
+    try {
+      final DateTime now = DateTime.now();
+      DateTime startDate;
+
+      switch (period) {
+        case 'daily':
+          startDate = DateTime(now.year, now.month, now.day);
+          break;
+        case 'weekly':
+          startDate = now.subtract(Duration(days: now.weekday - 1));
+          startDate = DateTime(startDate.year, startDate.month, startDate.day);
+          break;
+        case 'monthly':
+          startDate = DateTime(now.year, now.month, 1);
+          break;
+        default:
+          startDate = DateTime(now.year, now.month, now.day);
+      }
+
+      final giftsSnapshot = await _giftsCollection
+          .where('recipientId', isEqualTo: hostId)
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .get();
+
+      final Map<String, int> senderTotals = {};
+
+      for (final doc in giftsSnapshot.docs) {
+        final data = doc.data();
+        final senderId = data['senderId'] as String;
+        final giftValue = data['giftValue'] as int;
+
+        senderTotals[senderId] = (senderTotals[senderId] ?? 0) + giftValue;
+      }
+
+      final sortedSenders = senderTotals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final topSenders = sortedSenders.take(limit).toList();
+
+      final List<LeaderboardUser> leaderboard = [];
+
+      for (final entry in topSenders) {
+        final userId = entry.key;
+        final periodValue = entry.value;
+
+        final userDoc = await _usersCollection.doc(userId).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>;
+          leaderboard.add(
+            LeaderboardUser(
+              id: userId,
+              name: userData['displayName'] ?? 'No Name',
+              displayId: userData['displayId'] ?? 'N/A',
+              pictureUrl: userData['photoUrl'],
+              totalValue: periodValue,
+              totalSent: userData['totalSent'] ?? 0,
+              country: userData['country'],
+              countryFlagEmoji: userData['countryFlagEmoji'],
+            ),
+          );
+        }
+      }
+
+      return leaderboard;
+    } catch (e) {
+      debugPrint("Error in getTopFansForHost: $e");
+      rethrow;
+    }
+  }
+
   static Future<List<LeaderboardUser>> getTopGifters({
     required String period,
     int limit = 10,
@@ -750,6 +837,7 @@ class ProfileService {
               displayId: userData['displayId'] ?? 'N/A',
               pictureUrl: userData['photoUrl'],
               totalValue: totalValue,
+              totalSent: userData['totalSent'] ?? 0,
               country: userData['country'],
               countryFlagEmoji: userData['countryFlagEmoji'],
             ),
@@ -820,6 +908,7 @@ class ProfileService {
               displayId: userData['displayId'] ?? 'N/A',
               pictureUrl: userData['photoUrl'],
               totalValue: totalValue,
+              totalSent: userData['totalSent'] ?? 0,
               country: userData['country'],
               countryFlagEmoji: userData['countryFlagEmoji'],
             ),

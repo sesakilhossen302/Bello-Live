@@ -346,6 +346,30 @@ class MyRouter {
               },
             ),
             GoRoute(
+              path: Routes.videoRoom.path,
+              pageBuilder: (context, state) {
+                String roomId = '';
+                bool isHost = false;
+
+                if (state.extra != null &&
+                    state.extra is Map<String, dynamic>) {
+                  final data = state.extra as Map<String, dynamic>;
+                  roomId = data['roomId'] as String;
+                  isHost = data['isHost'] as bool;
+                } else {
+                  roomId = state.uri.queryParameters['roomId'] ?? '';
+                }
+
+                return CustomTransitionPage<void>(
+                  key: state.pageKey,
+                  child: LiveStreamPage(roomID: roomId, isHost: isHost),
+                  transitionsBuilder: customSlideTransition,
+                  transitionDuration: const Duration(milliseconds: 250),
+                  reverseTransitionDuration: const Duration(milliseconds: 200),
+                );
+              },
+            ),
+            GoRoute(
               path: Routes.liveStream.path,
               pageBuilder: (context, state) {
                 String roomId = '';

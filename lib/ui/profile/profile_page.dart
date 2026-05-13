@@ -144,7 +144,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               profileImage: data['photoUrl'] ?? '',
                               followers: data['followerCount'] ?? 0,
                               following: data['followingCount'] ?? 0,
-                              diamonds: monthlyDiamonds,
+                              diamonds: data['diamonds'] ?? 0,
                               beans: data['balance'] ?? 0,
                               giftSendingLevel: getSentLevel(
                                 data['totalSent'] ?? 0,

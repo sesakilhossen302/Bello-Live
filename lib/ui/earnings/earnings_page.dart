@@ -573,7 +573,12 @@ class _EarningsPageState extends State<EarningsPage> {
             ),
           ),
           const SizedBox(height: 40),
-          _buildGemsInfo(),
+          StreamBuilder<int>(
+            stream: ProfileService.getUserDiamondsStream(FirebaseAuth.instance.currentUser?.uid ?? ''),
+            builder: (context, snapshot) {
+              return _buildGemsInfo(snapshot.data ?? 0);
+            },
+          ),
           const SizedBox(height: 20),
           Center(
             child: ElevatedButton(
@@ -637,13 +642,13 @@ class _EarningsPageState extends State<EarningsPage> {
     );
   }
 
-  Widget _buildGemsInfo() {
-    return const Column(
+  Widget _buildGemsInfo(int currentDiamonds) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Current Gems Balance: 0 gems', style: TextStyle(color: Colors.white70, fontSize: 14)),
-        SizedBox(height: 5),
-        Text('Gems Required to Apply: 0 gems', style: TextStyle(color: Colors.white70, fontSize: 14)),
+        Text('Current Gems Balance: $currentDiamonds gems', style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        const SizedBox(height: 5),
+        const Text('Gems Required to Apply: 2,000,000 gems', style: TextStyle(color: Colors.white70, fontSize: 14)),
       ],
     );
   }
