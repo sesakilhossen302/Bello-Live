@@ -777,7 +777,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             final oldParticipantIds = _participants
                 .map((p) => p.userId)
                 .toSet();
-            final String hostId = _isInitialized ? (roomData['hostId'] ?? '') : '';
+            final String hostId = _isInitialized
+                ? (roomData['hostId'] ?? '')
+                : '';
 
             final newGuests = newParticipants
                 .where(
@@ -1358,7 +1360,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2d1b2b),
-        title: const Text('End PK Battle', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'End PK Battle',
+          style: TextStyle(color: Colors.white),
+        ),
         content: const Text(
           'Are you sure you want to end the current PK battle?',
           style: TextStyle(color: Colors.white70),
@@ -1366,7 +1371,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -1377,7 +1385,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 _pkState['opponentRoomId'] ?? '',
               );
             },
-            child: const Text('End Battle', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'End Battle',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -2327,16 +2338,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     : null,
                 child: (host.userPicture == null || host.userPicture!.isEmpty)
                     ? (host.gender != null
-                        ? Icon(
-                            host.gender?.toLowerCase() == 'male'
-                                ? Icons.male
-                                : Icons.female,
-                            color: host.gender?.toLowerCase() == 'male'
-                                ? Colors.blue.shade300
-                                : Colors.pink.shade300,
-                            size: 40,
-                          )
-                        : const Icon(Icons.person, size: 40, color: Colors.white))
+                          ? Icon(
+                              host.gender?.toLowerCase() == 'male'
+                                  ? Icons.male
+                                  : Icons.female,
+                              color: host.gender?.toLowerCase() == 'male'
+                                  ? Colors.blue.shade300
+                                  : Colors.pink.shade300,
+                              size: 40,
+                            )
+                          : const Icon(
+                              Icons.person,
+                              size: 40,
+                              color: Colors.white,
+                            ))
                     : null,
               ),
               Container(
@@ -2384,17 +2399,25 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 child: ClipOval(
                   child:
                       (guest.userPicture != null &&
-                              guest.userPicture!.isNotEmpty)
+                          guest.userPicture!.isNotEmpty)
                       ? CachedNetworkImage(
                           imageUrl: guest.userPicture!,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(
                             color: Colors.grey.shade900,
-                            child: const Icon(Icons.person, color: Colors.white, size: 30),
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 30,
+                            ),
                           ),
                           errorWidget: (context, url, error) => Container(
                             color: Colors.grey.shade900,
-                            child: const Icon(Icons.person, color: Colors.white, size: 30),
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 30,
+                            ),
                           ),
                         )
                       : Container(
@@ -3214,8 +3237,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     height: buttonSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _isPKMode ? Colors.red.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2),
-                      border: _isPKMode ? Border.all(color: Colors.red, width: 1.5) : null,
+                      color: _isPKMode
+                          ? Colors.red.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.2),
+                      border: _isPKMode
+                          ? Border.all(color: Colors.red, width: 1.5)
+                          : null,
                     ),
                     child: Icon(
                       _isPKMode ? Icons.stop_circle : Icons.bolt,

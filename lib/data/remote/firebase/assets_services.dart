@@ -22,6 +22,7 @@ class GiftModel {
   final String iconUrl;
   final int value;
   final String category;
+  final String subCategory;
 
   GiftModel({
     required this.id,
@@ -30,6 +31,7 @@ class GiftModel {
     required this.iconUrl,
     required this.value,
     required this.category,
+    this.subCategory = '',
   });
 
   factory GiftModel.fromFirestore(DocumentSnapshot doc) {
@@ -41,6 +43,7 @@ class GiftModel {
       iconUrl: data['iconURL'] ?? '',
       value: data['value'] ?? data['price'] ?? 0,
       category: data['category'] ?? 'Uncategorized',
+      subCategory: data['subCategory'] ?? data['subcategory'] ?? '',
     );
   }
 }
@@ -80,22 +83,40 @@ class AssetsService {
     });
   }
 
+  // NEW: Get gifts by subCategory (safely filters locally to avoid index issues)
+  static Stream<List<GiftModel>> getGiftsBySubCategory(String subCategory) {
+    return _giftsCollection
+        .where('category', isEqualTo: 'Gift')
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      final allGifts = snapshot.docs.map((doc) => GiftModel.fromFirestore(doc)).toList();
+      if (subCategory == 'Gift' || subCategory == 'All' || subCategory.isEmpty) {
+        return allGifts;
+      }
+      return allGifts.where((g) => g.subCategory == subCategory).toList();
+    });
+  }
+
   // NEW: Get all unique gift categories
-  static Future<List<String>> getGiftCategories() async {
+  static Future<List<String>> getGiftSubCategories() async {
     try {
-      final snapshot = await _giftsCollection.where('isActive', isEqualTo: true).get();
-      final categories = snapshot.docs
+      final snapshot = await _giftsCollection
+          .where('category', isEqualTo: 'Gift')
+          .where('isActive', isEqualTo: true)
+          .get();
+      final subCategories = snapshot.docs
           .map((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            return data['category'] as String? ?? 'Uncategorized';
+            return data['subCategory'] as String? ?? data['subcategory'] as String? ?? '';
           })
-          .where((cat) => cat != 'Emoji' && cat != 'Frame' && cat != 'Entrance')
+          .where((subCat) => subCat.isNotEmpty && subCat != 'Lucky' && subCat.toLowerCase() != 'uncategorized' && subCat.toLowerCase() != 'gift')
           .toSet()
           .toList();
-      return categories;
+      return subCategories;
     } catch (e) {
-      debugPrint('Error fetching categories: $e');
-      return ['Lucky']; // Default fallback
+      debugPrint('Error fetching subcategories: $e');
+      return [];
     }
   }
 }

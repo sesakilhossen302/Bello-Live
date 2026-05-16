@@ -87,20 +87,20 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
   }
 
   Future<void> _loadCategories() async {
-    var categories = await AssetsService.getGiftCategories();
-
-    // Filter out Lucky category
-    categories = categories.where((cat) => cat != 'Lucky').toList();
+    var subCategories = await AssetsService.getGiftSubCategories();
 
     final List<String> desiredOrder = ['Event', 'Popular', 'Luxury', 'Celebrate', 'Backpit'];
 
-    categories.sort((a, b) {
+    subCategories.sort((a, b) {
       int indexA = desiredOrder.indexOf(a);
       int indexB = desiredOrder.indexOf(b);
       if (indexA == -1) indexA = 999;
       if (indexB == -1) indexB = 999;
       return indexA.compareTo(indexB);
     });
+
+    // Add 'Gift' as the first tab which will represent 'All'
+    final categories = ['Gift', ...subCategories];
 
     if (!mounted) return;
 
@@ -445,7 +445,7 @@ class _GiftGridViewState extends State<_GiftGridView> with AutomaticKeepAliveCli
     }
 
     return StreamBuilder<List<GiftModel>>(
-      stream: AssetsService.getGiftsByCategory(widget.category),
+      stream: AssetsService.getGiftsBySubCategory(widget.category),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.pink));
@@ -516,19 +516,22 @@ class _GiftGridViewState extends State<_GiftGridView> with AutomaticKeepAliveCli
                 ),
               ),
               const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: Colors.cyan.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.diamond_outlined, color: Colors.cyan, size: 10),
-                    const SizedBox(width: 2),
-                    Text(
-                      gift.value.toString(),
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.cyan.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.diamond_outlined, color: Colors.cyan, size: 10),
+                      const SizedBox(width: 2),
+                      Text(
+                        gift.value.toString(),
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

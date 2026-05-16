@@ -430,7 +430,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     ZegoUIKit().login(currentUser.uid, _currentUserName);
     await ZegoUIKit().joinRoom(widget.roomID);
 
-    ZegoUIKit().turnMicrophoneOn(true);
+    ZegoUIKit().turnMicrophoneOn(widget.isHost);
     ZegoUIKit().setAudioOutputToSpeaker(true);
     ZegoUIKit().startPlayAllAudioVideo();
 
@@ -1306,75 +1306,79 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       child: _isRoomEnded
           ? const Scaffold(backgroundColor: Colors.black)
           : Scaffold(
-        resizeToAvoidBottomInset: false,
-        body: StreamBuilder<DatabaseEvent>(
-          stream: RoomService.getRoomStream(widget.roomID),
-          builder: (context, snapshot) {
-            String? backgroundUrl;
-            if (snapshot.hasData && snapshot.data!.snapshot.exists) {
-              final data =
-                  snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
-              backgroundUrl = data['backgroundUrl'] as String?;
-            }
+              resizeToAvoidBottomInset: false,
+              body: StreamBuilder<DatabaseEvent>(
+                stream: RoomService.getRoomStream(widget.roomID),
+                builder: (context, snapshot) {
+                  String? backgroundUrl;
+                  if (snapshot.hasData && snapshot.data!.snapshot.exists) {
+                    final data =
+                        snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
+                    backgroundUrl = data['backgroundUrl'] as String?;
+                  }
 
-            return Stack(
-              children: [
-                // Solid Background Color
-                Positioned.fill(
-                  child: Container(color: const Color(0xFF2d1b2b)),
-                ),
+                  return Stack(
+                    children: [
+                      // Solid Background Color
+                      Positioned.fill(
+                        child: Container(color: const Color(0xFF2d1b2b)),
+                      ),
 
-                SafeArea(
-                  child: _isInitialized
-                      ? Stack(
-                          children: [
-                            Stack(
-                              children: [
-                                Column(
-                                  children: [
-                                    _buildAppBar(),
-                                    _buildHostStatsRow(),
-                                    Column(
-                                      children: [
-                                        _buildStreamerProfile(),
-                                        _buildSeatsGrid(),
-                                      ],
-                                    ),
-                                    Expanded(
-                                      child: Container(
-                                        margin: EdgeInsets.only(bottom: 60),
-                                        child: Stack(
-                                          children: [
-                                            _buildChatSection(),
-                                            _buildJoinCallOverlay(),
-                                          ],
-                                        ),
+                      SafeArea(
+                        child: _isInitialized
+                            ? Stack(
+                                children: [
+                                  Stack(
+                                    children: [
+                                      Column(
+                                        children: [
+                                          _buildAppBar(),
+                                          _buildHostStatsRow(),
+                                          Column(
+                                            children: [
+                                              _buildStreamerProfile(),
+                                              _buildSeatsGrid(),
+                                            ],
+                                          ),
+                                          Expanded(
+                                            child: Container(
+                                              margin: EdgeInsets.only(
+                                                bottom: 60,
+                                              ),
+                                              child: Stack(
+                                                children: [
+                                                  _buildChatSection(),
+                                                  _buildJoinCallOverlay(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
+                                      Positioned(
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: _buildChatInput(),
+                                      ),
+                                    ],
+                                  ),
+                                  Center(child: _buildJoinAnimationOverlay()),
+                                  _buildFullScreenGift(),
+                                  _buildGiftOverlay(),
+                                ],
+                              )
+                            : const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.pink,
                                 ),
-                                Positioned(
-                                  bottom: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: _buildChatInput(),
-                                ),
-                              ],
-                            ),
-                            Center(child: _buildJoinAnimationOverlay()),
-                            _buildFullScreenGift(),
-                            _buildGiftOverlay(),
-                          ],
-                        )
-                      : const Center(
-                          child: CircularProgressIndicator(color: Colors.pink),
-                        ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
     );
   }
 
@@ -2122,21 +2126,76 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       currentUserParticipant = null;
     }
 
-    final bool canInteract = !widget.isHost && currentUserParticipant != null;
-    final bool isListener =
-        canInteract &&
-        currentUserParticipant.seatNo == -1 &&
-        !currentUserParticipant.isCoHost;
-    final bool isSpeakerOrCoHost =
-        canInteract &&
-        (currentUserParticipant.seatNo > 0 || currentUserParticipant.isCoHost);
+    final lockedData = roomData['lockedSeats'];
+    bool isLocked = false;
+    if (lockedData is Map) {
+      isLocked = lockedData['seat_$seatNo'] == true ||
+          lockedData[seatNo.toString()] == true;
+    } else if (lockedData is List) {
+      if (seatNo < lockedData.length) {
+        isLocked = lockedData[seatNo] == true;
+      }
+    }
 
-    IconData icon = Icons.event_seat;
-    Color iconColor = Colors.pink;
+    final bool canInteract = widget.isHost || (currentUserParticipant != null);
+    final bool isListener = canInteract &&
+        !widget.isHost &&
+        currentUserParticipant?.seatNo == -1 &&
+        currentUserParticipant?.isCoHost == false;
+    final bool isSpeakerOrCoHost = canInteract &&
+        !widget.isHost &&
+        ((currentUserParticipant?.seatNo ?? -1) > 0 ||
+            (currentUserParticipant?.isCoHost ?? false));
+
+    IconData icon = isLocked ? Icons.lock : Icons.event_seat;
+    Color iconColor = isLocked ? Colors.redAccent : Colors.pink;
 
     return GestureDetector(
       onTap: () async {
         if (!canInteract) return;
+        if (widget.isHost) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF2d1b2b),
+              title: Text(
+                isLocked ? 'Unlock Seat $seatNo?' : 'Lock Seat $seatNo?',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: Text(
+                isLocked
+                    ? 'Allow participants to sit on seat $seatNo.'
+                    : 'Prevent participants from sitting on seat $seatNo.',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isLocked ? Colors.green : Colors.red,
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (isLocked) {
+                      await RoomService.unlockSeat(widget.roomID, seatNo);
+                    } else {
+                      await RoomService.lockSeat(widget.roomID, seatNo);
+                    }
+                  },
+                  child: Text(
+                    isLocked ? 'Unlock' : 'Lock',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+
         if (currentUserParticipant?.isLocked == true && !widget.isHost) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2149,10 +2208,28 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           return;
         }
 
+        if (isLocked) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This seat is locked by the host.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
         try {
           if (isListener) {
-            await RoomService.takeSeat(widget.roomID, seatNo);
-            ZegoUIKit().turnMicrophoneOn(true);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please click the "Join Call" button to request a seat.'),
+                  backgroundColor: Colors.pink,
+                ),
+              );
+            }
           } else if (isSpeakerOrCoHost) {
             if (_isMoveAllowed) {
               await RoomService.moveSeat(widget.roomID, seatNo);
@@ -2198,20 +2275,21 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               alignment: Alignment.center,
               children: [
                 Icon(icon, color: iconColor, size: 28),
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 4,
-                        spreadRadius: 1,
-                        offset: const Offset(1, 1),
-                      ),
-                    ],
+                if (!isLocked)
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                          offset: const Offset(1, 1),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 14),
                   ),
-                  child: const Icon(Icons.add, color: Colors.white, size: 14),
-                ),
               ],
             ),
           ),
@@ -2229,7 +2307,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     RoomParticipant participant, {
     required bool isCurrentUser,
   }) {
-    final canLeaveSeat = isCurrentUser && !widget.isHost && !participant.isLocked;
+    final canLeaveSeat =
+        isCurrentUser && !widget.isHost && !participant.isLocked;
     return GestureDetector(
       onTap: !canLeaveSeat
           ? () {
@@ -2610,7 +2689,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 !currentUserParticipant.isCoHost));
 
     return Visibility(
-      visible: isListener && _isSeatApprovalRequired,
+      visible: isListener,
       child: Positioned(
         bottom: 8,
         right: 24,
@@ -2857,8 +2936,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       currentUserParticipant = null;
     }
 
-    // CHANGE: Everyone can speak and use tools, no seat required
-    final bool isSpeakerOrCoHost = true;
+    final bool isSpeakerOrCoHost = widget.isHost ||
+        (currentUserParticipant != null &&
+            (currentUserParticipant.seatNo > 0 ||
+                currentUserParticipant.isCoHost));
 
     final bool isCurrentlyMuted = currentUserParticipant?.isMuted ?? true;
     final int totalRequests = _coHostRequests.length + _speakerRequests.length;

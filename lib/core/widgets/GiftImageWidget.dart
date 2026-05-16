@@ -11,7 +11,8 @@ class GiftImageWidget extends StatefulWidget {
   final VoidCallback? onAnimationComplete;
   final Duration? displayDuration; // How long to show after loading
 
-  static const String _baseUrl = 'https://pub-a84b75c9c456460f9aadb5a9bc90b348.r2.dev/';
+  static const String _baseUrl =
+      'https://pub-a84b75c9c456460f9aadb5a9bc90b348.r2.dev/';
 
   const GiftImageWidget({
     super.key,
@@ -34,7 +35,8 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
   Future<void>? _loadFuture;
 
   String get _fullImageUrl {
-    if (widget.imageUrl.startsWith('http://') || widget.imageUrl.startsWith('https://')) {
+    if (widget.imageUrl.startsWith('http://') ||
+        widget.imageUrl.startsWith('https://')) {
       return widget.imageUrl;
     }
     return '${GiftImageWidget._baseUrl}${widget.imageUrl}';
@@ -67,15 +69,18 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
             // Animation is loaded and showing - start timer ONCE
             if (!_hasStartedTimer && widget.onAnimationComplete != null) {
               _hasStartedTimer = true;
-              Future.delayed(widget.displayDuration!, widget.onAnimationComplete!);
+              Future.delayed(
+                widget.displayDuration!,
+                widget.onAnimationComplete!,
+              );
             }
 
             return SVGAEasyPlayer(resUrl: _fullImageUrl, fit: widget.fit);
           },
         );
       } else {
-        // For regular (non-fullscreen): show immediately
-        return SVGAEasyPlayer(resUrl: _fullImageUrl, fit: widget.fit);
+        // For regular (non-fullscreen): show immediately as STATIC (no sound)
+        return _StaticSvgaPlayer(url: _fullImageUrl, fit: widget.fit);
       }
     }
 
@@ -84,9 +89,15 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
       fit: widget.fit,
       placeholder: (context, url) =>
           widget.placeholder ??
-          Center(child: CircularProgressIndicator(color: Colors.pink.withValues(alpha: 0.5), strokeWidth: 1.5)),
+          Center(
+            child: CircularProgressIndicator(
+              color: Colors.pink.withValues(alpha: 0.5),
+              strokeWidth: 1.5,
+            ),
+          ),
       errorWidget: (context, url, error) =>
-          widget.errorWidget ?? const Icon(Icons.card_giftcard, color: Colors.white54, size: 24),
+          widget.errorWidget ??
+          const Icon(Icons.card_giftcard, color: Colors.white54, size: 24),
     );
   }
 
@@ -109,5 +120,64 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
         });
       }
     }
+  }
+}
+
+class _StaticSvgaPlayer extends StatefulWidget {
+  final String url;
+  final BoxFit fit;
+
+  const _StaticSvgaPlayer({required this.url, required this.fit});
+
+  @override
+  State<_StaticSvgaPlayer> createState() => _StaticSvgaPlayerState();
+}
+
+class _StaticSvgaPlayerState extends State<_StaticSvgaPlayer> with SingleTickerProviderStateMixin {
+  SVGAAnimationController? _controller;
+  bool _isDisposed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = SVGAAnimationController(vsync: this);
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final videoItem = await SVGAParser.shared.decodeFromURL(widget.url);
+      if (_isDisposed) return;
+      
+      if (mounted && _controller != null) {
+        _controller!.videoItem = videoItem;
+        // DO NOT play the animation, just show the first frame.
+        // This ensures the audio tracks inside the SVGA do not play.
+        _controller!.value = 0.0;
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint("Error loading static SVGA: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller?.videoItem == null) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Colors.pink,
+          strokeWidth: 1.5,
+        ),
+      );
+    }
+    return SVGAImage(_controller!, fit: widget.fit);
   }
 }

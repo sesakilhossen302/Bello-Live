@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -10,6 +11,8 @@ import 'tabs/pk_tab.dart'; // For PKBattleCard
 import 'home_state.dart';
 
 class HomeCubit extends Cubit<HomeState> {
+  final List<StreamSubscription> _subscriptions = [];
+
   HomeCubit() : super(const HomeState()) {
     _initStreams();
   }
@@ -54,7 +57,7 @@ class HomeCubit extends Cubit<HomeState> {
         .asBroadcastStream();
 
     // 2. Popular Tab: Combine Audio + Video, sort by host diamonds
-    Rx.combineLatest2(
+    final sub1 = Rx.combineLatest2(
           audioRoomsStreamRaw,
           liveStreamsStreamRaw,
           (DatabaseEvent audioEvent, DatabaseEvent liveEvent) =>
@@ -69,9 +72,10 @@ class HomeCubit extends Cubit<HomeState> {
           _updateCountryCounts(rooms);
           _emitFilteredRooms();
         });
+    _subscriptions.add(sub1);
 
     // 3. Freshers Tab: Combine Audio + Video, sort by host's creation date (newest first)
-    Rx.combineLatest2(
+    final sub2 = Rx.combineLatest2(
           audioRoomsStreamRaw,
           liveStreamsStreamRaw,
           (DatabaseEvent audioEvent, DatabaseEvent liveEvent) =>
@@ -85,9 +89,10 @@ class HomeCubit extends Cubit<HomeState> {
           _freshersRaw = rooms;
           _emitFilteredRooms();
         });
+    _subscriptions.add(sub2);
 
     // 4. Party Tab: Audio rooms only, sort by host diamonds
-    audioRoomsStreamRaw
+    final sub3 = audioRoomsStreamRaw
         .debounceTime(const Duration(milliseconds: 500))
         .asyncExpand((audioEvent) async* {
           yield await _processAudioRooms(audioEvent);
@@ -96,13 +101,15 @@ class HomeCubit extends Cubit<HomeState> {
           _audioRoomsRaw = rooms;
           _emitFilteredRooms();
         });
+    _subscriptions.add(sub3);
 
     // 5. PK Tab: Extract PK Battles directly from live_streams node
-    liveStreamsStreamRaw.debounceTime(const Duration(milliseconds: 500)).listen(
+    final sub4 = liveStreamsStreamRaw.debounceTime(const Duration(milliseconds: 500)).listen(
       (event) {
         _extractAndEmitPKBattles(event);
       },
     );
+    _subscriptions.add(sub4);
   }
 
   void _updateCountryCounts(List<StreamerModel> rooms) {
@@ -394,6 +401,10 @@ class HomeCubit extends Cubit<HomeState> {
 
   @override
   Future<void> close() {
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
     _allRoomsSubject.close();
     _audioRoomsSubject.close();
     _freshersSubject.close();

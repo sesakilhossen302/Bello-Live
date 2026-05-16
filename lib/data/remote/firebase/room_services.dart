@@ -348,7 +348,19 @@ class RoomService {
     if (!roomSnapshot.exists) throw Exception('Room not found.');
 
     final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
-    // Removed seat approval check as requested
+    final lockedSeatsMap = roomData['lockedSeats'];
+    bool isLocked = false;
+    if (lockedSeatsMap is Map) {
+      isLocked = lockedSeatsMap['seat_$newSeatNo'] == true ||
+          lockedSeatsMap[newSeatNo.toString()] == true;
+    } else if (lockedSeatsMap is List) {
+      if (newSeatNo < lockedSeatsMap.length) {
+        isLocked = lockedSeatsMap[newSeatNo] == true;
+      }
+    }
+    if (isLocked) {
+      throw Exception('This seat is locked by the host.');
+    }
 
     final participantsSnapshot = await _participantsRef.child(roomId).get();
     if (participantsSnapshot.exists) {
@@ -372,6 +384,19 @@ class RoomService {
       final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
       if (!(roomData['isMoveAllowed'] ?? true)) {
         throw Exception('Host has disabled moving seats.');
+      }
+      final lockedSeatsMap = roomData['lockedSeats'];
+      bool isLocked = false;
+      if (lockedSeatsMap is Map) {
+        isLocked = lockedSeatsMap['seat_$newSeatNo'] == true ||
+            lockedSeatsMap[newSeatNo.toString()] == true;
+      } else if (lockedSeatsMap is List) {
+        if (newSeatNo < lockedSeatsMap.length) {
+          isLocked = lockedSeatsMap[newSeatNo] == true;
+        }
+      }
+      if (isLocked) {
+        throw Exception('This seat is locked by the host.');
       }
     }
 
@@ -600,9 +625,31 @@ class RoomService {
       }
     }
 
+    final roomSnapshot = await _roomsRef.child(roomId).get();
+    final lockedSeats = <int>{};
+    if (roomSnapshot.exists) {
+      final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+      final lockedData = roomData['lockedSeats'];
+      if (lockedData is Map) {
+        for (var key in lockedData.keys) {
+          final sKey = key.toString().replaceFirst('seat_', '');
+          final seatNo = int.tryParse(sKey);
+          if (seatNo != null && lockedData[key] == true) {
+            lockedSeats.add(seatNo);
+          }
+        }
+      } else if (lockedData is List) {
+        for (int i = 0; i < lockedData.length; i++) {
+          if (lockedData[i] == true) {
+            lockedSeats.add(i);
+          }
+        }
+      }
+    }
+
     int? nextAvailableSeat;
-    for (int i = 1; i <= 12; i++) {
-      if (!occupiedSeats.contains(i)) {
+    for (int i = 1; i <= 8; i++) {
+      if (!occupiedSeats.contains(i) && !lockedSeats.contains(i)) {
         nextAvailableSeat = i;
         break;
       }
@@ -610,7 +657,7 @@ class RoomService {
 
     if (nextAvailableSeat == null) {
       await requestRef.remove();
-      throw Exception('All seats are full.');
+      throw Exception('All seats are full or locked.');
     }
 
     await participantRef.update({'seatNo': nextAvailableSeat, 'isMuted': false});
@@ -650,6 +697,14 @@ class RoomService {
 
   static Future<void> removeRoomPassword(String roomId) async {
     await _roomsRef.child(roomId).update({'isLocked': false, 'password': null});
+  }
+
+  static Future<void> lockSeat(String roomId, int seatNo) async {
+    await _roomsRef.child('$roomId/lockedSeats/seat_$seatNo').set(true);
+  }
+
+  static Future<void> unlockSeat(String roomId, int seatNo) async {
+    await _roomsRef.child('$roomId/lockedSeats/seat_$seatNo').remove();
   }
 
   // ============================================================================
