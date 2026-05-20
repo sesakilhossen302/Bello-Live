@@ -99,8 +99,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
       return indexA.compareTo(indexB);
     });
 
-    // Add 'Gift' as the first tab which will represent 'All'
-    final categories = ['Gift', ...subCategories];
+    final categories = subCategories.isNotEmpty ? subCategories : ['Event', 'Luxury', 'Romantic'];
 
     if (!mounted) return;
 
@@ -334,7 +333,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
           decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(20)),
           child: Row(
             children: [
-              SvgPicture.asset("assets/icons/beans.svg", colorFilter: const ColorFilter.mode(Colors.amber, BlendMode.srcIn), width: 16),
+              const Icon(Icons.diamond, color: Colors.cyanAccent, size: 16),
               const SizedBox(width: 4),
               Text(
                 _currentBalance.toString(),
@@ -381,6 +380,8 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
                           ? CachedNetworkImage(
                               imageUrl: participant.userPicture!,
                               fit: BoxFit.cover,
+                              memCacheWidth: 150,
+                              memCacheHeight: 150,
                               errorWidget: (_, __, ___) => const Icon(Icons.person, color: Colors.white, size: 20),
                             )
                           : const Icon(Icons.person, color: Colors.white, size: 20),

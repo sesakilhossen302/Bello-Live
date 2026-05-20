@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  get: ^4.6.6
   flutter_svg: ^2.2.0
   flutter_bloc: ^9.1.1
   go_router: ^16.2.1
@@ -79,6 +80,10 @@ flutter:
     - assets/banner/
     - assets/room_bg/
     - assets/logo/
+    - assets/gameimages/
+    - assets/gameimages/win_card/
+    - assets/gameimages/normal_card/
+    - assets/animalgame/
 
 
 flutter_launcher_icons:

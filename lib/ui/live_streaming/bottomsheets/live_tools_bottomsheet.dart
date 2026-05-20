@@ -8,6 +8,7 @@ import '../../streaming/bottomsheets/game_list_bottomsheet.dart';
 import 'invite_pk_bottomsheet.dart';
 import 'share_bottomsheet.dart';
 import 'package:zego_express_engine/zego_express_engine.dart';
+import '../../streaming/bottomsheets/rocket_config_bottomsheet.dart';
 
 class _ToolItem {
   final String label;
@@ -41,6 +42,11 @@ final List<_ToolItem> _hostTools = [
     label: 'Speaker',
     icon: CupertinoIcons.speaker_2_fill,
     iconBgColor: Colors.blue.shade600,
+  ),
+  _ToolItem(
+    label: 'Rocket',
+    icon: Icons.rocket_launch,
+    iconBgColor: Colors.purple.shade600,
   ),
   _ToolItem(
     label: 'Room skin',
@@ -92,6 +98,11 @@ final List<_ToolItem> _guestTools = [
     iconBgColor: Colors.blue.shade600,
   ),
   _ToolItem(
+    label: 'Rocket',
+    icon: Icons.rocket_launch,
+    iconBgColor: Colors.purple.shade600,
+  ),
+  _ToolItem(
     label: 'Games',
     icon: Icons.games_outlined,
     iconBgColor: Colors.green.shade700,
@@ -103,6 +114,7 @@ class LiveToolsBottomSheet extends StatefulWidget {
   final String currentRoomId;
   final bool isHost;
   final String hostName;
+  final String hostId;
   final MusicPlayerManager musicManager;
 
   const LiveToolsBottomSheet({
@@ -110,6 +122,7 @@ class LiveToolsBottomSheet extends StatefulWidget {
     required this.pendingInvites,
     required this.currentRoomId,
     required this.isHost,
+    required this.hostId,
     this.hostName = "Host",
     required this.musicManager,
   });
@@ -230,7 +243,16 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                         _isSpeakerMuted,
                       );
                     };
-
+                  } else if (tool.label == 'Rocket') {
+                    onTapLogic = () {
+                      Navigator.pop(context);
+                      showRocketConfigBottomSheet(
+                        context,
+                        roomId: widget.currentRoomId,
+                        hostId: widget.hostId,
+                        isAudioRoom: false,
+                      );
+                    };
                   } else if (tool.label == 'Notice') {
                     onTapLogic = () {
                       Navigator.pop(context);
@@ -537,6 +559,7 @@ void showLiveToolsBottomSheet(
   required List<PKInvite> pendingInvites,
   required String currentRoomId,
   required bool isHost,
+  required String hostId,
   String hostName = "Host",
   required MusicPlayerManager musicManager,
 }) {
@@ -549,6 +572,7 @@ void showLiveToolsBottomSheet(
         pendingInvites: pendingInvites,
         currentRoomId: currentRoomId,
         isHost: isHost,
+        hostId: hostId,
         hostName: hostName,
         musicManager: musicManager,
       );

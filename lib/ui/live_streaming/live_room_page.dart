@@ -218,6 +218,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   GiftOverlay? _currentGiftOverlay;
   Timer? _giftOverlayTimer;
   String? _fullScreenGiftUrl;
+  int? _fullScreenGiftDuration;
 
   // --- Duration Timer Variables ---
   Timer? durationTimer;
@@ -328,7 +329,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
       ZegoUIKit().leaveRoom();
       ZegoUIKit().logout();
-      ZegoUIKit().uninit();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        try {
+          ZegoUIKit().uninit();
+        } catch (_) {}
+      });
     }
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
@@ -659,6 +664,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     bool isLuckyGift = false,
     int? hitCount,
     String? senderId,
+    int? durationSec,
   }) {
     _giftOverlayTimer?.cancel();
 
@@ -673,6 +679,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
       if (!isLuckyGift) {
         _fullScreenGiftUrl = giftAnimationUrl;
+        _fullScreenGiftDuration = durationSec;
       }
     });
 
@@ -923,6 +930,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           isLuckyGift: isLuckyGift,
           hitCount: hitCount,
           senderId: data['senderId'],
+          durationSec: data['duration'] as int?,
         );
       }
     });
@@ -2700,6 +2708,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             imageUrl: _fullScreenGiftUrl!,
             fit: BoxFit.contain,
             isFullScreenAnimation: true,
+            displayDuration: Duration(seconds: _fullScreenGiftDuration ?? 10),
             onAnimationComplete: () {
               if (mounted) {
                 setState(() {
@@ -3098,7 +3107,84 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       ),
       child: Row(
         children: [
+          Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              height: buttonSize,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1.0,
+                ),
+              ),
+              child: Center(
+                child: TextField(
+                  controller: _chatController,
+                  focusNode: _chatFocusNode,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Say something...',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           if (!_isChatExpanded) ...[
+            Padding(
+              padding: const EdgeInsets.only(right: paddingRight),
+              child: GestureDetector(
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  final hostId = roomData['hostId'] ?? '';
+                  final seatedParticipants = _participants.where((p) {
+                    return p.isOnSeat || p.userId == hostId;
+                  }).toList();
+
+                  final convertedParticipants = seatedParticipants.map((p) {
+                    return _ConvertedParticipant(
+                      userId: p.userId,
+                      userName: p.userName,
+                      userPicture: p.userPicture,
+                    );
+                  }).toList();
+
+                  showGiftBottomSheet(
+                    context,
+                    roomId: widget.roomID,
+                    participants: convertedParticipants,
+                    hostId: hostId,
+                  );
+                },
+                child: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.gift_fill,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(right: paddingRight),
               child: GestureDetector(
@@ -3108,6 +3194,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     context,
                     isHost: widget.isHost,
                     currentRoomId: widget.roomID,
+                    hostId: roomData['hostId'] ?? '',
                     hostName: roomData['hostName'] ?? 'Host',
                     pendingInvites: _pendingInvites,
                     musicManager: _musicPlayerManager,
@@ -3124,41 +3211,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     Icons.more_horiz,
                     color: Colors.white,
                     size: iconSize,
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: paddingRight),
-              child: GestureDetector(
-                onTap: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  final convertedParticipants = _participants.map((p) {
-                    return _ConvertedParticipant(
-                      userId: p.userId,
-                      userName: p.userName,
-                      userPicture: p.userPicture,
-                    );
-                  }).toList();
-
-                  showGiftBottomSheet(
-                    context,
-                    roomId: widget.roomID,
-                    participants: convertedParticipants,
-                    hostId: roomData['hostId'] ?? '',
-                  );
-                },
-                child: Container(
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.gift_fill,
-                    color: Colors.white,
-                    size: 16,
                   ),
                 ),
               ),
@@ -3354,57 +3406,21 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 ),
               ),
           ],
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              height: buttonSize,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1.0,
-                ),
-              ),
-              child: Center(
-                child: TextField(
-                  controller: _chatController,
-                  focusNode: _chatFocusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Say something...',
-                    hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 13,
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+          if (_isChatExpanded)
+            GestureDetector(
+              onTap: _sendMessage,
+              child: Container(
+                width: buttonSize,
+                height: buttonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Colors.pink.shade400, Colors.pink.shade600],
                   ),
-                  onSubmitted: (_) => _sendMessage(),
                 ),
+                child: const Icon(Icons.send, color: Colors.white, size: 16),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: _sendMessage,
-            child: Container(
-              width: buttonSize,
-              height: buttonSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Colors.pink.shade400, Colors.pink.shade600],
-                ),
-              ),
-              child: const Icon(Icons.send, color: Colors.white, size: 16),
-            ),
-          ),
         ],
       ),
     );

@@ -25,6 +25,8 @@ import '../ui/streaming/live_now_page.dart';
 import '../ui/feedback/feedback_page.dart';
 import '../ui/games/greedy_game.dart';
 import '../ui/games/spinner_game.dart';
+import '../ui/games/teen_patti/teen_patti_game.dart';
+import '../ui/games/animalGame/game_screen.dart';
 import '../ui/home/home_page.dart';
 import '../ui/host_page/host_page.dart';
 import '../ui/live_streaming/live_room_page.dart';
@@ -432,10 +434,30 @@ class MyRouter {
               ),
             ),
             GoRoute(
+              path: Routes.teenPatti.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const GameScreen(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.animalGame.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const AnimalGameScreen(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
               path: Routes.topUp.path,
               pageBuilder: (context, state) => CustomTransitionPage<void>(
                 key: state.pageKey,
-                child: TopUpPage(beansCount: 12745),
+                child: const TopUpPage(),
                 transitionsBuilder: customSlideTransition,
                 transitionDuration: const Duration(milliseconds: 250),
                 reverseTransitionDuration: const Duration(milliseconds: 200),

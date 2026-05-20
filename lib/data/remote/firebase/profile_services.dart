@@ -496,6 +496,61 @@ class ProfileService {
     }
   }
 
+  static Future<void> sendRocketGift({
+    required int totalCoins,
+    required List<String> recipientIds,
+  }) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) throw Exception("No user logged in");
+
+    // 50% vanish, 50% distribute
+    final int distributionAmount = totalCoins ~/ 2;
+    final int sharePerRecipient = recipientIds.isNotEmpty ? distributionAmount ~/ recipientIds.length : 0;
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final senderRef = _usersCollection.doc(currentUserId);
+        final senderDoc = await transaction.get(senderRef);
+
+        if (!senderDoc.exists) throw Exception("Sender profile not found");
+
+        final int currentBalance = (senderDoc.data() as Map<String, dynamic>)['balance'] ?? 0;
+
+        if (currentBalance < totalCoins) {
+          throw Exception("Insufficient balance. Need $totalCoins beans, have $currentBalance beans.");
+        }
+
+        // Deduct totalCoins from sender
+        transaction.update(senderRef, {
+          'balance': FieldValue.increment(-totalCoins),
+          'totalSent': FieldValue.increment(totalCoins),
+        });
+
+        // Add sharePerRecipient to each recipient
+        if (sharePerRecipient > 0) {
+          for (String recipientId in recipientIds) {
+            transaction.update(_usersCollection.doc(recipientId), {
+              'diamonds': FieldValue.increment(sharePerRecipient),
+              'totalReceived': FieldValue.increment(sharePerRecipient),
+            });
+
+            final giftDocRef = _giftsCollection.doc();
+            transaction.set(giftDocRef, {
+              'senderId': currentUserId,
+              'recipientId': recipientId,
+              'giftValue': sharePerRecipient,
+              'category': 'RocketShare',
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Error in sendRocketGift transaction: $e");
+      rethrow;
+    }
+  }
+
   static Future<int> getCurrentUserBalance() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return 0;
@@ -520,6 +575,15 @@ class ProfileService {
       return data['balance'] ?? 0;
     });
   }
+
+  static Future<void> topUpBalance(int amount) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) throw Exception("No user logged in");
+    await _usersCollection.doc(currentUserId).update({
+      'balance': FieldValue.increment(amount),
+    });
+  }
+
 
   static Stream<int> getUserDiamondsStream(String userId) {
     if (userId.isEmpty) return Stream.value(0);

@@ -778,6 +778,8 @@ class RoomService {
     String? category,
     String? receiverId,
     String? receiverName,
+    int? duration,
+    int? person,
   }) async {
     final user = _auth.currentUser!;
     final participantSnapshot = await _participantsRef.child('$roomId/${user.uid}').get();
@@ -800,6 +802,8 @@ class RoomService {
       'giftValue': giftValue,
       'category': category ?? 'Normal',
       'hitCount': hitCount,
+      'duration': duration,
+      'person': person,
       'timestamp': ServerValue.timestamp,
     });
   }

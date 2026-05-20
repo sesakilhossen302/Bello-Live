@@ -109,6 +109,7 @@ class _MyImageWidgetState extends State<MyImageWidget> with SingleTickerProvider
     return CachedNetworkImage(
       imageUrl: _fullImageUrl,
       fit: widget.fit,
+      memCacheWidth: widget.isFullScreenAnimation ? null : 250,
       placeholder: (context, url) =>
           widget.placeholder ??
           Center(child: CircularProgressIndicator(color: Colors.pink.withValues(alpha: 0.5), strokeWidth: 1.5)),

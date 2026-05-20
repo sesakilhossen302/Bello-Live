@@ -190,7 +190,7 @@ class BigWinnerOverlay extends StatelessWidget {
       );
     } else if (gameName == "Teen Patti") {
       return Image.asset(
-        "assets/icons/tin_patti_icon.png",
+        "assets/gameimages/card_back.png",
         width: size,
         height: size,
         fit: BoxFit.cover,
@@ -201,6 +201,16 @@ class BigWinnerOverlay extends StatelessWidget {
     } else if (gameName == "Greedy") {
       return Image.asset(
         "assets/greedy/greedy.jpeg",
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Icon(Icons.videogame_asset, color: Colors.white, size: size * 0.6);
+        },
+      );
+    } else if (gameName == "Animal Game") {
+      return Image.asset(
+        "assets/animalgame/bg.png",
         width: size,
         height: size,
         fit: BoxFit.cover,

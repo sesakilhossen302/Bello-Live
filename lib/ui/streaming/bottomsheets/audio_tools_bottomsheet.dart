@@ -9,6 +9,7 @@ import '../../../data/remote/firebase/room_services.dart';
 import '../../live_streaming/bottomsheets/share_bottomsheet.dart';
 import '../blocked_users_page.dart';
 import 'game_list_bottomsheet.dart';
+import 'rocket_config_bottomsheet.dart';
 
 class _ToolItem {
   final String label;
@@ -22,6 +23,7 @@ final List<_ToolItem> _hostTools = [
   _ToolItem(label: 'Share', icon: Icons.share, iconBgColor: Colors.blue.shade700),
   _ToolItem(label: 'Inbox', icon: CupertinoIcons.mail_solid, iconBgColor: Colors.red.shade700),
   _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, iconBgColor: Colors.blue.shade600),
+  _ToolItem(label: 'Rocket', icon: Icons.rocket_launch, iconBgColor: Colors.purple.shade600),
   _ToolItem(label: 'Room skin', icon: Icons.color_lens_outlined, iconBgColor: Colors.teal.shade600),
   _ToolItem(label: 'Notice', icon: Icons.campaign_outlined, iconBgColor: Colors.indigo.shade600),
   _ToolItem(label: 'Play music', icon: Icons.music_note_outlined, iconBgColor: Colors.pink.shade600),
@@ -33,6 +35,7 @@ final List<_ToolItem> _guestTools = [
   _ToolItem(label: 'Share', icon: Icons.share, iconBgColor: Colors.blue.shade700),
   _ToolItem(label: 'Inbox', icon: CupertinoIcons.mail_solid, iconBgColor: Colors.red.shade700),
   _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, iconBgColor: Colors.blue.shade600),
+  _ToolItem(label: 'Rocket', icon: Icons.rocket_launch, iconBgColor: Colors.purple.shade600),
   _ToolItem(label: 'Games', icon: Icons.games_outlined, iconBgColor: Colors.green.shade700),
 ];
 
@@ -40,6 +43,7 @@ class AudioToolsBottomSheet extends StatefulWidget {
   final String currentRoomId;
   final bool isHost;
   final String hostName;
+  final String hostId;
   final MusicPlayerManager musicManager;
 
   const AudioToolsBottomSheet({
@@ -47,6 +51,7 @@ class AudioToolsBottomSheet extends StatefulWidget {
     required this.currentRoomId,
     required this.isHost,
     required this.musicManager,
+    required this.hostId,
     this.hostName = "Host",
   });
 
@@ -124,6 +129,16 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
                       await ZegoExpressEngine.instance.muteSpeaker(_isSpeakerMuted);
+                    };
+                  } else if (tool.label == 'Rocket') {
+                    onTapLogic = () {
+                      Navigator.pop(context);
+                      showRocketConfigBottomSheet(
+                        context,
+                        roomId: widget.currentRoomId,
+                        hostId: widget.hostId,
+                        isAudioRoom: true,
+                      );
                     };
                   } else if (tool.label == 'Notice') {
                     onTapLogic = () {
@@ -275,6 +290,7 @@ void showAudioToolsBottomSheet(
   required String currentRoomId,
   required bool isHost,
   required MusicPlayerManager musicManager,
+  required String hostId,
   String hostName = "Host",
 }) {
   showModalBottomSheet(
@@ -286,6 +302,7 @@ void showAudioToolsBottomSheet(
         currentRoomId: currentRoomId,
         isHost: isHost,
         musicManager: musicManager,
+        hostId: hostId,
         hostName: hostName,
       );
     },

@@ -718,7 +718,16 @@ class _HomePageState extends State<HomePage>
         'image': 'assets/spinner/fruits.jpeg',
         'path': Routes.spinner.path,
       },
-      {'name': 'Tin Patti', 'image': 'assets/icons/tin_patti_icon.png'},
+      {
+        'name': 'Tin Patti',
+        'image': 'assets/gameimages/card_back.png',
+        'path': Routes.teenPatti.path,
+      },
+      {
+        'name': 'Animal Game',
+        'image': 'assets/animalgame/bg.png',
+        'path': Routes.animalGame.path,
+      },
     ];
 
     return SingleChildScrollView(

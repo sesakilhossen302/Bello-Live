@@ -9,6 +9,7 @@ import '../../navigation/routes.dart';
 import '../../navigation/my_router.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/room_services.dart';
+import 'package:zego_uikit/zego_uikit.dart';
 
 class FloatingMinimizedRoom extends StatefulWidget {
   const FloatingMinimizedRoom({super.key});
@@ -127,6 +128,13 @@ class _FloatingMinimizedRoomState extends State<FloatingMinimizedRoom>
                         } else {
                           LiveStreamService.deleteRoom(data.roomId);
                         }
+                        ZegoUIKit().leaveRoom();
+                        ZegoUIKit().logout();
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          try {
+                            ZegoUIKit().uninit();
+                          } catch (_) {}
+                        });
                         context.read<AppCubit>().closeMinimizedRoom();
                       },
                       child: Container(

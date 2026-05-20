@@ -256,6 +256,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   late Animation<Offset> _joinAnimationOffset;
 
   String? _fullScreenGiftUrl;
+  int? _fullScreenGiftDuration;
   bool _isMinimizing = false;
 
   @override
@@ -338,7 +339,11 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       }
       ZegoUIKit().leaveRoom();
       ZegoUIKit().logout();
-      ZegoUIKit().uninit();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        try {
+          ZegoUIKit().uninit();
+        } catch (_) {}
+      });
     }
     super.dispose();
   }
@@ -567,6 +572,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     bool isLuckyGift = false,
     int? hitCount,
     String? senderId,
+    int? durationSec,
   }) {
     _giftOverlayTimer?.cancel();
 
@@ -581,6 +587,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
       if (!isLuckyGift) {
         _fullScreenGiftUrl = giftAnimationUrl;
+        _fullScreenGiftDuration = durationSec;
       }
     });
 
@@ -802,6 +809,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           isLuckyGift: false,
           hitCount: hitCount,
           senderId: data['senderId'],
+          durationSec: data['duration'] as int?,
         );
       }
     });
@@ -2129,7 +2137,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     final lockedData = roomData['lockedSeats'];
     bool isLocked = false;
     if (lockedData is Map) {
-      isLocked = lockedData['seat_$seatNo'] == true ||
+      isLocked =
+          lockedData['seat_$seatNo'] == true ||
           lockedData[seatNo.toString()] == true;
     } else if (lockedData is List) {
       if (seatNo < lockedData.length) {
@@ -2138,11 +2147,13 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     }
 
     final bool canInteract = widget.isHost || (currentUserParticipant != null);
-    final bool isListener = canInteract &&
+    final bool isListener =
+        canInteract &&
         !widget.isHost &&
         currentUserParticipant?.seatNo == -1 &&
         currentUserParticipant?.isCoHost == false;
-    final bool isSpeakerOrCoHost = canInteract &&
+    final bool isSpeakerOrCoHost =
+        canInteract &&
         !widget.isHost &&
         ((currentUserParticipant?.seatNo ?? -1) > 0 ||
             (currentUserParticipant?.isCoHost ?? false));
@@ -2160,7 +2171,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               backgroundColor: const Color(0xFF2d1b2b),
               title: Text(
                 isLocked ? 'Unlock Seat $seatNo?' : 'Lock Seat $seatNo?',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               content: Text(
                 isLocked
@@ -2171,7 +2185,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white70),
+                  ),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -2187,7 +2204,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   },
                   child: Text(
                     isLocked ? 'Unlock' : 'Lock',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -2225,7 +2245,9 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Please click the "Join Call" button to request a seat.'),
+                  content: Text(
+                    'Please click the "Join Call" button to request a seat.',
+                  ),
                   backgroundColor: Colors.pink,
                 ),
               );
@@ -2506,6 +2528,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             imageUrl: _fullScreenGiftUrl!,
             fit: BoxFit.contain,
             isFullScreenAnimation: true,
+            displayDuration: Duration(seconds: _fullScreenGiftDuration ?? 10),
             onAnimationComplete: () {
               if (mounted) {
                 setState(() {
@@ -2936,7 +2959,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       currentUserParticipant = null;
     }
 
-    final bool isSpeakerOrCoHost = widget.isHost ||
+    final bool isSpeakerOrCoHost =
+        widget.isHost ||
         (currentUserParticipant != null &&
             (currentUserParticipant.seatNo > 0 ||
                 currentUserParticipant.isCoHost));
@@ -2958,43 +2982,59 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              height: buttonSize,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1.0,
+                ),
+              ),
+              child: Center(
+                child: TextField(
+                  controller: _chatController,
+                  focusNode: _chatFocusNode,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Say something...',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           if (!_isChatExpanded) ...[
             Padding(
               padding: const EdgeInsets.only(right: paddingRight),
               child: GestureDetector(
                 onTap: () {
-                  showAudioToolsBottomSheet(
-                    context,
-                    isHost: widget.isHost,
-                    musicManager: _musicPlayerManager,
-                    currentRoomId: widget.roomID,
-                  );
-                },
-                child: Container(
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
-                  ),
-                  child: const Icon(
-                    Icons.more_horiz,
-                    color: Colors.white,
-                    size: iconSize,
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: paddingRight),
-              child: GestureDetector(
-                onTap: () {
                   FocusManager.instance.primaryFocus?.unfocus();
+                  final hostId = roomData['hostId'] ?? '';
+                  final seatedParticipants = _participants.where((p) {
+                    return p.seatNo >= 0 || p.isCoHost || p.userId == hostId;
+                  }).toList();
+
                   showGiftBottomSheet(
                     context,
                     roomId: widget.roomID,
-                    participants: _participants,
-                    hostId: roomData['hostId'] ?? '',
+                    participants: seatedParticipants,
+                    hostId: hostId,
                   );
                 },
                 child: Container(
@@ -3008,6 +3048,33 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     CupertinoIcons.gift_fill,
                     color: Colors.white,
                     size: 16,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: paddingRight),
+              child: GestureDetector(
+                onTap: () {
+                  showAudioToolsBottomSheet(
+                    context,
+                    isHost: widget.isHost,
+                    musicManager: _musicPlayerManager,
+                    currentRoomId: widget.roomID,
+                    hostId: roomData['hostId'] ?? '',
+                  );
+                },
+                child: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  child: const Icon(
+                    Icons.more_horiz,
+                    color: Colors.white,
+                    size: iconSize,
                   ),
                 ),
               ),
@@ -3114,57 +3181,21 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 ),
               ),
           ],
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              height: buttonSize,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1.0,
-                ),
-              ),
-              child: Center(
-                child: TextField(
-                  controller: _chatController,
-                  focusNode: _chatFocusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Say something...',
-                    hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 13,
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+          if (_isChatExpanded)
+            GestureDetector(
+              onTap: _sendMessage,
+              child: Container(
+                width: buttonSize,
+                height: buttonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Colors.pink.shade400, Colors.pink.shade600],
                   ),
-                  onSubmitted: (_) => _sendMessage(),
                 ),
+                child: const Icon(Icons.send, color: Colors.white, size: 16),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: _sendMessage,
-            child: Container(
-              width: buttonSize,
-              height: buttonSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Colors.pink.shade400, Colors.pink.shade600],
-                ),
-              ),
-              child: const Icon(Icons.send, color: Colors.white, size: 16),
-            ),
-          ),
         ],
       ),
     );

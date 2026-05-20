@@ -26,6 +26,8 @@ enum Routes {
   liveStream,
   greedy,
   spinner,
+  teenPatti,
+  animalGame,
   editProfile,
   applyHosting,
   applyAgency,
@@ -98,6 +100,10 @@ extension RoutesExtension on Routes {
         return '/greedy';
       case Routes.spinner:
         return '/spinner';
+      case Routes.teenPatti:
+        return '/teenPatti';
+      case Routes.animalGame:
+        return '/animalGame';
       case Routes.editProfile:
         return '/editProfile';
       case Routes.applyHosting:

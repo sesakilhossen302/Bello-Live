@@ -1,6 +1,70 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_svga/flutter_svga.dart';
+
+class _SvgaTask {
+  final String url;
+  final Completer<Uint8List> completer;
+  _SvgaTask(this.url, this.completer);
+}
+
+class _SvgaLoader {
+  // Store raw binary bytes in RAM so new controller instances get fresh MovieEntity objects
+  static final Map<String, Uint8List> _byteCache = {};
+  static final Map<String, Future<Uint8List>> _inFlight = {};
+  static final List<_SvgaTask> _queue = [];
+  static int _activeWorkers = 0;
+  static const int _maxWorkers = 4; // Allow 4 concurrent workers for fast loading
+
+  static Future<Uint8List> load(String url) {
+    if (_byteCache.containsKey(url)) {
+      return Future.value(_byteCache[url]!);
+    }
+    if (_inFlight.containsKey(url)) {
+      return _inFlight[url]!;
+    }
+
+    final completer = Completer<Uint8List>();
+    _inFlight[url] = completer.future;
+
+    _queue.add(_SvgaTask(url, completer));
+    _pump();
+
+    return completer.future;
+  }
+
+  static void _pump() async {
+    if (_activeWorkers >= _maxWorkers || _queue.isEmpty) return;
+
+    _activeWorkers++;
+    final task = _queue.removeAt(0);
+
+    try {
+      Uint8List bytes;
+      if (task.url.startsWith('assets/')) {
+        final byteData = await rootBundle.load(task.url);
+        bytes = byteData.buffer.asUint8List();
+      } else {
+        // Lightning-fast Disk & RAM Caching using DefaultCacheManager
+        final file = await DefaultCacheManager().getSingleFile(task.url);
+        bytes = await file.readAsBytes();
+      }
+
+      _byteCache[task.url] = bytes;
+      task.completer.complete(bytes);
+    } catch (e) {
+      task.completer.completeError(e);
+    } finally {
+      _inFlight.remove(task.url);
+      _activeWorkers--;
+      _pump();
+    }
+  }
+}
 
 class GiftImageWidget extends StatefulWidget {
   final String imageUrl;
@@ -9,7 +73,7 @@ class GiftImageWidget extends StatefulWidget {
   final Widget? errorWidget;
   final bool isFullScreenAnimation;
   final VoidCallback? onAnimationComplete;
-  final Duration? displayDuration; // How long to show after loading
+  final Duration? displayDuration;
 
   static const String _baseUrl =
       'https://pub-a84b75c9c456460f9aadb5a9bc90b348.r2.dev/';
@@ -30,13 +94,12 @@ class GiftImageWidget extends StatefulWidget {
 }
 
 class _GiftImageWidgetState extends State<GiftImageWidget> {
-  bool _isLoaded = false;
   bool _hasStartedTimer = false;
-  Future<void>? _loadFuture;
 
   String get _fullImageUrl {
     if (widget.imageUrl.startsWith('http://') ||
-        widget.imageUrl.startsWith('https://')) {
+        widget.imageUrl.startsWith('https://') ||
+        widget.imageUrl.startsWith('assets/')) {
       return widget.imageUrl;
     }
     return '${GiftImageWidget._baseUrl}${widget.imageUrl}';
@@ -45,48 +108,41 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
   bool get _isSvgaFile => _fullImageUrl.contains("svga");
 
   @override
-  void initState() {
-    super.initState();
-    // Start loading immediately for fullscreen animations
-    if (widget.isFullScreenAnimation && _isSvgaFile) {
-      _loadFuture = _loadSvga();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     if (_isSvgaFile) {
       if (widget.isFullScreenAnimation) {
-        // For fullscreen: load first, then show
-        return FutureBuilder(
-          future: _loadFuture,
-          builder: (context, snapshot) {
-            if (!_isLoaded) {
-              // Don't show anything while loading
-              return const SizedBox.shrink();
-            }
+        if (!_hasStartedTimer && widget.onAnimationComplete != null) {
+          _hasStartedTimer = true;
+          Future.delayed(
+            widget.displayDuration ?? const Duration(seconds: 10),
+            () {
+              if (mounted && widget.onAnimationComplete != null) {
+                widget.onAnimationComplete!();
+              }
+            },
+          );
+        }
 
-            // Animation is loaded and showing - start timer ONCE
-            if (!_hasStartedTimer && widget.onAnimationComplete != null) {
-              _hasStartedTimer = true;
-              Future.delayed(
-                widget.displayDuration!,
-                widget.onAnimationComplete!,
-              );
-            }
-
-            return SVGAEasyPlayer(resUrl: _fullImageUrl, fit: widget.fit);
-          },
+        return _SvgaBufferPlayer(
+          url: _fullImageUrl,
+          fit: widget.fit,
+          isFullScreen: true,
+          playAudio: true,
         );
       } else {
-        // For regular (non-fullscreen): show immediately as STATIC (no sound)
-        return _StaticSvgaPlayer(url: _fullImageUrl, fit: widget.fit);
+        return _SvgaBufferPlayer(
+          url: _fullImageUrl,
+          fit: widget.fit,
+          isFullScreen: false,
+          playAudio: false,
+        );
       }
     }
 
     return CachedNetworkImage(
       imageUrl: _fullImageUrl,
       fit: widget.fit,
+      memCacheWidth: widget.isFullScreenAnimation ? null : 250,
       placeholder: (context, url) =>
           widget.placeholder ??
           Center(
@@ -100,40 +156,26 @@ class _GiftImageWidgetState extends State<GiftImageWidget> {
           const Icon(Icons.card_giftcard, color: Colors.white54, size: 24),
     );
   }
-
-  Future<void> _loadSvga() async {
-    if (_isLoaded) return;
-
-    // Preload the SVGA file
-    try {
-      await SVGAParser.shared.decodeFromURL(_fullImageUrl);
-      if (mounted) {
-        setState(() {
-          _isLoaded = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading SVGA: $e');
-      if (mounted) {
-        setState(() {
-          _isLoaded = true; // Show anyway to prevent infinite loading
-        });
-      }
-    }
-  }
 }
 
-class _StaticSvgaPlayer extends StatefulWidget {
+class _SvgaBufferPlayer extends StatefulWidget {
   final String url;
   final BoxFit fit;
+  final bool isFullScreen;
+  final bool playAudio;
 
-  const _StaticSvgaPlayer({required this.url, required this.fit});
+  const _SvgaBufferPlayer({
+    required this.url,
+    required this.fit,
+    this.isFullScreen = false,
+    this.playAudio = false,
+  });
 
   @override
-  State<_StaticSvgaPlayer> createState() => _StaticSvgaPlayerState();
+  State<_SvgaBufferPlayer> createState() => _SvgaBufferPlayerState();
 }
 
-class _StaticSvgaPlayerState extends State<_StaticSvgaPlayer> with SingleTickerProviderStateMixin {
+class _SvgaBufferPlayerState extends State<_SvgaBufferPlayer> with SingleTickerProviderStateMixin {
   SVGAAnimationController? _controller;
   bool _isDisposed = false;
 
@@ -146,18 +188,30 @@ class _StaticSvgaPlayerState extends State<_StaticSvgaPlayer> with SingleTickerP
 
   Future<void> _load() async {
     try {
-      final videoItem = await SVGAParser.shared.decodeFromURL(widget.url);
+      final bytes = await _SvgaLoader.load(widget.url);
       if (_isDisposed) return;
       
+      final videoItem = await SVGAParser.shared.decodeFromBuffer(bytes);
+      if (_isDisposed) return;
+
       if (mounted && _controller != null) {
+        if (!widget.playAudio) {
+          try {
+            videoItem.audios.clear(); // Safely clear all audio tracks for grid thumbnails
+          } catch (_) {}
+        }
         _controller!.videoItem = videoItem;
-        // DO NOT play the animation, just show the first frame.
-        // This ensures the audio tracks inside the SVGA do not play.
-        _controller!.value = 0.0;
         setState(() {});
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _controller != null && !_isDisposed) {
+            _controller!.reset();
+            _controller!.repeat(); // Keep the animation playing continuously
+          }
+        });
       }
     } catch (e) {
-      debugPrint("Error loading static SVGA: $e");
+      debugPrint("Error loading SVGA from buffer: $e");
     }
   }
 
@@ -171,10 +225,17 @@ class _StaticSvgaPlayerState extends State<_StaticSvgaPlayer> with SingleTickerP
   @override
   Widget build(BuildContext context) {
     if (_controller?.videoItem == null) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.pink,
-          strokeWidth: 1.5,
+      if (widget.isFullScreen) {
+        return const SizedBox.shrink();
+      }
+      return Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            color: Colors.pink.withValues(alpha: 0.5),
+            strokeWidth: 1.5,
+          ),
         ),
       );
     }

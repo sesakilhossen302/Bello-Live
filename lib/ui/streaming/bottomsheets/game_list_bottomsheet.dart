@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../navigation/routes.dart';
 import '../../games/greedy_game_bottomsheet.dart';
 import '../../games/spinner_game_bottomsheet.dart';
 
@@ -26,11 +28,18 @@ class GamesListBottomSheet extends StatelessWidget {
       },
       {
         'name': 'Tin Patti',
-        'image': 'assets/icons/tin_patti_icon.png',
+        'image': 'assets/gameimages/card_back.png',
         'onTap': () {
           Navigator.pop(context);
-          // TODO: Show tin patti game bottomsheet
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tin Patti - Coming Soon!')));
+          context.push(Routes.teenPatti.path);
+        },
+      },
+      {
+        'name': 'Animal Game',
+        'image': 'assets/animalgame/bg.png',
+        'onTap': () {
+          Navigator.pop(context);
+          context.push(Routes.animalGame.path);
         },
       },
     ];
