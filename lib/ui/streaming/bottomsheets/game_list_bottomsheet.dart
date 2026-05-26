@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../../../navigation/routes.dart';
 import '../../games/greedy_game_bottomsheet.dart';
-import '../../games/spinner_game_bottomsheet.dart';
+import '../../games/teen_patti_bottomsheet.dart';
+import '../../games/animal_game_bottomsheet.dart';
 
 class GamesListBottomSheet extends StatelessWidget {
   const GamesListBottomSheet({super.key});
@@ -19,19 +18,11 @@ class GamesListBottomSheet extends StatelessWidget {
         },
       },
       {
-        'name': 'Fruits King',
-        'image': 'assets/spinner/fruits.jpeg',
-        'onTap': () {
-          Navigator.pop(context);
-          showFruitsKingBottomSheet(context);
-        },
-      },
-      {
         'name': 'Tin Patti',
         'image': 'assets/gameimages/card_back.png',
         'onTap': () {
           Navigator.pop(context);
-          context.push(Routes.teenPatti.path);
+          showTeenPattiBottomSheet(context);
         },
       },
       {
@@ -39,7 +30,7 @@ class GamesListBottomSheet extends StatelessWidget {
         'image': 'assets/animalgame/bg.png',
         'onTap': () {
           Navigator.pop(context);
-          context.push(Routes.animalGame.path);
+          showAnimalGameBottomSheet(context);
         },
       },
     ];

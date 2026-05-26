@@ -125,7 +125,10 @@ class CoinSelector extends StatelessWidget {
           // Records Button
           GestureDetector(
             onTap: () {
-              Get.to(() => const RecordsScreen());
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RecordsScreen()),
+              );
             },
             child: Container(
               width: 35,

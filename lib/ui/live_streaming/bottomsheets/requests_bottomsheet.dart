@@ -8,8 +8,14 @@ import '../live_room_page.dart';
 class LiveStreamJoinRequestsBottomSheet extends StatefulWidget {
   final List<JoinRequest> initialJoinRequests;
   final String roomID;
+  final int currentGuestCount;
 
-  const LiveStreamJoinRequestsBottomSheet({super.key, required this.initialJoinRequests, required this.roomID});
+  const LiveStreamJoinRequestsBottomSheet({
+    super.key,
+    required this.initialJoinRequests,
+    required this.roomID,
+    required this.currentGuestCount,
+  });
 
   @override
   State<LiveStreamJoinRequestsBottomSheet> createState() => _LiveStreamJoinRequestsBottomSheetState();
@@ -17,6 +23,7 @@ class LiveStreamJoinRequestsBottomSheet extends StatefulWidget {
 
 class _LiveStreamJoinRequestsBottomSheetState extends State<LiveStreamJoinRequestsBottomSheet> {
   late List<JoinRequest> _joinRequests;
+  int _approvedCount = 0;
 
   @override
   void initState() {
@@ -75,9 +82,19 @@ class _LiveStreamJoinRequestsBottomSheetState extends State<LiveStreamJoinReques
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: () {
+              if (widget.currentGuestCount + _approvedCount >= 9) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Maximum 10 people (including host) can join the call.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
               LiveStreamService.approveJoinRequest(widget.roomID, request.requestId, request.userId);
               setState(() {
                 _joinRequests.remove(request);
+                _approvedCount++;
               });
               if (_joinRequests.isEmpty) {
                 Navigator.pop(context);
@@ -125,6 +142,7 @@ void showLiveStreamJoinRequestsBottomSheet({
   required BuildContext context,
   required List<JoinRequest> joinRequests,
   required String roomID,
+  required int currentGuestCount,
 }) {
   showModalBottomSheet(
     context: context,
@@ -133,7 +151,11 @@ void showLiveStreamJoinRequestsBottomSheet({
     builder: (context) {
       return FractionallySizedBox(
         heightFactor: 0.7,
-        child: LiveStreamJoinRequestsBottomSheet(initialJoinRequests: joinRequests, roomID: roomID),
+        child: LiveStreamJoinRequestsBottomSheet(
+          initialJoinRequests: joinRequests,
+          roomID: roomID,
+          currentGuestCount: currentGuestCount,
+        ),
       );
     },
   );

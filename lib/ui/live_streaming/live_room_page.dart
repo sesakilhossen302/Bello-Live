@@ -178,6 +178,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   List<PKInvite> _pendingInvites = [];
   int _participantCount = 0;
   bool _isInitialized = false;
+  bool _isDiamondLocked = false;
   late bool _isJoined;
   bool _roomDoesNotExist = false;
   String _currentUserName = "Me";
@@ -1674,13 +1675,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         _buildPKEmptySeats(),
         Expanded(
           flex: 2,
-          child: Column(
+          child: Stack(
             children: [
-              Expanded(flex: 1, child: _buildChatSection()),
-              SafeArea(top: false, child: _buildChatInput()),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _buildChatSection(),
+              ),
+              _buildJoinCallOverlay(),
             ],
           ),
         ),
+        SafeArea(top: false, child: _buildChatInput()),
       ],
     );
   }
@@ -1697,6 +1702,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 alignment: Alignment.bottomCenter,
                 child: _buildChatSection(),
               ),
+              _buildJoinCallOverlay(),
             ],
           ),
         ),
@@ -1951,82 +1957,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
             const SizedBox(width: 6),
 
-            // Join Request Button (Moved from bottom)
-            if (!widget.isHost && !_isJoined)
-              GestureDetector(
-                onTap: () async {
-                  final currentUserId = _auth.currentUser?.uid ?? '';
-                  final myParticipant = _participants.firstWhere(
-                    (p) => p.userId == currentUserId,
-                    orElse: () => LiveStreamParticipant(
-                      userId: '',
-                      userName: '',
-                      isOnSeat: false,
-                      isMuted: true,
-                      isCameraOn: false,
-                    ),
-                  );
-                  if (myParticipant.isLocked == true) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'You are locked and cannot change seats.',
-                          ),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                    return;
-                  }
-                  try {
-                    await LiveStreamService.requestToJoin(widget.roomID);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Request sent. Wait for host approval.',
-                          ),
-                          backgroundColor: Colors.pink,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: ${e.toString()}')),
-                      );
-                    }
-                  }
-                },
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700), // Gold color
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.person_add_alt_1_outlined,
-                    color: Color(0xFFFFD700),
-                    size: 18,
-                  ),
-                ),
-              ),
-
-            const SizedBox(width: 6),
-
             // Exit Button - FIXED AT RIGHT
             IconButton(
               icon: const Icon(
@@ -2147,6 +2077,26 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 ),
               );
             },
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isDiamondLocked = !_isDiamondLocked;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.4),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isDiamondLocked ? Icons.lock : Icons.lock_outline,
+                color: Colors.white,
+                size: 14,
+              ),
+            ),
           ),
           const Spacer(),
         ],
@@ -2579,7 +2529,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           right: 16,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: guests.map((guest) => _buildGuestAvatar(guest)).toList(),
+            children: guests.take(3).map((guest) => _buildGuestAvatar(guest)).toList(),
           ),
         ),
       ],
@@ -3308,11 +3258,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
                   onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
+                    final hostId = roomData['hostId'] ?? '';
+                    final currentGuestCount = _participants.where((p) => p.userId != hostId && p.isOnSeat).length;
                     showLiveStreamJoinRequestsBottomSheet(
                       context: context,
                       joinRequests: _joinRequests,
                       roomID: widget.roomID,
+                      currentGuestCount: currentGuestCount,
                     );
                   },
                   child: Stack(
@@ -3559,6 +3511,82 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             .toList()
             .reversed
             .toList(),
+      ),
+    );
+  }
+
+  Widget _buildJoinCallOverlay() {
+    if (widget.isHost || _isJoined) return const SizedBox.shrink();
+
+    return Positioned(
+      bottom: 8,
+      right: 16,
+      child: GestureDetector(
+        onTap: () async {
+          final currentUserId = _auth.currentUser?.uid ?? '';
+          final myParticipant = _participants.firstWhere(
+            (p) => p.userId == currentUserId,
+            orElse: () => LiveStreamParticipant(
+              userId: '',
+              userName: '',
+              isOnSeat: false,
+              isMuted: true,
+              isCameraOn: false,
+            ),
+          );
+          if (myParticipant.isLocked == true) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('You are locked and cannot change seats.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+          try {
+            await LiveStreamService.requestToJoin(widget.roomID);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Request sent. Wait for host approval.'),
+                  backgroundColor: Colors.pink,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error: ${e.toString()}')),
+              );
+            }
+          }
+        },
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.5),
+            border: Border.all(
+              color: const Color(0xFFFFD700), // Gold color
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 4,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.person_add_alt_1_outlined,
+            color: Color(0xFFFFD700),
+            size: 18,
+          ),
+        ),
       ),
     );
   }

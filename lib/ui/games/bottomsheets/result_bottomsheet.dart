@@ -54,7 +54,13 @@ class _GameResultBottomSheetState extends State<GameResultBottomSheet> {
       if (_secondsRemaining <= 1) {
         timer.cancel();
         if (mounted) {
-          Navigator.pop(context); // Auto-close the sheet
+          final route = ModalRoute.of(context);
+          if (route != null &&
+              route.isCurrent &&
+              route.animation?.status != AnimationStatus.reverse &&
+              route.animation?.status != AnimationStatus.dismissed) {
+            Navigator.pop(context); // Auto-close the sheet
+          }
         }
       } else {
         if (mounted) {

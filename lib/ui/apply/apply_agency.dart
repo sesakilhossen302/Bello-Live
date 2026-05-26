@@ -55,9 +55,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
   }
 
   Future<void> _checkApplicationStatus() async {
-    setState(() {
-      _isCheckingStatus = true;
-    });
+    setState(() => _isCheckingStatus = true);
     try {
       final statusDoc = await ProfileService.getAgencyApplicationStatus();
       if (statusDoc.exists) {
@@ -66,20 +64,12 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
           _applicationStatus = data['status'];
           _applicationData = data;
         });
-      } else {
-        final hostingStatusDoc = await ProfileService.getHostingApplicationStatus();
-        if (hostingStatusDoc.exists) {
-          setState(() {
-            _conflictingApplicationError = "You have already applied for hosting. You cannot apply for an agency.";
-          });
-        }
       }
+      // No conflict check — a user can be both Host and Agency
     } catch (e) {
-      debugPrint("Error checking status: $e");
+      debugPrint('Error checking agency status: $e');
     } finally {
-      setState(() {
-        _isCheckingStatus = false;
-      });
+      setState(() => _isCheckingStatus = false);
     }
   }
 
@@ -251,7 +241,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
                     : _conflictingApplicationError != null
                     ? _buildErrorDisplay(_conflictingApplicationError!)
                     : _applicationStatus != null
-                    ? (_applicationStatus == 'accept'
+                    ? (_applicationStatus == 'active'
                           ? _buildApprovedDisplay()
                           : _applicationStatus == 'reject'
                           ? _buildRejectedDisplay()
@@ -530,63 +520,134 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
   }
 
   Widget _buildApprovedDisplay() {
+    final String agencyName = _applicationData?['agencyName']?.toString() ?? 'N/A';
+    // agencyId may be stored as int by admin — convert to String
+    final String agencyCode = (_applicationData?['agencyId'] ?? _applicationData?['agencyCode'] ?? agencyName).toString();
+
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CupertinoIcons.check_mark_circled_solid, color: Colors.green, size: 80),
-            const SizedBox(height: 20),
-            const Text(
-              'Congratulations!',
-              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            // Green check icon
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00C9A7), Color(0xFF0097A7)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00C9A7).withValues(alpha: 0.45),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(CupertinoIcons.checkmark_alt, color: Colors.white, size: 44),
             ),
-            const SizedBox(height: 10),
-            const Text(
-              'You are now an agency',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Please visit the agency portal to manage your agency',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final Uri url = Uri.parse('https://picture-live-mother-portal.web.app');
 
-                try {
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(
-                      url,
-                      mode: LaunchMode.externalApplication, // Opens in default browser
-                    );
-                  } else {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('Could not open the agency portal')));
-                    }
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error opening portal: $e')));
-                  }
-                }
-              },
-              icon: const Icon(CupertinoIcons.arrow_right_circle_fill),
-              label: const Text('Go to Agency Portal'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pink,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            const SizedBox(height: 24),
+
+            // Headline
+            const Text(
+              'You are Agency Now',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Your application has been approved',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 32),
+
+            // Agency Code Card
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFF00C9A7).withValues(alpha: 0.5),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Agency Code',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        agencyCode,
+                        style: const TextStyle(
+                          color: Color(0xFF00C9A7),
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
+
+            const SizedBox(height: 40),
+
+            // Cancel button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _isLoading ? null : _cancelApplication,
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.red.shade400, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                child: _isLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(color: Colors.red.shade400, strokeWidth: 2),
+                      )
+                    : Text(
+                        'Cancel Agency',
+                        style: TextStyle(
+                          color: Colors.red.shade400,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+
+            const SizedBox(height: 30),
           ],
         ),
       ),

@@ -123,29 +123,57 @@ class _ProfilePageState extends State<ProfilePage> {
 
                         final now = DateTime.now();
 
-                        return FutureBuilder<int>(
-                          future: ProfileService.getMonthlyGiftsReceived(
-                            userId: uid,
-                            year: now.year,
-                            month: now.month,
-                          ),
-                          builder: (context, diamondSnapshot) {
+                        return FutureBuilder<List<dynamic>>(
+                          future: Future.wait([
+                            ProfileService.getMonthlyGiftsReceived(
+                              userId: uid,
+                              year: now.year,
+                              month: now.month,
+                            ),
+                            ProfileService.getHostingApplicationStatus(),
+                            ProfileService.getAgencyApplicationStatus(),
+                          ]),
+                          builder: (context, snapshot) {
                             final int monthlyDiamonds =
-                                diamondSnapshot.data ?? 0;
+                                (snapshot.data?[0] as int?) ?? 0;
+
+                            // Determine host/agency approval
+                            bool isHost = false;
+                            bool isAgency = false;
+                            if (snapshot.hasData) {
+                              final hostDoc = snapshot.data![1]
+                                  as dynamic; // DocumentSnapshot
+                              final agencyDoc = snapshot.data![2]
+                                  as dynamic;
+                              if (hostDoc.exists) {
+                                final d = hostDoc.data()
+                                    as Map<String, dynamic>;
+                                isHost = d['status'] == 'approved';
+                              }
+                              if (agencyDoc.exists) {
+                                final d = agencyDoc.data()
+                                    as Map<String, dynamic>;
+                                isAgency = d['status'] == 'active';
+                              }
+                            }
 
                             // Map Firestore data to our local UserProfile model
                             final userProfile = UserProfile(
-                              name: data['displayName'] ?? AppLocalizations.of(context).noName,
+                              name: data['displayName'] ??
+                                  AppLocalizations.of(context).noName,
                               id: uid,
                               displayId: data['displayId'] ?? 'N/A',
                               country: data['country'] ?? 'N/A',
                               countryFlagEmoji: data['countryFlagEmoji'],
-                              bio: data['bio'] ?? AppLocalizations.of(context).noBio,
+                              bio: data['bio'] ??
+                                  AppLocalizations.of(context).noBio,
                               profileImage: data['photoUrl'] ?? '',
                               followers: data['followerCount'] ?? 0,
                               following: data['followingCount'] ?? 0,
                               diamonds: data['diamonds'] ?? 0,
                               beans: data['balance'] ?? 0,
+                              isHost: isHost,
+                              isAgency: isAgency,
                               giftSendingLevel: getSentLevel(
                                 data['totalSent'] ?? 0,
                               ),
@@ -158,14 +186,26 @@ class _ProfilePageState extends State<ProfilePage> {
                                   _buildTopAvatar(userProfile),
                                   const SizedBox(height: 20),
                                   _buildUserInfoCard(userProfile),
+                                  // Show role badges based on Firestore status
+                                  if (userProfile.isHost || userProfile.isAgency) ...[
+                                    const SizedBox(height: 10),
+                                    _buildRoleBadges(
+                                      isHost: userProfile.isHost,
+                                      isAgency: userProfile.isAgency,
+                                    ),
+                                  ],
                                   const SizedBox(height: 10),
                                   _buildLocationSection(userProfile),
                                   const SizedBox(height: 20),
                                   FutureBuilder<int>(
-                                    future: ProfileService.getMutualsList(userProfile.id).then((l) => l.length),
+                                    future: ProfileService.getMutualsList(
+                                            userProfile.id)
+                                        .then((l) => l.length),
                                     builder: (context, mutualsSnapshot) {
-                                      final friendsCount = mutualsSnapshot.data ?? 0;
-                                      return _buildStatistics(userProfile, friendsCount);
+                                      final friendsCount =
+                                          mutualsSnapshot.data ?? 0;
+                                      return _buildStatistics(
+                                          userProfile, friendsCount);
                                     },
                                   ),
                                   const SizedBox(height: 15),
@@ -324,6 +364,59 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Shows one or two styled pills for Host / Agency roles.
+  Widget _buildRoleBadges({required bool isHost, required bool isAgency}) {
+    Widget pill({
+      required String label,
+      required Color start,
+      required Color end,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [start, end]),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: start.withValues(alpha: 0.45),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (isHost) ...[
+          pill(
+            label: 'Host',
+            start: const Color(0xFFFF6B9D),
+            end: const Color(0xFFFF3C78),
+          ),
+          if (isAgency) const SizedBox(width: 10),
+        ],
+        if (isAgency)
+          pill(
+            label: 'Agency',
+            start: const Color(0xFF00C9A7),
+            end: const Color(0xFF0097A7),
+          ),
+      ],
+    );
+  }
+
   Widget _buildLocationSection(UserProfile userProfile) {
     return Column(
       children: [
@@ -415,7 +508,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const Icon(Icons.diamond_outlined, color: Colors.white70, size: 28),
           const SizedBox(width: 12),
           Text(
-            userProfile.diamonds.toString(),
+            _formatNumber(userProfile.beans),
             style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
           ),
         ],
@@ -476,6 +569,20 @@ class _ProfilePageState extends State<ProfilePage> {
             iconColor: Colors.orangeAccent,
             title: AppLocalizations.of(context).myBag,
             onTap: () => context.push(Routes.myBag.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.mic_external_on_outlined,
+            iconColor: Colors.pinkAccent,
+            title: AppLocalizations.of(context).applyHosting,
+            onTap: () => context.push(Routes.applyHosting.path),
+          ),
+          const SizedBox(height: 12),
+          _buildMenuItem(
+            icon: Icons.business_center_outlined,
+            iconColor: Colors.tealAccent,
+            title: AppLocalizations.of(context).applyAgency,
+            onTap: () => context.push(Routes.applyAgency.path),
           ),
         ],
       ),
@@ -632,6 +739,10 @@ class UserProfile {
   final int diamonds;
   final int beans;
   final int giftSendingLevel;
+  /// True when hosting application status == 'approved'
+  final bool isHost;
+  /// True when agency application status == 'active'
+  final bool isAgency;
 
   UserProfile({
     required this.name,
@@ -646,6 +757,8 @@ class UserProfile {
     required this.diamonds,
     required this.beans,
     this.giftSendingLevel = 1,
+    this.isHost = false,
+    this.isAgency = false,
   });
 }
 

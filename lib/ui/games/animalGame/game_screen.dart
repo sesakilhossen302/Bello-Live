@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
+import '../../../navigation/routes.dart';
+import '../../../../data/remote/firebase/profile_services.dart';
+import 'package:flutter_svga/flutter_svga.dart';
 import 'game_controller.dart';
 
 class AnimalGameScreen extends StatefulWidget {
@@ -10,13 +16,13 @@ class AnimalGameScreen extends StatefulWidget {
 
 class _AnimalGameScreenState extends State<AnimalGameScreen> {
   late GameController controller;
-  bool _isBottomSheetShown = false;
+  bool _isResultShown = false;
+  DialogRoute? _resultDialogRoute;
 
   @override
   void initState() {
     super.initState();
     controller = GameController();
-    controller.startGame();
     controller.addListener(() {
       setState(() {});
     });
@@ -24,6 +30,9 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
 
   @override
   void dispose() {
+    if (_resultDialogRoute != null && _resultDialogRoute!.isActive) {
+      _resultDialogRoute!.navigator?.removeRoute(_resultDialogRoute!);
+    }
     controller.dispose();
     super.dispose();
   }
@@ -31,42 +40,53 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
   @override
   Widget build(BuildContext context) {
     if (controller.currentPhase == GamePhase.showingResult &&
-        !_isBottomSheetShown) {
-      _isBottomSheetShown = true;
+        !_isResultShown) {
+      _isResultShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showResultBottomSheet(context);
+        _showResultDialog(context);
       });
     } else if (controller.currentPhase != GamePhase.showingResult) {
-      _isBottomSheetShown = false;
+      if (_isResultShown) {
+        _isResultShown = false;
+        if (_resultDialogRoute != null && _resultDialogRoute!.isActive) {
+          _resultDialogRoute!.navigator?.removeRoute(_resultDialogRoute!);
+          _resultDialogRoute = null;
+        }
+      }
     }
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            fit: BoxFit.fill,
-            image: AssetImage("assets/animalgame/bg.png"),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                fit: BoxFit.fill,
+                image: AssetImage("assets/animalgame/bg.png"),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF0066FF), Color(0xFF0044CC)],
+              ),
+            ), 
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildUserProfileRow(),
+                  _buildTopBar(),
+                  const Spacer(),
+                  _buildAnimalGrid(),
+                  const SizedBox(height: 40),
+                  _buildAnimalsList(),
+                  const SizedBox(height: 20),
+                  _buildCoinsRow(),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
           ),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0066FF), Color(0xFF0044CC)],
-          ),
-        ), 
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              const Spacer(),
-              _buildAnimalGrid(),
-              const SizedBox(height: 40),
-              _buildAnimalsList(),
-              const SizedBox(height: 20),
-              _buildCoinsRow(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -92,18 +112,21 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1a1a2e),
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: const Text(
-              'Ranking',
-              style: TextStyle(
-                color: Colors.amber,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: () => _showRankingBottomSheet(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1a1a2e),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: const Text(
+                'Ranking',
+                style: TextStyle(
+                  color: Colors.amber,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -182,7 +205,7 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
   }
 
   Widget _buildAnimalCard(String animal, int animalIndex) {
-    final betAmount = controller.animalBets[animal] ?? 0;
+    final myBet = controller.animalBets[animal] ?? 0;
     final isHighlighted =
         (controller.currentPhase == GamePhase.round ||
             controller.currentPhase == GamePhase.result ||
@@ -222,7 +245,7 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
                 ),
               ),
             ),
-            if (betAmount > 0)
+            if (myBet > 0)
               Positioned(
                 top: 8,
                 left: 8,
@@ -238,7 +261,7 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
                     border: Border.all(color: Colors.amber, width: 2),
                   ),
                   child: Text(
-                    _formatBalance(betAmount),
+                    _formatBalance(myBet),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -366,10 +389,33 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
   }
 
   String _formatBalance(int number) {
-    if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(0)}K';
+    final isNegative = number < 0;
+    final absNumber = number.abs();
+    String formatted;
+    if (absNumber >= 1000000) {
+      double val = absNumber / 1000000;
+      String s = val.toStringAsFixed(2);
+      if (s.endsWith('.00')) {
+        formatted = '${val.toInt()}M';
+      } else if (s.endsWith('0')) {
+        formatted = '${val.toStringAsFixed(1)}M';
+      } else {
+        formatted = '${s}M';
+      }
+    } else if (absNumber >= 1000) {
+      double val = absNumber / 1000;
+      String s = val.toStringAsFixed(2);
+      if (s.endsWith('.00')) {
+        formatted = '${val.toInt()}K';
+      } else if (s.endsWith('0')) {
+        formatted = '${val.toStringAsFixed(1)}K';
+      } else {
+        formatted = '${s}K';
+      }
+    } else {
+      formatted = absNumber.toString();
     }
-    return number.toString();
+    return isNegative ? '-$formatted' : formatted;
   }
 
   int _getMultiplier(String animal) {
@@ -395,379 +441,908 @@ class _AnimalGameScreenState extends State<AnimalGameScreen> {
     }
   }
 
-  void _showResultBottomSheet(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+  void _showResultDialog(BuildContext context) {
+    if (_resultDialogRoute != null && _resultDialogRoute!.isActive) {
+      _resultDialogRoute!.navigator?.removeRoute(_resultDialogRoute!);
+    }
 
-    showModalBottomSheet(
+    _resultDialogRoute = DialogRoute(
       context: context,
-      isDismissible: true,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        width: screenWidth,
-        padding: const EdgeInsets.all(35),
-        decoration: const BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
+      barrierColor: Colors.black54,
+      barrierDismissible: true,
+      builder: (context) => AnimalGameResultDialog(controller: controller),
+    );
+
+    Navigator.of(context).push(_resultDialogRoute!);
+  }
+
+  Widget _buildUserProfileRow() {
+    final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: ProfileService.getUserProfileStream(currentUserId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox(height: 50);
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final String displayName = data['displayName'] ?? 'User';
+        final String displayId = data['displayId'] ?? 'N/A';
+        final String? photoUrl = data['photoUrl'];
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.amber.withOpacity(0.3), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              )
+            ],
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (!controller.hasParticipated) ...[
-              const Icon(Icons.info_outline, color: Colors.orange, size: 80),
-              const SizedBox(height: 25),
-              const Text(
-                'Not Participated',
-                style: TextStyle(
-                  color: Colors.orange,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+          child: Row(
+            children: [
+              // Back button to close/pop screen safely
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
-              const SizedBox(height: 15),
-              const Text(
-                'You did not bet in this round',
-                style: TextStyle(color: Colors.white70, fontSize: 18),
-              ),
-              if (controller.winningAnimal != null) ...[
-                const SizedBox(height: 25),
-                const Text(
-                  'Winning Animal:',
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-                const SizedBox(height: 15),
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.amber, width: 5),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/animalgame/${controller.winningAnimal}.png',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 25),
-            ] else if (controller.isWin) ...[
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(Icons.celebration, color: Colors.amber, size: 80),
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    child: Text('✨', style: TextStyle(fontSize: 30)),
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: Text('✨', style: TextStyle(fontSize: 30)),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    left: 20,
-                    child: Text('🎊', style: TextStyle(fontSize: 25)),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 20,
-                    child: Text('🎊', style: TextStyle(fontSize: 25)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 25),
-              const Text(
-                '🎉 Congratulations! 🎉',
-                style: TextStyle(
-                  color: Colors.amber,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 15),
-              const Text(
-                'YOU WON!',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 25),
-              if (controller.winningAnimal != null)
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.amber, width: 5),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/animalgame/${controller.winningAnimal}.png',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 25),
+              const SizedBox(width: 12),
+              // Avatar
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: Colors.green.shade900,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.green, width: 2),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.amber, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.amber.withOpacity(0.3),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    )
+                  ],
                 ),
+                child: ClipOval(
+                  child: photoUrl != null && photoUrl.isNotEmpty
+                      ? Image.network(
+                          photoUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.person, color: Colors.white70),
+                        )
+                      : const Icon(Icons.person, color: Colors.white70),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // User Info
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total Bet:',
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                        Row(
-                          children: [
-                            Image.asset(
-                              'assets/animalgame/coin.png',
-                              width: 20,
-                              height: 20,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatBalance(controller.totalBetAmount),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'You Won:',
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                        Row(
-                          children: [
-                            Image.asset(
-                              'assets/animalgame/coin.png',
-                              width: 24,
-                              height: 24,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatBalance(controller.winAmount),
-                              style: const TextStyle(
-                                color: Colors.amber,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Divider(color: Colors.white30, height: 25),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Net Gain:',
-                          style: TextStyle(
-                            color: Colors.greenAccent,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            const Text(
-                              '+',
-                              style: TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Image.asset(
-                              'assets/animalgame/coin.png',
-                              width: 22,
-                              height: 22,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatBalance(
-                                controller.winAmount -
-                                    controller.totalBetAmount,
-                              ),
-                              style: const TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    const SizedBox(height: 2),
+                    Text(
+                      'ID: $displayId',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
-            ] else ...[
-              const Icon(
-                Icons.sentiment_dissatisfied,
-                color: Colors.red,
-                size: 80,
-              ),
-              const SizedBox(height: 25),
-              const Text(
-                'Better Luck Next Time!',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(width: 12),
+              // Topup Button
+              GestureDetector(
+                onTap: () => context.push(Routes.topUp.path),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF8C00), Color(0xFFFF3C78)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF3C78).withOpacity(0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      )
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.add_circle_outline, color: Colors.white, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Top Up',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 15),
-              const Text(
-                'YOU LOST',
-                style: TextStyle(color: Colors.white70, fontSize: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLocalWinBannerOverlay() {
+    final winData = controller.activeGameWin;
+    final bool show = controller.showGameWinBanner && winData != null;
+
+    final String displayName = winData?['displayName'] ?? 'User';
+    final String? photoUrl = winData?['photoUrl'];
+    final String gameName = winData?['gameName'] ?? 'Game';
+    final int winAmount = winData?['winAmount'] ?? 0;
+    final String bannerType = winData?['bannerType'] ?? 'blue';
+
+    final String assetPath = bannerType == 'red'
+        ? 'assets/svga/gamebannerRED.svga'
+        : 'assets/svga/gamebannerBlue.svga';
+
+    String coinsText;
+    if (winAmount >= 1000000) {
+      coinsText = '${(winAmount / 1000000).toStringAsFixed(1)}M';
+      if (coinsText.endsWith('.0M')) coinsText = '${(winAmount ~/ 1000000)}M';
+    } else {
+      coinsText = '${(winAmount / 1000).toStringAsFixed(0)}K';
+    }
+
+    Widget gameIcon = Image.asset(
+      'assets/animalgame/bg.png',
+      width: 28,
+      height: 28,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const Icon(Icons.pets, color: Colors.orange, size: 28),
+    );
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutBack,
+      top: 120, // Slightly lower than bottomsheet top to fit under user profile row
+      left: show ? (MediaQuery.of(context).size.width - 320) / 2 : -340,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: show ? 1.0 : 0.0,
+        child: Container(
+          width: 320,
+          height: 90,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: SVGAEasyPlayer(
+                    assetsName: assetPath,
+                    fit: BoxFit.fill,
+                  ),
+                ),
               ),
-              const SizedBox(height: 25),
-              if (controller.winningAnimal != null)
-                Column(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                child: Row(
                   children: [
-                    const Text(
-                      'Winning Animal:',
-                      style: TextStyle(color: Colors.white70, fontSize: 16),
-                    ),
-                    const SizedBox(height: 15),
                     Container(
-                      width: 100,
-                      height: 100,
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.amber, width: 5),
+                        border: Border.all(color: Colors.white24, width: 1.5),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          )
+                        ],
                       ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/animalgame/${controller.winningAnimal}.png',
-                          fit: BoxFit.cover,
-                        ),
+                      clipBehavior: Clip.antiAlias,
+                      child: gameIcon,
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.amber, width: 1.5),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          )
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 16,
+                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: (photoUrl == null || photoUrl.isEmpty)
+                            ? const Icon(Icons.person, size: 20, color: Colors.white)
+                            : null,
                       ),
                     ),
-                  ],
-                ),
-              const SizedBox(height: 25),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade900,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.red, width: 2),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total Bet:',
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                        Row(
-                          children: [
-                            Image.asset(
-                              'assets/animalgame/coin.png',
-                              width: 20,
-                              height: 20,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              shadows: [
+                                Shadow(color: Colors.black, blurRadius: 4),
+                              ],
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatBalance(controller.totalBetAmount),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Divider(color: Colors.white30, height: 25),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Net Loss:',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          Text(
+                            'Won in $gameName',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 9,
+                              shadows: const [
+                                Shadow(color: Colors.black, blurRadius: 3),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: bannerType == 'red' ? Colors.redAccent : Colors.lightBlueAccent,
+                          width: 1,
                         ),
-                        Row(
-                          children: [
-                            const Text(
-                              '-',
-                              style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/coins/coin.png',
+                            width: 14,
+                            height: 14,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, color: Colors.amber, size: 14),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '+$coinsText',
+                            style: TextStyle(
+                              color: bannerType == 'red' ? Colors.redAccent.shade100 : Colors.lightBlueAccent.shade100,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
-                            Image.asset(
-                              'assets/animalgame/coin.png',
-                              width: 22,
-                              height: 22,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatBalance(controller.totalBetAmount),
-                              style: const TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
             ],
-          ],
+          ),
         ),
       ),
     );
+  }
 
-    Future.delayed(const Duration(milliseconds: 4800), () {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+  void _showRankingBottomSheet(BuildContext context) {
+    controller.fetchTodayRankings();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void listener() {
+              if (mounted) {
+                setModalState(() {});
+              }
+            }
+            controller.addListener(listener);
+
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Today's Ranking",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            controller.removeListener(listener);
+                            Navigator.pop(context);
+                          },
+                          child: const Icon(Icons.close, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: Colors.black12),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        if (controller.isLoadingRankings) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        final rankings = controller.todayRankings;
+                        if (rankings.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              "No game wins recorded today.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        }
+
+                        return ListView.builder(
+                          itemCount: rankings.length,
+                          itemBuilder: (context, index) {
+                            final user = rankings[index];
+                            final displayName = user['displayName'] ?? 'User';
+                            final photoUrl = user['photoUrl'] as String?;
+                            final winAmount = user['winAmount'] as int;
+
+                            Widget rankWidget;
+                            if (index == 0) {
+                              rankWidget = const Icon(Icons.emoji_events, color: Colors.amber, size: 24);
+                            } else if (index == 1) {
+                              rankWidget = const Icon(Icons.emoji_events, color: Colors.grey, size: 24);
+                            } else if (index == 2) {
+                              rankWidget = const Icon(Icons.emoji_events, color: Colors.brown, size: 24);
+                            } else {
+                              rankWidget = CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.grey.shade200,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ListTile(
+                              leading: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(width: 30, child: Center(child: rankWidget)),
+                                  const SizedBox(width: 10),
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                        ? NetworkImage(photoUrl)
+                                        : null,
+                                    child: (photoUrl == null || photoUrl.isEmpty)
+                                        ? const Icon(Icons.person, color: Colors.white)
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                              title: Text(
+                                displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    'assets/animalgame/coin.png',
+                                    width: 16,
+                                    height: 16,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.monetization_on,
+                                      color: Colors.amber,
+                                      size: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _formatBalance(winAmount),
+                                    style: const TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class AnimalGameResultDialog extends StatelessWidget {
+  final GameController controller;
+
+  const AnimalGameResultDialog({super.key, required this.controller});
+
+  String _formatBalance(int number) {
+    final isNegative = number < 0;
+    final absNumber = number.abs();
+    String formatted;
+    if (absNumber >= 1000000) {
+      double val = absNumber / 1000000;
+      String s = val.toStringAsFixed(2);
+      if (s.endsWith('.00')) {
+        formatted = '${val.toInt()}M';
+      } else if (s.endsWith('0')) {
+        formatted = '${val.toStringAsFixed(1)}M';
+      } else {
+        formatted = '${s}M';
       }
-    });
+    } else if (absNumber >= 1000) {
+      double val = absNumber / 1000;
+      String s = val.toStringAsFixed(2);
+      if (s.endsWith('.00')) {
+        formatted = '${val.toInt()}K';
+      } else if (s.endsWith('0')) {
+        formatted = '${val.toStringAsFixed(1)}K';
+      } else {
+        formatted = '${s}K';
+      }
+    } else {
+      formatted = absNumber.toString();
+    }
+    return isNegative ? '-$formatted' : formatted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.85,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.amber.withOpacity(0.8), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 20,
+              spreadRadius: 5,
+            )
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (!controller.hasParticipated) ...[
+                const Icon(Icons.info_outline, color: Colors.orange, size: 70),
+                const SizedBox(height: 16),
+                const Text(
+                  'Not Participated',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'You did not bet in this round',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                if (controller.winningAnimal != null) ...[
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Winning Animal:',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.amber, width: 4),
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/animalgame/${controller.winningAnimal}.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ],
+              ] else if (controller.isWin) ...[
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const Icon(Icons.celebration, color: Colors.amber, size: 70),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: Text('✨', style: TextStyle(fontSize: 24)),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Text('✨', style: TextStyle(fontSize: 24)),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 10,
+                      child: Text('🎊', style: TextStyle(fontSize: 20)),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 10,
+                      child: Text('🎊', style: TextStyle(fontSize: 20)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '🎉 Congratulations! 🎉',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.amber,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'YOU WON!',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (controller.winningAnimal != null)
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.amber, width: 4),
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/animalgame/${controller.winningAnimal}.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade900.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.green, width: 1.5),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total Bet:',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          Row(
+                            children: [
+                              Image.asset(
+                                'assets/animalgame/coin.png',
+                                width: 18,
+                                height: 18,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatBalance(controller.totalBetAmount),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'You Won:',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          Row(
+                            children: [
+                              Image.asset(
+                                'assets/animalgame/coin.png',
+                                width: 20,
+                                height: 20,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatBalance(controller.winAmount),
+                                style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white30, height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Net Gain:',
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Text(
+                                '+',
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Image.asset(
+                                'assets/animalgame/coin.png',
+                                width: 18,
+                                height: 18,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatBalance(
+                                  controller.winAmount -
+                                      controller.totalBetAmount,
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const Icon(
+                  Icons.sentiment_dissatisfied,
+                  color: Colors.red,
+                  size: 70,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Better Luck Next Time!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'YOU LOST',
+                  style: TextStyle(color: Colors.white70, fontSize: 20),
+                ),
+                const SizedBox(height: 16),
+                if (controller.winningAnimal != null)
+                  Column(
+                    children: [
+                      const Text(
+                        'Winning Animal:',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.amber, width: 4),
+                        ),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/animalgame/${controller.winningAnimal}.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade900.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.red, width: 1.5),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total Bet:',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          Row(
+                            children: [
+                              Image.asset(
+                                'assets/animalgame/coin.png',
+                                width: 18,
+                                height: 18,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatBalance(controller.totalBetAmount),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white30, height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Net Loss:',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Text(
+                                '-',
+                                style: TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Image.asset(
+                                'assets/animalgame/coin.png',
+                                width: 18,
+                                height: 18,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatBalance(controller.totalBetAmount),
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

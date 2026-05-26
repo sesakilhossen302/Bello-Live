@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import 'notification_service.dart';
 
@@ -165,6 +167,40 @@ class ProfileService {
     }
   }
 
+  /// Uploads an image file to Cloudinary and returns the secure URL.
+  /// Uses an explicit http.Client with close() to prevent Android connection reset errors.
+  static Future<String> _uploadToCloudinary(File imageFile) async {
+    const cloudName = 'dbnffwlpy';
+    const uploadPreset = 'mplive';
+    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+
+    // Use an explicit client so we can close it properly — this prevents
+    // "Connection reset by peer (errno=104)" on Android.
+    final client = http.Client();
+    try {
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['upload_preset'] = uploadPreset
+        ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+
+      final streamedResponse = await client.send(request);
+      final responseBody = await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode == 200) {
+        final jsonData = jsonDecode(responseBody) as Map<String, dynamic>;
+        final secureUrl = jsonData['secure_url'] as String?;
+        if (secureUrl == null || secureUrl.isEmpty) {
+          throw Exception('Cloudinary returned no URL');
+        }
+        return secureUrl;
+      } else {
+        debugPrint('Cloudinary upload failed (${streamedResponse.statusCode}): $responseBody');
+        throw Exception('Cloudinary upload failed with status ${streamedResponse.statusCode}');
+      }
+    } finally {
+      client.close(); // Always release the connection
+    }
+  }
+
   static Future<void> updateUserProfile({
     String? displayName,
     String? country,
@@ -189,7 +225,8 @@ class ProfileService {
     if (dob != null) dataToUpdate['dob'] = Timestamp.fromDate(dob);
 
     if (imageFile != null) {
-      final imageUrl = await _uploadProfileImage(currentUserId, imageFile);
+      // Upload to Cloudinary; the returned secure_url is saved as a string in Firestore
+      final imageUrl = await _uploadToCloudinary(imageFile);
       dataToUpdate['photoUrl'] = imageUrl;
     }
 
@@ -211,8 +248,13 @@ class ProfileService {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
 
-    final nidFrontUrl = await _uploadApplicationDocument(currentUserId, nidFrontFile, 'nid_front');
-    final nidBackUrl = await _uploadApplicationDocument(currentUserId, nidBackFile, 'nid_back');
+    // Upload both NID images to Cloudinary in parallel
+    final results = await Future.wait([
+      _uploadToCloudinary(nidFrontFile),
+      _uploadToCloudinary(nidBackFile),
+    ]);
+    final nidFrontUrl = results[0];
+    final nidBackUrl = results[1];
 
     final Map<String, dynamic> applicationData = {
       'userId': currentUserId,
@@ -238,6 +280,13 @@ class ProfileService {
     await _agencyApplicationsCollection.doc(currentUserId).delete();
   }
 
+  static Future<void> cancelHostingApplication() async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) throw Exception("No user logged in");
+
+    await _hostingApplicationsCollection.doc(currentUserId).delete();
+  }
+
   static Future<void> applyForHosting({
     required String idNumber,
     required String hostType,
@@ -249,7 +298,8 @@ class ProfileService {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
 
-    final selfieUrl = await _uploadApplicationDocument(currentUserId, selfieFile, 'selfie');
+    // Upload selfie to Cloudinary
+    final selfieUrl = await _uploadToCloudinary(selfieFile);
 
     final Map<String, dynamic> applicationData = {
       'userId': currentUserId,
@@ -984,6 +1034,44 @@ class ProfileService {
     } catch (e) {
       debugPrint("Error in getTopHosts: $e");
       rethrow;
+    }
+  }
+
+  static Future<void> recordGameWin({
+    required String roomId,
+    required String gameName,
+    required int winAmount,
+  }) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) {
+      debugPrint("recordGameWin failed: currentUserId is null");
+      return;
+    }
+
+    try {
+      debugPrint("recordGameWin starting for user: $currentUserId, roomId: $roomId, game: $gameName, amount: $winAmount");
+      final doc = await _usersCollection.doc(currentUserId).get();
+      if (!doc.exists) {
+        debugPrint("recordGameWin failed: User document does not exist for $currentUserId");
+        return;
+      }
+      final data = doc.data() as Map<String, dynamic>;
+      final String displayName = data['displayName'] ?? data['name'] ?? 'User';
+      final String? photoUrl = data['photoUrl'] ?? data['profilePic'];
+
+      await _firestore.collection('room_game_wins').add({
+        'roomId': roomId,
+        'userId': currentUserId,
+        'displayName': displayName,
+        'photoUrl': photoUrl,
+        'gameName': gameName,
+        'winAmount': winAmount,
+        'timestamp': FieldValue.serverTimestamp(),
+        'bannerType': winAmount >= 550000 ? 'red' : 'blue',
+      });
+      debugPrint("recordGameWin successfully written to Firestore for roomId: $roomId");
+    } catch (e) {
+      debugPrint("Error recording game win: $e");
     }
   }
 }

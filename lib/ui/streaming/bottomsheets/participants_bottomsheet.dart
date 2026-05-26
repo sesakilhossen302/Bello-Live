@@ -73,7 +73,7 @@ class ParticipantsBottomSheet extends StatelessWidget {
       role = 'Host';
     } else if (participant.isCoHost) {
       role = 'Co-host';
-    } else if (participant.seatNo > 0) {
+    } else if (participant.seatNo > 0 || participant.isApprovedSpeaker) {
       role = 'Speaker';
     }
 
@@ -175,9 +175,61 @@ class ParticipantsBottomSheet extends StatelessWidget {
                   _showBlockOptions(context, participant.userName, participant.userId);
                 } else if (value == 'lock') {
                   await RoomService.lockParticipant(roomId, participant.userId, !participant.isLocked);
+                } else if (value == 'add_to_call') {
+                  try {
+                    await RoomService.inviteOrRemoveParticipantFromCall(roomId, participant.userId, true);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${participant.userName} added to call.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                } else if (value == 'remove_from_call') {
+                  try {
+                    await RoomService.inviteOrRemoveParticipantFromCall(roomId, participant.userId, false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${participant.userName} removed from call.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
                 }
               },
               itemBuilder: (context) => [
+                if (!participant.isApprovedSpeaker && !participant.isCoHost)
+                  const PopupMenuItem(
+                    value: 'add_to_call',
+                    child: Row(
+                      children: [
+                        Icon(Icons.call, color: Colors.green, size: 20),
+                        SizedBox(width: 8),
+                        Text('Seat on Call', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                if (participant.isApprovedSpeaker && !participant.isCoHost)
+                  const PopupMenuItem(
+                    value: 'remove_from_call',
+                    child: Row(
+                      children: [
+                        Icon(Icons.call_end, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Remove from Call', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'mute',
                   child: Row(

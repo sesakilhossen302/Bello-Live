@@ -85,7 +85,9 @@ class RoomParticipant {
   final bool isCoHost;
   final bool isMuted;
   final bool isLocked;
+  final int? coHostUntil;
   final ZegoUIKitUser? zegoUser;
+  final bool isApprovedSpeaker;
 
   RoomParticipant({
     required this.userId,
@@ -95,7 +97,9 @@ class RoomParticipant {
     required this.isCoHost,
     required this.isMuted,
     this.isLocked = false,
+    this.coHostUntil,
     this.zegoUser,
+    this.isApprovedSpeaker = false,
   });
 
   factory RoomParticipant.fromRTDB(String key, Map<dynamic, dynamic> data) {
@@ -107,10 +111,16 @@ class RoomParticipant {
       isCoHost: data['isCoHost'] ?? false,
       isMuted: data['isMuted'] ?? true,
       isLocked: data['isLocked'] ?? false,
+      coHostUntil: data['coHostUntil'] as int?,
+      isApprovedSpeaker: data['isApprovedSpeaker'] ?? false,
     );
   }
 
-  RoomParticipant copyWith({ZegoUIKitUser? zegoUser}) {
+  RoomParticipant copyWith({
+    ZegoUIKitUser? zegoUser,
+    int? coHostUntil,
+    bool? isApprovedSpeaker,
+  }) {
     return RoomParticipant(
       userId: userId,
       userName: userName,
@@ -119,7 +129,9 @@ class RoomParticipant {
       isCoHost: isCoHost,
       isMuted: isMuted,
       isLocked: isLocked,
+      coHostUntil: coHostUntil ?? this.coHostUntil,
       zegoUser: zegoUser ?? this.zegoUser,
+      isApprovedSpeaker: isApprovedSpeaker ?? this.isApprovedSpeaker,
     );
   }
 }
@@ -191,6 +203,7 @@ class GiftOverlay {
 class AudioRoomPage extends StatefulWidget {
   final String roomID;
   final bool isHost;
+  static String? currentRoomId;
 
   const AudioRoomPage({super.key, required this.roomID, required this.isHost});
 
@@ -246,6 +259,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   GiftOverlay? _currentGiftOverlay;
   Timer? _giftOverlayTimer;
+  Timer? _coHostElapsedTimer;
 
   // --- Duration Timer Variables ---
   Timer? durationTimer;
@@ -262,6 +276,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   @override
   void initState() {
     super.initState();
+    AudioRoomPage.currentRoomId = widget.roomID;
 
     _joinAnimationController = AnimationController(
       duration: welcomeTime,
@@ -309,6 +324,9 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   @override
   void dispose() {
+    if (AudioRoomPage.currentRoomId == widget.roomID) {
+      AudioRoomPage.currentRoomId = null;
+    }
     _roomSubscription?.cancel();
     _messageSubscription?.cancel();
     _participantsSubscription?.cancel();
@@ -316,6 +334,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _coHostRequestsSubscription?.cancel();
     _emojiSubscription?.cancel();
     _emojiTimer?.cancel();
+    _coHostElapsedTimer?.cancel();
     _giftNotificationSubscription?.cancel();
 
     _chatFocusNode.removeListener(_updateChatExpansion);
@@ -725,13 +744,46 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               return;
             }
 
-            if (newCurrentUser.isMuted != oldCurrentUser.isMuted &&
-                newCurrentUser.userId.isNotEmpty) {
-              ZegoUIKit().turnMicrophoneOn(!newCurrentUser.isMuted);
+            if (newCurrentUser.userId.isNotEmpty) {
+              final bool canSpeak =
+                  widget.isHost ||
+                  newCurrentUser.isApprovedSpeaker ||
+                  newCurrentUser.isCoHost;
+              if (canSpeak) {
+                if (newCurrentUser.isMuted != oldCurrentUser.isMuted) {
+                  ZegoUIKit().turnMicrophoneOn(!newCurrentUser.isMuted);
+                }
+              } else {
+                ZegoUIKit().turnMicrophoneOn(false);
+              }
             }
           }
 
-          if (mounted) setState(() => _participants = updatedParticipants);
+          if (mounted) {
+            setState(() => _participants = updatedParticipants);
+            _updateCoHostElapsedTimer();
+            if (widget.isHost) {
+              final occupiedSeats = <int>{};
+              final hasHidden = updatedParticipants.any(
+                (p) => p.isApprovedSpeaker && p.seatNo == -1 && p.userId != _auth.currentUser?.uid,
+              );
+              for (var p in updatedParticipants) {
+                if (p.seatNo > 0) {
+                  occupiedSeats.add(p.seatNo);
+                }
+              }
+              bool hasEmptySeat = false;
+              for (int i = 1; i <= 8; i++) {
+                if (!occupiedSeats.contains(i)) {
+                  hasEmptySeat = true;
+                  break;
+                }
+              }
+              if (hasEmptySeat && hasHidden) {
+                RoomService.promoteHiddenSpeakers(widget.roomID);
+              }
+            }
+          }
         });
 
     _emojiSubscription = RoomService.getEmojiStream(widget.roomID).listen((
@@ -1774,6 +1826,38 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               );
             },
           ),
+          if (widget.isHost) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () async {
+                try {
+                  final newLockState = !_isSeatApprovalRequired;
+                  await RoomService.toggleSeatApprovalRequired(
+                    widget.roomID,
+                    newLockState,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error toggling room lock: $e')),
+                    );
+                  }
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _isSeatApprovalRequired ? Icons.lock : Icons.lock_open,
+                  color: _isSeatApprovalRequired ? Colors.pink : Colors.white,
+                  size: 12,
+                ),
+              ),
+            ),
+          ],
           const Spacer(),
         ],
       ),
@@ -2021,62 +2105,124 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             Positioned(
               right: MediaQuery.of(context).size.width * 0.18,
               top: 5,
-              child: GestureDetector(
-                onTap: coHost == null
-                    ? null
-                    : () {
-                        showProfileInfoBottomSheet(
-                          context,
-                          userId: coHost!.userId,
-                          hostId: roomData['hostId'],
-                          roomId: widget.roomID,
-                          isSeated: true,
-                          isCoHost: true,
-                        );
-                      },
-                child: Column(
-                  children: [
-                    coHost != null
-                        ? Transform.scale(
-                            scale: 0.8, // Slightly smaller than host
-                            child: buildStreamerSeat(
-                              imageUrl: coHost.userPicture,
-                              name: coHost.userName,
-                              isMuted: coHost.isMuted,
-                              userId: coHost.userId,
-                              isHost: false,
-                            ),
-                          )
-                        : Column(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  coHost != null
+                      ? GestureDetector(
+                          onTap: () {
+                            showProfileInfoBottomSheet(
+                              context,
+                              userId: coHost!.userId,
+                              hostId: roomData['hostId'],
+                              roomId: widget.roomID,
+                              isSeated: true,
+                              isCoHost: true,
+                            );
+                          },
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.event_seat,
-                                  color: Colors.white70,
-                                  size: 24,
+                              Transform.scale(
+                                scale: 0.8, // Slightly smaller than host
+                                child: buildStreamerSeat(
+                                  imageUrl: coHost.userPicture,
+                                  name: coHost.userName,
+                                  isMuted: coHost.isMuted,
+                                  userId: coHost.userId,
+                                  isHost: false,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                "Co-Host",
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10,
+                              if (coHost.coHostUntil != null) ...[
+                                const SizedBox(height: 2),
+                                CoHostTimer(
+                                  coHostUntil: coHost.coHostUntil!,
+                                  roomId: widget.roomID,
+                                  userId: coHost.userId,
                                 ),
-                              ),
+                              ],
                             ],
                           ),
-                  ],
-                ),
+                        )
+                      : () {
+                          final String currentUserId =
+                              _auth.currentUser?.uid ?? '';
+                          final bool isUserSeated = _participants.any(
+                            (p) =>
+                                p.userId == currentUserId &&
+                                p.seatNo >= 1 &&
+                                p.userId != roomData['hostId'],
+                          );
+                          final bool showPlusIcon = isUserSeated;
+
+                          return GestureDetector(
+                            onTap: showPlusIcon
+                                ? () => _showCoHostPurchaseDialog()
+                                : null,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.event_seat,
+                                        color: Colors.white70,
+                                        size: 24,
+                                      ),
+                                      if (showPlusIcon)
+                                        Positioned(
+                                          right: 4,
+                                          bottom: 4,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Colors.pink,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.25),
+                                                  blurRadius: 4,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ],
+                                            ),
+                                            padding: const EdgeInsets.all(1),
+                                            child: const Icon(
+                                              Icons.add,
+                                              color: Colors.white,
+                                              size: 10,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  "Co-Host",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }(),
+                ],
               ),
             ),
           ],
@@ -2123,6 +2269,185 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     );
   }
 
+  void _showSeatUserBottomSheet(int seatNo) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2d1b2b),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StreamBuilder<DatabaseEvent>(
+          stream: RoomService.getRoomParticipants(widget.roomID),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.pink),
+              );
+            }
+
+            final List<RoomParticipant> approvedUsers = [];
+            final data = snapshot.data?.snapshot.value;
+            debugPrint(
+              "DEBUG BOTTOM SHEET: snapshot active. data type: ${data.runtimeType}, data: $data",
+            );
+            if (data is Map) {
+              final participantsMap = Map<dynamic, dynamic>.from(data);
+              participantsMap.forEach((key, value) {
+                if (value is Map) {
+                  final participant = RoomParticipant.fromRTDB(
+                    key.toString(),
+                    Map<dynamic, dynamic>.from(value),
+                  );
+                  debugPrint(
+                    "DEBUG BOTTOM SHEET: User: ${participant.userName}, isApprovedSpeaker: ${participant.isApprovedSpeaker}, seatNo: ${participant.seatNo}, isCoHost: ${participant.isCoHost}",
+                  );
+                  if (participant.isApprovedSpeaker &&
+                      participant.seatNo == -1 &&
+                      !participant.isCoHost) {
+                    approvedUsers.add(participant);
+                  }
+                }
+              });
+            }
+
+            if (approvedUsers.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 40,
+                  horizontal: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.people_outline,
+                      color: Colors.white54,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No approved users',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Approve speaker requests from the bottom call icon first, then tap the empty seat to place them.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Text(
+                    'Select User for Seat $seatNo',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 1),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: approvedUsers.length,
+                    itemBuilder: (context, index) {
+                      final user = approvedUsers[index];
+                      return ListTile(
+                        leading: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundImage: user.userPicture != null
+                                    ? NetworkImage(user.userPicture!)
+                                    : null,
+                                child: user.userPicture == null
+                                    ? const Icon(Icons.person)
+                                    : null,
+                              ),
+                              Positioned(
+                                width: 52,
+                                height: 52,
+                                child: IgnorePointer(
+                                  child: ActiveFrameWidget(
+                                    userId: user.userId,
+                                    size: 52,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        title: Text(
+                          user.userName,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.pink,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () async {
+                            try {
+                              await RoomService.seatApprovedParticipant(
+                                widget.roomID,
+                                user.userId,
+                                seatNo,
+                              );
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error: $e')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text(
+                            'Seat',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildEmptySeat(int seatNo) {
     final currentUser = _auth.currentUser!;
     RoomParticipant? currentUserParticipant;
@@ -2158,61 +2483,16 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         ((currentUserParticipant?.seatNo ?? -1) > 0 ||
             (currentUserParticipant?.isCoHost ?? false));
 
-    IconData icon = isLocked ? Icons.lock : Icons.event_seat;
-    Color iconColor = isLocked ? Colors.redAccent : Colors.pink;
+    final bool isUserApproved = widget.isHost || (currentUserParticipant?.isApprovedSpeaker == true);
+    final bool isVisualLocked = isLocked || (_isSeatApprovalRequired && !isUserApproved);
+    IconData icon = isVisualLocked ? Icons.lock : Icons.event_seat;
+    Color iconColor = isVisualLocked ? Colors.redAccent : Colors.pink;
 
     return GestureDetector(
       onTap: () async {
         if (!canInteract) return;
         if (widget.isHost) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF2d1b2b),
-              title: Text(
-                isLocked ? 'Unlock Seat $seatNo?' : 'Lock Seat $seatNo?',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: Text(
-                isLocked
-                    ? 'Allow participants to sit on seat $seatNo.'
-                    : 'Prevent participants from sitting on seat $seatNo.',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isLocked ? Colors.green : Colors.red,
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    if (isLocked) {
-                      await RoomService.unlockSeat(widget.roomID, seatNo);
-                    } else {
-                      await RoomService.lockSeat(widget.roomID, seatNo);
-                    }
-                  },
-                  child: Text(
-                    isLocked ? 'Unlock' : 'Lock',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
+          _showSeatUserBottomSheet(seatNo);
           return;
         }
 
@@ -2242,15 +2522,33 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
         try {
           if (isListener) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Please click the "Join Call" button to request a seat.',
-                  ),
-                  backgroundColor: Colors.pink,
-                ),
-              );
+            if (currentUserParticipant == null || !currentUserParticipant.isApprovedSpeaker) {
+              if (_isSeatApprovalRequired) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Please click the "Join Call" button to join the call first.',
+                      ),
+                      backgroundColor: Colors.pink,
+                    ),
+                  );
+                }
+              } else {
+                await RoomService.joinCallImmediately(widget.roomID);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Joined the call. Tap the seat again to sit.',
+                      ),
+                      backgroundColor: Colors.pink,
+                    ),
+                  );
+                }
+              }
+            } else {
+              await RoomService.takeSeat(widget.roomID, seatNo);
             }
           } else if (isSpeakerOrCoHost) {
             if (_isMoveAllowed) {
@@ -2297,7 +2595,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               alignment: Alignment.center,
               children: [
                 Icon(icon, color: iconColor, size: 28),
-                if (!isLocked)
+                if (!isVisualLocked)
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -2711,24 +3009,40 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             (currentUserParticipant.seatNo == -1 &&
                 !currentUserParticipant.isCoHost));
 
+    final bool showJoinCall = isListener && _isSeatApprovalRequired && (currentUserParticipant == null || !currentUserParticipant.isApprovedSpeaker);
+
     return Visibility(
-      visible: isListener,
+      visible: showJoinCall,
       child: Positioned(
         bottom: 8,
         right: 24,
         child: GestureDetector(
           onTap: () async {
             try {
-              await RoomService.requestToBeSpeaker(widget.roomID);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Request sent. Please wait for host approval.',
+              if (_isSeatApprovalRequired) {
+                await RoomService.requestToBeSpeaker(widget.roomID);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Request sent. Please wait for host approval.',
+                      ),
+                      backgroundColor: Colors.pink,
                     ),
-                    backgroundColor: Colors.pink,
-                  ),
-                );
+                  );
+                }
+              } else {
+                await RoomService.joinCallImmediately(widget.roomID);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'You joined the call. Tap any empty seat to sit.',
+                      ),
+                      backgroundColor: Colors.pink,
+                    ),
+                  );
+                }
               }
             } catch (e) {
               debugPrint("Error requesting to be speaker: $e");
@@ -3026,14 +3340,33 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 onTap: () {
                   FocusManager.instance.primaryFocus?.unfocus();
                   final hostId = roomData['hostId'] ?? '';
-                  final seatedParticipants = _participants.where((p) {
-                    return p.seatNo >= 0 || p.isCoHost || p.userId == hostId;
-                  }).toList();
+                  final hostName = roomData['hostName'] ?? 'Host';
+                  final hostPicture = roomData['hostPicture'];
+
+                  final List<RoomParticipant> giftParticipants = List.from(
+                    _participants,
+                  );
+                  final bool hasHost = giftParticipants.any(
+                    (p) => p.userId == hostId,
+                  );
+                  if (!hasHost && hostId.isNotEmpty) {
+                    giftParticipants.insert(
+                      0,
+                      RoomParticipant(
+                        userId: hostId,
+                        userName: hostName,
+                        userPicture: hostPicture,
+                        seatNo: 0,
+                        isCoHost: false,
+                        isMuted: false,
+                      ),
+                    );
+                  }
 
                   showGiftBottomSheet(
                     context,
                     roomId: widget.roomID,
-                    participants: seatedParticipants,
+                    participants: giftParticipants,
                     hostId: hostId,
                   );
                 },
@@ -3128,7 +3461,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   ),
                 ),
               ),
-            if (widget.isHost)
+            if (widget.isHost && _isSeatApprovalRequired)
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
@@ -3338,6 +3671,462 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           ),
         ],
       ),
+    );
+  }
+
+  void _showCoHostPurchaseDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return _CoHostPurchaseDialogContent(
+          roomId: widget.roomID,
+          hostId: roomData['hostId'] ?? '',
+        );
+      },
+    );
+  }
+
+  void _updateCoHostElapsedTimer() {
+    if (!_isInitialized) return;
+    final currentUserId = _auth.currentUser?.uid;
+    final bool isUserCoHost = _participants.any(
+      (p) => p.userId == currentUserId && p.isCoHost == true,
+    );
+
+    if (isUserCoHost) {
+      if (_coHostElapsedTimer == null) {
+        _coHostElapsedTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+          final hostId = roomData['hostId'] ?? '';
+          if (hostId.isNotEmpty && currentUserId != null) {
+            await RoomService.updateCoHostElapsedTime(widget.roomID, hostId, currentUserId, 30 * 1000);
+          }
+        });
+      }
+    } else {
+      _coHostElapsedTimer?.cancel();
+      _coHostElapsedTimer = null;
+    }
+  }
+}
+
+class CoHostOption {
+  final String title;
+  final int coins;
+  final Duration duration;
+
+  const CoHostOption({
+    required this.title,
+    required this.coins,
+    required this.duration,
+  });
+}
+
+class CoHostTimer extends StatefulWidget {
+  final int coHostUntil;
+  final String roomId;
+  final String userId;
+
+  const CoHostTimer({
+    super.key,
+    required this.coHostUntil,
+    required this.roomId,
+    required this.userId,
+  });
+
+  @override
+  State<CoHostTimer> createState() => _CoHostTimerState();
+}
+
+class _CoHostTimerState extends State<CoHostTimer> {
+  Timer? _timer;
+  late Duration _remaining;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculateRemaining();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(CoHostTimer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.coHostUntil != widget.coHostUntil) {
+      _timer?.cancel();
+      _calculateRemaining();
+      _startTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _calculateRemaining() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final diff = widget.coHostUntil - now;
+    if (diff <= 0) {
+      _remaining = Duration.zero;
+      _onExpired();
+    } else {
+      _remaining = Duration(milliseconds: diff);
+    }
+  }
+
+  void _onExpired() {
+    _timer?.cancel();
+    RoomService.removeCoHost(widget.roomId, widget.userId).catchError((e) {
+      debugPrint("Error removing expired co-host: $e");
+    });
+  }
+
+  void _startTimer() {
+    if (_remaining == Duration.zero) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _calculateRemaining();
+      });
+    });
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inHours >= 1) {
+      final hours = duration.inHours.toString().padLeft(2, '0');
+      final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+      final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+      return '$hours:$minutes:$seconds';
+    } else {
+      final minutes = duration.inMinutes.toString().padLeft(2, '0');
+      final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+      return '$minutes:$seconds';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        _formatDuration(_remaining),
+        style: const TextStyle(
+          color: Colors.cyanAccent,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+class _CoHostPurchaseDialogContent extends StatefulWidget {
+  final String roomId;
+  final String hostId;
+
+  const _CoHostPurchaseDialogContent({
+    required this.roomId,
+    required this.hostId,
+  });
+
+  @override
+  State<_CoHostPurchaseDialogContent> createState() =>
+      __CoHostPurchaseDialogContentState();
+}
+
+class __CoHostPurchaseDialogContentState
+    extends State<_CoHostPurchaseDialogContent> {
+  int _selectedIndex = 0;
+  bool _isLoading = false;
+
+  final List<CoHostOption> _options = const [
+    CoHostOption(title: '2 Hours', coins: 20000, duration: Duration(hours: 2)),
+    CoHostOption(title: '3 Hours', coins: 50000, duration: Duration(hours: 3)),
+    CoHostOption(title: '6 Hours', coins: 100000, duration: Duration(hours: 6)),
+    CoHostOption(
+      title: '12 Hours',
+      coins: 400000,
+      duration: Duration(hours: 12),
+    ),
+    CoHostOption(
+      title: '1 Month',
+      coins: 1000000,
+      duration: Duration(days: 30),
+    ),
+  ];
+
+  String _formatCoins(int count) {
+    if (count == 20000) return '20,000';
+    if (count == 50000) return '50,000';
+    if (count == 100000) return '1,00,000';
+    if (count == 400000) return '4,00,000';
+    if (count == 1000000) return '10,00,000';
+    return count.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedOption = _options[_selectedIndex];
+
+    return StreamBuilder<int>(
+      stream: ProfileService.getCurrentUserBalanceStream(),
+      builder: (context, snapshot) {
+        final balance = snapshot.data ?? 0;
+        final hasEnough = balance >= selectedOption.coins;
+
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2d1b2b),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+              color: Colors.pink.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.event_seat, color: Colors.pink, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Become Co-Host',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Your Balance:',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.diamond,
+                            color: Colors.cyanAccent,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            balance.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Select a duration (Transfer to Host):',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _options.length,
+                  itemBuilder: (ctx, index) {
+                    final option = _options[index];
+                    final isSelected = _selectedIndex == index;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedIndex = index;
+                        });
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.pink.withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.pink
+                                : Colors.white.withValues(alpha: 0.1),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              option.title,
+                              style: TextStyle(
+                                color: isSelected ? Colors.pink : Colors.white,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.diamond,
+                                  color: Colors.cyan,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatCoins(option.coins),
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.pink
+                                        : Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (_isLoading || !hasEnough)
+                        ? null
+                        : () async {
+                            setState(() {
+                              _isLoading = true;
+                            });
+                            try {
+                              await RoomService.purchaseCoHostSeat(
+                                roomId: widget.roomId,
+                                hostId: widget.hostId,
+                                coinPrice: selectedOption.coins,
+                                duration: selectedOption.duration,
+                              );
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Successfully joined as Co-Host for ${selectedOption.title}!',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                setState(() {
+                                  _isLoading = false;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Purchase failed: ${e.toString().replaceAll('Exception: ', '')}',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.pink,
+                      disabledBackgroundColor: Colors.grey.shade800,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            hasEnough ? 'Purchase' : 'Low Balance',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }

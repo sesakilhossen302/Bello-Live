@@ -714,11 +714,6 @@ class _HomePageState extends State<HomePage>
         'path': Routes.greedy.path,
       },
       {
-        'name': 'Fruits King',
-        'image': 'assets/spinner/fruits.jpeg',
-        'path': Routes.spinner.path,
-      },
-      {
         'name': 'Tin Patti',
         'image': 'assets/gameimages/card_back.png',
         'path': Routes.teenPatti.path,

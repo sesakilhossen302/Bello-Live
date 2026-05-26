@@ -706,7 +706,7 @@ class _FruitsKingBottomSheetState extends State<FruitsKingBottomSheet> {
 
     return SafeArea(
       child: Container(
-        height: MediaQuery.of(context).size.height * .7,
+        height: MediaQuery.of(context).size.height * .5,
         decoration: BoxDecoration(
           image: DecorationImage(
             image: AssetImage(

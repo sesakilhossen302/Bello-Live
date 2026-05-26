@@ -24,6 +24,17 @@ class _TopUpPageState extends State<TopUpPage>
   final String defaultMessage =
       "Hello, I want to purchase Coins for my MP Live account.";
 
+  String _formatCoins(int number) {
+    if (number >= 1000000) {
+      final millions = number / 1000000;
+      return '${millions.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+    } else if (number >= 1000) {
+      final thousands = number / 1000;
+      return '${thousands.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+    }
+    return number.toString();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -218,33 +229,38 @@ class _TopUpPageState extends State<TopUpPage>
                                   ),
                                 ),
                                 const SizedBox(width: 14),
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 300),
-                                  transitionBuilder:
-                                      (
-                                        Widget child,
-                                        Animation<double> animation,
-                                      ) {
-                                        return ScaleTransition(
-                                          scale: animation,
-                                          child: child,
-                                        );
-                                      },
-                                  child: Text(
-                                    coinsCount.toString(),
-                                    key: ValueKey<int>(coinsCount),
-                                    style: const TextStyle(
-                                      color: Colors.amber,
-                                      fontSize: 56,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 1.0,
-                                      shadows: [
-                                        Shadow(
+                                Flexible(
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 300),
+                                    transitionBuilder:
+                                        (
+                                          Widget child,
+                                          Animation<double> animation,
+                                        ) {
+                                          return ScaleTransition(
+                                            scale: animation,
+                                            child: child,
+                                          );
+                                        },
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _formatCoins(coinsCount),
+                                        key: ValueKey<String>(_formatCoins(coinsCount)),
+                                        style: const TextStyle(
                                           color: Colors.amber,
-                                          blurRadius: 15,
-                                          offset: Offset(0, 0),
+                                          fontSize: 56,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 1.0,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.amber,
+                                              blurRadius: 15,
+                                              offset: Offset(0, 0),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),

@@ -722,7 +722,7 @@ class _GreedyGameBottomSheetState extends State<GreedyGameBottomSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.7,
+        height: MediaQuery.of(context).size.height * 0.5,
         decoration: BoxDecoration(
           // image: DecorationImage(image: const AssetImage("assets/greedy/greedy_bg.webp"), fit: BoxFit.cover),
           gradient: AppColors.backgroundGradient,

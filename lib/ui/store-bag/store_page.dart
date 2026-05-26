@@ -23,7 +23,7 @@ class _StorePageState extends State<StorePage> {
   Map<String, List<StoreItemModel>> _storeItems = {};
   List<String> _categories = [];
   bool _isLoading = true;
-  int _userBalance = 0;
+  int _userDiamonds = 0;
   String? _userPhotoUrl;
 
   @override
@@ -35,13 +35,14 @@ class _StorePageState extends State<StorePage> {
   Future<void> _loadData() async {
     try {
       final items = await StoreService.fetchStoreItems();
-      final balance = await ProfileService.getCurrentUserBalance();
 
       String? photoUrl;
+      int balance = 0;
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
         final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         photoUrl = doc.data()?['photoUrl'] as String?;
+        balance = doc.data()?['balance'] ?? 0;
       }
 
       final categories = items.keys.toList()..sort();
@@ -49,7 +50,7 @@ class _StorePageState extends State<StorePage> {
       setState(() {
         _storeItems = items;
         _categories = categories;
-        _userBalance = balance;
+        _userDiamonds = balance;
         _userPhotoUrl = photoUrl;
         _isLoading = false;
       });
@@ -137,13 +138,13 @@ class _StorePageState extends State<StorePage> {
                       height: 20,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: LinearGradient(colors: [Colors.amber.shade300, Colors.amber.shade600]),
+                        gradient: LinearGradient(colors: [Colors.cyan.shade300, Colors.blue.shade600]),
                       ),
-                      child: const Icon(Icons.monetization_on, color: Colors.white, size: 14),
+                      child: const Icon(Icons.diamond, color: Colors.white, size: 14),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$_userBalance',
+                      '$_userDiamonds',
                       style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -351,7 +352,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
 
             const SizedBox(height: 20),
             Text(
-              'Buy ${widget.item.name} for ${widget.item.price} beans/month?',
+              'Buy ${widget.item.name} for ${widget.item.price} diamonds/month?',
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
@@ -467,14 +468,14 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
                                   height: 16,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    gradient: LinearGradient(colors: [Colors.amber.shade300, Colors.amber.shade600]),
+                                    gradient: LinearGradient(colors: [Colors.cyan.shade300, Colors.blue.shade600]),
                                   ),
-                                  child: const Icon(Icons.monetization_on, color: Colors.white, size: 12),
+                                  child: const Icon(Icons.diamond, color: Colors.white, size: 12),
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    '${widget.item.price} beans/mo',
+                                    '${widget.item.price} diamonds/mo',
                                     style: TextStyle(
                                       color: Colors.pink.shade300,
                                       fontSize: 12,

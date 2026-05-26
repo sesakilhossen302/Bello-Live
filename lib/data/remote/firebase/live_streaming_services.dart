@@ -17,10 +17,14 @@ class LiveStreamService {
   // FLATTENED DATABASE REFERENCES (COST SAVERS)
   // ============================================================================
   static final DatabaseReference _roomsRef = _database.ref('live_streams');
-  static final DatabaseReference _participantsRef = _database.ref('live_participants');
+  static final DatabaseReference _participantsRef = _database.ref(
+    'live_participants',
+  );
   static final DatabaseReference _eventsRef = _database.ref('live_events');
   static final DatabaseReference _requestsRef = _database.ref('live_requests');
-  static final DatabaseReference _globalRandomPKRef = _database.ref('globalRandomLivePKInvites');
+  static final DatabaseReference _globalRandomPKRef = _database.ref(
+    'globalRandomLivePKInvites',
+  );
 
   static final Map<String, StreamSubscription> _participantCountListeners = {};
   static final Map<String, Timer?> _heartbeatTimers = {};
@@ -33,7 +37,10 @@ class LiveStreamService {
     final user = _auth.currentUser!;
 
     // Clean up existing room if host already has one
-    final existingRoomSnapshot = await _roomsRef.orderByChild('hostId').equalTo(user.uid).once();
+    final existingRoomSnapshot = await _roomsRef
+        .orderByChild('hostId')
+        .equalTo(user.uid)
+        .once();
     if (existingRoomSnapshot.snapshot.exists) {
       for (final child in existingRoomSnapshot.snapshot.children) {
         final oldRoomId = child.key;
@@ -50,7 +57,8 @@ class LiveStreamService {
     final roomId = roomRef.key!;
 
     final userDoc = await _usersCollection.doc(user.uid).get();
-    if (!userDoc.exists) throw Exception("User profile not found. Cannot create room.");
+    if (!userDoc.exists)
+      throw Exception("User profile not found. Cannot create room.");
 
     final userData = userDoc.data() as Map<String, dynamic>;
     final String hostName = userData['displayName'] ?? 'Anonymous';
@@ -96,11 +104,14 @@ class LiveStreamService {
     return roomId;
   }
 
-  static Stream<DatabaseEvent> getAllRooms() => _roomsRef.orderByChild('isActive').equalTo(true).onValue;
+  static Stream<DatabaseEvent> getAllRooms() =>
+      _roomsRef.orderByChild('isActive').equalTo(true).onValue;
 
-  static Future<DataSnapshot> getRoomInfo(String roomId) => _roomsRef.child(roomId).get();
+  static Future<DataSnapshot> getRoomInfo(String roomId) =>
+      _roomsRef.child(roomId).get();
 
-  static Stream<DatabaseEvent> getRoomStream(String roomId) => _roomsRef.child(roomId).onValue;
+  static Stream<DatabaseEvent> getRoomStream(String roomId) =>
+      _roomsRef.child(roomId).onValue;
 
   static Future<void> deleteRoom(String roomId) async {
     try {
@@ -154,7 +165,10 @@ class LiveStreamService {
       final sessionDate = DateTime.fromMillisecondsSinceEpoch(startTimestamp);
       final dateKey =
           '${sessionDate.year}-${sessionDate.month.toString().padLeft(2, '0')}-${sessionDate.day.toString().padLeft(2, '0')}';
-      final historyRef = _usersCollection.doc(hostId).collection('liveHistory').doc(dateKey);
+      final historyRef = _usersCollection
+          .doc(hostId)
+          .collection('liveHistory')
+          .doc(dateKey);
       final docSnapshot = await historyRef.get();
 
       if (docSnapshot.exists) {
@@ -234,9 +248,10 @@ class LiveStreamService {
       final userData = userDoc.data() as Map<String, dynamic>;
       userName = userData['displayName'] ?? userName;
       displayId = userData['displayId'] ?? '';
-      userPicture = userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
+      userPicture =
+          userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
       final gender = userData['gender'];
-      
+
       final participantSnapshot = await participantRef.get();
       if (!participantSnapshot.exists) {
         await participantRef.set({
@@ -276,24 +291,35 @@ class LiveStreamService {
 
   static void _setupParticipantCountSync(String roomId) {
     _participantCountListeners[roomId]?.cancel();
-    _participantCountListeners[roomId] = _participantsRef.child(roomId).onValue.listen((event) async {
-      if (!event.snapshot.exists) {
-        await _roomsRef.child('$roomId/participantCount').set(0);
-        return;
-      }
-      final participants = event.snapshot.value;
-      if (participants is Map) {
-        final actualCount = participants.length;
-        final countSnapshot = await _roomsRef.child('$roomId/participantCount').get();
-        final currentCount = (countSnapshot.value as int?) ?? 0;
-        if (currentCount != actualCount) {
-          await _roomsRef.child('$roomId/participantCount').set(actualCount);
-        }
-      }
-    });
+    _participantCountListeners[roomId] = _participantsRef
+        .child(roomId)
+        .onValue
+        .listen((event) async {
+          if (!event.snapshot.exists) {
+            await _roomsRef.child('$roomId/participantCount').set(0);
+            return;
+          }
+          final participants = event.snapshot.value;
+          if (participants is Map) {
+            final actualCount = participants.length;
+            final countSnapshot = await _roomsRef
+                .child('$roomId/participantCount')
+                .get();
+            final currentCount = (countSnapshot.value as int?) ?? 0;
+            if (currentCount != actualCount) {
+              await _roomsRef
+                  .child('$roomId/participantCount')
+                  .set(actualCount);
+            }
+          }
+        });
   }
 
-  static Future<void> _setupPresence(String roomId, String userId, {required bool isHost}) async {
+  static Future<void> _setupPresence(
+    String roomId,
+    String userId, {
+    required bool isHost,
+  }) async {
     final roomRef = _roomsRef.child(roomId);
     final participantRef = _participantsRef.child('$roomId/$userId');
 
@@ -316,7 +342,9 @@ class LiveStreamService {
 
   static void _startForegroundHeartbeat(String roomId) {
     _heartbeatTimers[roomId]?.cancel();
-    _heartbeatTimers[roomId] = Timer.periodic(const Duration(minutes: 1), (timer) async {
+    _heartbeatTimers[roomId] = Timer.periodic(const Duration(minutes: 1), (
+      timer,
+    ) async {
       try {
         await _roomsRef.child('$roomId/lastActive').set(ServerValue.timestamp);
       } catch (e) {
@@ -341,7 +369,11 @@ class LiveStreamService {
     }
   }
 
-  static Future<void> resumePresence(String roomId, String userId, {required bool isHost}) async {
+  static Future<void> resumePresence(
+    String roomId,
+    String userId, {
+    required bool isHost,
+  }) async {
     try {
       final roomRef = _roomsRef.child(roomId);
       final participantRef = _participantsRef.child('$roomId/$userId');
@@ -368,7 +400,10 @@ class LiveStreamService {
     }
   }
 
-  static Future<void> demoteAllParticipantsToViewers(String roomId, String hostId) async {
+  static Future<void> demoteAllParticipantsToViewers(
+    String roomId,
+    String hostId,
+  ) async {
     final pRef = _participantsRef.child(roomId);
     try {
       final snapshot = await pRef.get();
@@ -377,7 +412,11 @@ class LiveStreamService {
 
       for (final entry in participants.entries) {
         if (entry.key != hostId) {
-          await pRef.child(entry.key).update({'isMuted': false, 'isCameraOn': false, 'isOnSeat': false});
+          await pRef.child(entry.key).update({
+            'isMuted': false,
+            'isCameraOn': false,
+            'isOnSeat': false,
+          });
         }
       }
     } catch (e) {
@@ -396,15 +435,29 @@ class LiveStreamService {
 
   static Future<void> toggleMuteState(String roomId, bool newMuteState) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'isMuted': newMuteState});
+    await _participantsRef.child('$roomId/${user.uid}').update({
+      'isMuted': newMuteState,
+    });
   }
 
-  static Future<void> muteParticipant(String roomId, String userId, bool isMuted) async {
-    await _participantsRef.child('$roomId/$userId').update({'isMuted': isMuted});
+  static Future<void> muteParticipant(
+    String roomId,
+    String userId,
+    bool isMuted,
+  ) async {
+    await _participantsRef.child('$roomId/$userId').update({
+      'isMuted': isMuted,
+    });
   }
 
-  static Future<void> lockParticipant(String roomId, String userId, bool isLocked) async {
-    await _participantsRef.child('$roomId/$userId').update({'isLocked': isLocked});
+  static Future<void> lockParticipant(
+    String roomId,
+    String userId,
+    bool isLocked,
+  ) async {
+    await _participantsRef.child('$roomId/$userId').update({
+      'isLocked': isLocked,
+    });
   }
 
   static Future<void> kickParticipant(String roomId, String userId) async {
@@ -412,7 +465,11 @@ class LiveStreamService {
     await _requestsRef.child('$roomId/join_requests/$userId').remove();
   }
 
-  static Future<void> blockParticipant(String roomId, String userId, {Duration? duration}) async {
+  static Future<void> blockParticipant(
+    String roomId,
+    String userId, {
+    Duration? duration,
+  }) async {
     await kickParticipant(roomId, userId);
     final expiry = duration != null
         ? DateTime.now().add(duration).millisecondsSinceEpoch
@@ -430,7 +487,9 @@ class LiveStreamService {
 
   static Future<void> toggleCameraState(String roomId, bool isCameraOn) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'isCameraOn': isCameraOn});
+    await _participantsRef.child('$roomId/${user.uid}').update({
+      'isCameraOn': isCameraOn,
+    });
   }
 
   // ============================================================================
@@ -449,7 +508,8 @@ class LiveStreamService {
       final userData = userDoc.data() as Map<String, dynamic>;
       userName = userData['displayName'] ?? userName;
       displayId = userData['displayId'] ?? '';
-      userPicture = userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
+      userPicture =
+          userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
 
       await _requestsRef.child('$roomId/join_requests/${user.uid}').set({
         'userId': user.uid,
@@ -471,23 +531,36 @@ class LiveStreamService {
   }
 
   static Stream<DatabaseEvent> getJoinRequestsStream(String roomId) {
-    return _requestsRef.child('$roomId/join_requests').orderByChild('requestedAt').onValue;
+    return _requestsRef
+        .child('$roomId/join_requests')
+        .orderByChild('requestedAt')
+        .onValue;
   }
 
-  static Future<void> approveJoinRequest(String roomId, String requestId, String userId) async {
+  static Future<void> approveJoinRequest(
+    String roomId,
+    String requestId,
+    String userId,
+  ) async {
     final requestRef = _requestsRef.child('$roomId/join_requests/$requestId');
 
     final participantsSnapshot = await _participantsRef.child(roomId).get();
     int seatedCount = 0;
     if (participantsSnapshot.exists) {
       final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
-      seatedCount = participants.values.where((p) => p is Map && p['isOnSeat'] == true).length;
+      seatedCount = participants.values
+          .where((p) => p is Map && p['isOnSeat'] == true)
+          .length;
     }
 
     if (seatedCount >= 4) throw Exception("The call seats are full.");
 
     final participantRef = _participantsRef.child('$roomId/$userId');
-    await participantRef.update({'isOnSeat': true, 'isMuted': false, 'isCameraOn': true});
+    await participantRef.update({
+      'isOnSeat': true,
+      'isMuted': false,
+      'isCameraOn': true,
+    });
     await requestRef.remove();
   }
 
@@ -499,14 +572,22 @@ class LiveStreamService {
   // FAST EVENTS (EMOJIS & GIFTS)
   // ============================================================================
 
-  static Future<void> sendEmoji(String roomId, String emojiUrl, String emojiName) async {
+  static Future<void> sendEmoji(
+    String roomId,
+    String emojiUrl,
+    String emojiName,
+  ) async {
     final user = _auth.currentUser!;
-    final participantSnapshot = await _participantsRef.child('$roomId/${user.uid}').get();
+    final participantSnapshot = await _participantsRef
+        .child('$roomId/${user.uid}')
+        .get();
 
-    if (!participantSnapshot.exists) throw Exception("You must join the room first.");
+    if (!participantSnapshot.exists)
+      throw Exception("You must join the room first.");
 
     final userDoc = await _usersCollection.doc(user.uid).get();
-    String userName = userDoc.data()?['displayName'] ?? user.displayName ?? 'Anonymous';
+    String userName =
+        userDoc.data()?['displayName'] ?? user.displayName ?? 'Anonymous';
 
     // OVERWRITE instead of push
     await _eventsRef.child('$roomId/latest_emoji').set({
@@ -518,7 +599,8 @@ class LiveStreamService {
     });
   }
 
-  static Stream<DatabaseEvent> getEmojiStream(String roomId) => _eventsRef.child('$roomId/latest_emoji').onValue;
+  static Stream<DatabaseEvent> getEmojiStream(String roomId) =>
+      _eventsRef.child('$roomId/latest_emoji').onValue;
 
   static Future<void> sendGift({
     int? hitCount,
@@ -533,9 +615,12 @@ class LiveStreamService {
     int? person,
   }) async {
     final user = _auth.currentUser!;
-    final participantSnapshot = await _participantsRef.child('$roomId/${user.uid}').get();
+    final participantSnapshot = await _participantsRef
+        .child('$roomId/${user.uid}')
+        .get();
 
-    if (!participantSnapshot.exists) throw Exception('You must join the room first.');
+    if (!participantSnapshot.exists)
+      throw Exception('You must join the room first.');
 
     final participantData = participantSnapshot.value as Map<dynamic, dynamic>;
     String userName = participantData['userName'] ?? 'User';
@@ -559,7 +644,8 @@ class LiveStreamService {
     });
   }
 
-  static Stream<DatabaseEvent> getGiftStream(String roomId) => _eventsRef.child('$roomId/latest_gift').onValue;
+  static Stream<DatabaseEvent> getGiftStream(String roomId) =>
+      _eventsRef.child('$roomId/latest_gift').onValue;
 
   // ============================================================================
   // USER ROOM QUERIES
@@ -567,7 +653,10 @@ class LiveStreamService {
 
   static Future<String?> getUserActiveRoom(String userId) async {
     try {
-      final snapshot = await _roomsRef.orderByChild('hostId').equalTo(userId).once();
+      final snapshot = await _roomsRef
+          .orderByChild('hostId')
+          .equalTo(userId)
+          .once();
       if (!snapshot.snapshot.exists) return null;
 
       for (final child in snapshot.snapshot.children) {
@@ -585,12 +674,17 @@ class LiveStreamService {
       final hostingRoom = await getUserActiveRoom(userId);
       if (hostingRoom != null) return hostingRoom;
 
-      final snapshot = await _roomsRef.orderByChild('isActive').equalTo(true).once();
+      final snapshot = await _roomsRef
+          .orderByChild('isActive')
+          .equalTo(true)
+          .once();
       if (!snapshot.snapshot.exists) return null;
 
       for (final child in snapshot.snapshot.children) {
         final roomId = child.key.toString();
-        final participantSnapshot = await _participantsRef.child('$roomId/$userId').get();
+        final participantSnapshot = await _participantsRef
+            .child('$roomId/$userId')
+            .get();
         if (participantSnapshot.exists) return roomId;
       }
       return null;
@@ -615,11 +709,17 @@ class LiveStreamService {
 
     final receiverRoomSnapshot = await _roomsRef.child(receiverRoomId).get();
     if (receiverRoomSnapshot.exists) {
-      final pkState = (receiverRoomSnapshot.value as Map)['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
-      if (pkState['isPK'] == true) throw Exception("User is already in a PK battle.");
+      final pkState =
+          (receiverRoomSnapshot.value as Map)['pkState']
+              as Map<dynamic, dynamic>? ??
+          {'isPK': false};
+      if (pkState['isPK'] == true)
+        throw Exception("User is already in a PK battle.");
     }
 
-    final inviteRef = _requestsRef.child('$receiverRoomId/pk_invites/$senderRoomId');
+    final inviteRef = _requestsRef.child(
+      '$receiverRoomId/pk_invites/$senderRoomId',
+    );
     await inviteRef.set({
       'senderRoomId': senderRoomId,
       'senderHostId': user.uid,
@@ -634,14 +734,22 @@ class LiveStreamService {
   }
 
   static Stream<List<PKInvite>> getPKInvitesStream(String myRoomId) {
-    return _requestsRef.child('$myRoomId/pk_invites').orderByChild('status').equalTo('pending').onValue.map((event) {
-      if (!event.snapshot.exists) return <PKInvite>[];
-      final invitesMap = event.snapshot.value as Map<dynamic, dynamic>;
-      return invitesMap.entries.map((entry) => PKInvite.fromRTDB(entry.key, entry.value)).toList();
-    });
+    return _requestsRef
+        .child('$myRoomId/pk_invites')
+        .orderByChild('status')
+        .equalTo('pending')
+        .onValue
+        .map((event) {
+          if (!event.snapshot.exists) return <PKInvite>[];
+          final invitesMap = event.snapshot.value as Map<dynamic, dynamic>;
+          return invitesMap.entries
+              .map((entry) => PKInvite.fromRTDB(entry.key, entry.value))
+              .toList();
+        });
   }
 
-  static Stream<List<PKInvite>> getSentPKInvitesStream(String mySenderRoomId) => Stream.value([]);
+  static Stream<List<PKInvite>> getSentPKInvitesStream(String mySenderRoomId) =>
+      Stream.value([]);
 
   static Future<void> acceptPKInvite(String myRoomId, PKInvite invite) async {
     final myRoomRef = _roomsRef.child(myRoomId);
@@ -650,7 +758,9 @@ class LiveStreamService {
     final myRoomData = myRoomSnapshot.value as Map<dynamic, dynamic>;
 
     final int duration = invite.durationInMinutes;
-    final pkEndTime = DateTime.now().add(Duration(minutes: duration)).millisecondsSinceEpoch;
+    final pkEndTime = DateTime.now()
+        .add(Duration(minutes: duration))
+        .millisecondsSinceEpoch;
 
     await myRoomRef.update({
       'pkState': {
@@ -676,14 +786,19 @@ class LiveStreamService {
       },
     });
 
-    await _requestsRef.child('$myRoomId/pk_invites/${invite.id}').update({'status': 'accepted'});
+    await _requestsRef.child('$myRoomId/pk_invites/${invite.id}').update({
+      'status': 'accepted',
+    });
   }
 
   static Future<void> rejectPKInvite(String myRoomId, PKInvite invite) async {
     await _requestsRef.child('$myRoomId/pk_invites/${invite.id}').remove();
   }
 
-  static Future<void> endPKBattle(String myRoomId, String opponentRoomId) async {
+  static Future<void> endPKBattle(
+    String myRoomId,
+    String opponentRoomId,
+  ) async {
     await _roomsRef.child(myRoomId).update({
       'pkState': {'isPK': false},
     });
@@ -698,26 +813,35 @@ class LiveStreamService {
   // RANDOM PK SYSTEM
   // ============================================================================
 
-  static Future<void> sendGlobalRandomPKInvite(String senderRoomId, int durationInMinutes) async {
+  static Future<void> sendGlobalRandomPKInvite(
+    String senderRoomId,
+    int durationInMinutes,
+  ) async {
     final user = _auth.currentUser!;
     final senderRoomSnapshot = await _roomsRef.child(senderRoomId).get();
-    if (!senderRoomSnapshot.exists) throw Exception('Your room does not exist.');
+    if (!senderRoomSnapshot.exists)
+      throw Exception('Your room does not exist.');
 
     final senderRoomData = senderRoomSnapshot.value as Map<dynamic, dynamic>;
-    final pkState = senderRoomData['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
-    if (pkState['isPK'] == true) throw Exception('You are already in a PK battle.');
+    final pkState =
+        senderRoomData['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
+    if (pkState['isPK'] == true)
+      throw Exception('You are already in a PK battle.');
 
     final inviteRef = _globalRandomPKRef.push();
     await inviteRef.set({
       'inviteId': inviteRef.key!,
       'senderRoomId': senderRoomId,
       'senderHostId': user.uid,
-      'senderHostName': senderRoomData['hostName'] ?? (user.displayName ?? 'Anonymous'),
+      'senderHostName':
+          senderRoomData['hostName'] ?? (user.displayName ?? 'Anonymous'),
       'senderHostPicture': senderRoomData['hostPicture'] ?? user.photoURL,
       'status': 'pending',
       'createdAt': ServerValue.timestamp,
       'durationInMinutes': durationInMinutes,
-      'expiresAt': DateTime.now().add(const Duration(seconds: 7)).millisecondsSinceEpoch,
+      'expiresAt': DateTime.now()
+          .add(const Duration(seconds: 7))
+          .millisecondsSinceEpoch,
     });
 
     Future.delayed(const Duration(seconds: 7), () async {
@@ -739,7 +863,9 @@ class LiveStreamService {
       if (value == null || value is! Map) return <PKInvite>[];
 
       final invitesMap = Map<dynamic, dynamic>.from(value);
-      return invitesMap.entries.where((entry) => entry.value is Map).map((entry) {
+      return invitesMap.entries.where((entry) => entry.value is Map).map((
+        entry,
+      ) {
         final inviteData = Map<dynamic, dynamic>.from(entry.value as Map);
         return PKInvite(
           id: entry.key.toString(),
@@ -756,23 +882,36 @@ class LiveStreamService {
     });
   }
 
-  static Future<void> acceptGlobalRandomPKInvite(String roomId, PKInvite invite) async {
+  static Future<void> acceptGlobalRandomPKInvite(
+    String roomId,
+    PKInvite invite,
+  ) async {
     final user = _auth.currentUser!;
     final senderRoomSnapshot = await _roomsRef.child(invite.senderRoomId).get();
 
-    if (!senderRoomSnapshot.exists) throw Exception('Sender room no longer exists.');
-    final senderPkState = (senderRoomSnapshot.value as Map)['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
-    if (senderPkState['isPK'] == true) throw Exception('PK already started with someone else.');
+    if (!senderRoomSnapshot.exists)
+      throw Exception('Sender room no longer exists.');
+    final senderPkState =
+        (senderRoomSnapshot.value as Map)['pkState']
+            as Map<dynamic, dynamic>? ??
+        {'isPK': false};
+    if (senderPkState['isPK'] == true)
+      throw Exception('PK already started with someone else.');
 
     final myRoomSnapshot = await _roomsRef.child(roomId).get();
     if (myRoomSnapshot.exists) {
-      final myPkState = (myRoomSnapshot.value as Map)['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
-      if (myPkState['isPK'] == true) throw Exception('You are already in a PK battle.');
+      final myPkState =
+          (myRoomSnapshot.value as Map)['pkState'] as Map<dynamic, dynamic>? ??
+          {'isPK': false};
+      if (myPkState['isPK'] == true)
+        throw Exception('You are already in a PK battle.');
     }
 
     await _globalRandomPKRef.child(invite.id).remove();
 
-    final pkEndTime = DateTime.now().add(Duration(minutes: invite.durationInMinutes));
+    final pkEndTime = DateTime.now().add(
+      Duration(minutes: invite.durationInMinutes),
+    );
     final receiverDoc = await _usersCollection.doc(user.uid).get();
     final receiverName = receiverDoc.data()?['displayName'] ?? 'Unknown';
     final receiverPicture = receiverDoc.data()?['profilePicture'];

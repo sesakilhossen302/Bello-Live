@@ -57,6 +57,7 @@ dependencies:
   collection: ^1.19.1
   bloc: ^9.2.0
   audioplayers: ^6.6.0
+  http: ^1.4.0
   flutter_localizations:
     sdk: flutter
 

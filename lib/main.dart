@@ -11,6 +11,7 @@ import 'di/get_it.dart';
 import 'firebase_options.dart';
 import 'navigation/my_router.dart';
 import 'ui/widgets/floating_minimized_room.dart';
+import 'ui/widgets/global_win_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +62,7 @@ class MyApp extends StatelessWidget {
                 children: [
                   if (child != null) child,
                   const FloatingMinimizedRoom(),
+                  const GlobalWinBanner(),
                 ],
               );
             },

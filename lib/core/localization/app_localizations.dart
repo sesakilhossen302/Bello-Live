@@ -88,6 +88,8 @@ class AppLocalizations {
       'store': 'Store',
       'theme': 'Theme',
       'my_bag': 'My Bag',
+      'apply_hosting': 'Apply Hosting',
+      'apply_agency': 'Apply Agency',
       'login_to_see_profile': 'Please log in to see your profile.',
       'profile_not_found': 'Profile not found.',
       'no_bio': 'No bio yet.',
@@ -242,6 +244,8 @@ class AppLocalizations {
       'store': 'স্টোর',
       'theme': 'থিম',
       'my_bag': 'আমার ব্যাগ',
+      'apply_hosting': 'হোস্টিং আবেদন',
+      'apply_agency': 'এজেন্সি আবেদন',
       'login_to_see_profile': 'আপনার প্রোফাইল দেখতে লগ ইন করুন।',
       'profile_not_found': 'প্রোফাইল পাওয়া যায়নি।',
       'no_bio': 'এখনো কোন বায়ো নেই।',
@@ -394,6 +398,8 @@ class AppLocalizations {
       'store': 'स्टोर',
       'theme': 'थीम',
       'my_bag': 'मेरा बैग',
+      'apply_hosting': 'होस्टिंग के लिए आवेदन करें',
+      'apply_agency': 'एजेंसी के लिए आवेदन करें',
       'login_to_see_profile': 'अपनी प्रोफ़ाइल देखने के लिए कृपया लॉगिन करें।',
       'profile_not_found': 'प्रोफ़ाइल नहीं मिली।',
       'no_bio': 'अभी कोई बायो नहीं है।',
@@ -546,6 +552,8 @@ class AppLocalizations {
       'store': 'اسٹور',
       'theme': 'تھیم',
       'my_bag': 'میرا بیگ',
+      'apply_hosting': 'ہوسٹنگ کے لیے درخواست دیں',
+      'apply_agency': 'ایجنسی کے لیے درخواست دیں',
       'login_to_see_profile': 'اپنی پروفائل دیکھنے کے لیے براہ کرم لاگ ان کریں۔',
       'profile_not_found': 'پروفائل نہیں ملی۔',
       'no_bio': 'ابھی تک کوئی بائیو نہیں ہے۔',
@@ -698,6 +706,8 @@ class AppLocalizations {
       'store': 'Tienda',
       'theme': 'Tema',
       'my_bag': 'Mi bolsa',
+      'apply_hosting': 'Solicitar Hosting',
+      'apply_agency': 'Solicitar Agencia',
       'login_to_see_profile': 'Por favor, inicie sesión para ver su perfil.',
       'profile_not_found': 'Perfil no encontrado.',
       'no_bio': 'Sin biografía aún.',
@@ -853,6 +863,8 @@ class AppLocalizations {
   String get store => translate('store');
   String get theme => translate('theme');
   String get myBag => translate('my_bag');
+  String get applyHosting => translate('apply_hosting');
+  String get applyAgency => translate('apply_agency');
   String get loginToSeeProfile => translate('login_to_see_profile');
   String get profileNotFound => translate('profile_not_found');
   String get noBio => translate('no_bio');

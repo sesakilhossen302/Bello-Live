@@ -20,11 +20,14 @@ class StoreItemModel {
 
   factory StoreItemModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final rawPrice = data['price'] ?? data['value'] ?? 0;
+    final parsedPrice = rawPrice is num ? rawPrice.toInt() : int.tryParse(rawPrice.toString()) ?? 0;
+
     return StoreItemModel(
       id: doc.id,
       name: data['name'] ?? 'Unknown',
       imageUrl: data['imageURL'] ?? '',
-      price: data['value'] ?? 0,
+      price: parsedPrice,
       category: data['category'] ?? 'Uncategorized',
       expiresAt: data['expiresAt'] != null ? (data['expiresAt'] as Timestamp).toDate() : null,
     );
@@ -74,7 +77,7 @@ class StoreService {
       final userData = userDoc.data() ?? {};
       final currentBalance = userData['balance'] ?? 0;
       if (currentBalance < item.price) {
-        throw Exception("Insufficient beans to purchase this item.");
+        throw Exception("Insufficient diamonds to purchase this item.");
       }
 
       final bagDoc = await transaction.get(bagRef);

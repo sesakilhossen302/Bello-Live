@@ -14,10 +14,18 @@ class RoomService {
   // ============================================================================
   // FLATTENED DATABASE REFERENCES (THE COST SAVER)
   // ============================================================================
-  static final DatabaseReference _roomsRef = _database.ref('rooms'); // Only slow/static data
-  static final DatabaseReference _participantsRef = _database.ref('room_participants'); // Fast delta updates
-  static final DatabaseReference _eventsRef = _database.ref('room_events'); // Overwrites for emojis/gifts
-  static final DatabaseReference _requestsRef = _database.ref('room_requests'); // Host-only private data
+  static final DatabaseReference _roomsRef = _database.ref(
+    'rooms',
+  ); // Only slow/static data
+  static final DatabaseReference _participantsRef = _database.ref(
+    'room_participants',
+  ); // Fast delta updates
+  static final DatabaseReference _eventsRef = _database.ref(
+    'room_events',
+  ); // Overwrites for emojis/gifts
+  static final DatabaseReference _requestsRef = _database.ref(
+    'room_requests',
+  ); // Host-only private data
 
   // Track active listeners and timers to prevent memory leaks and duplicates
   static final Map<String, StreamSubscription> _participantCountListeners = {};
@@ -37,7 +45,10 @@ class RoomService {
     }
 
     // Clean up existing room if host already has one
-    final existingRoomSnapshot = await _roomsRef.orderByChild('hostId').equalTo(user.uid).once();
+    final existingRoomSnapshot = await _roomsRef
+        .orderByChild('hostId')
+        .equalTo(user.uid)
+        .once();
     if (existingRoomSnapshot.snapshot.exists) {
       for (final child in existingRoomSnapshot.snapshot.children) {
         final oldRoomId = child.key;
@@ -124,7 +135,10 @@ class RoomService {
       final dateKey =
           '${sessionDate.year}-${sessionDate.month.toString().padLeft(2, '0')}-${sessionDate.day.toString().padLeft(2, '0')}';
 
-      final historyRef = _usersCollection.doc(hostId).collection('liveHistory').doc(dateKey);
+      final historyRef = _usersCollection
+          .doc(hostId)
+          .collection('liveHistory')
+          .doc(dateKey);
       final docSnapshot = await historyRef.get();
 
       if (docSnapshot.exists) {
@@ -215,8 +229,10 @@ class RoomService {
 
     // Check if blocked
     final roomSnapshot = await _roomsRef.child(roomId).get();
+    String hostId = '';
     if (roomSnapshot.exists) {
       final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+      hostId = roomData['hostId'] ?? '';
       final blockedUsers = roomData['blockedUsers'] as Map<dynamic, dynamic>?;
       if (blockedUsers != null && blockedUsers.containsKey(user.uid)) {
         final expiry = blockedUsers[user.uid] as int;
@@ -228,7 +244,10 @@ class RoomService {
 
     final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
-    final userProfileDoc = await _firestore.collection('users').doc(user.uid).get();
+    final userProfileDoc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
     String userName = user.displayName ?? 'Anonymous';
     String? userPicture = user.photoURL;
@@ -241,16 +260,58 @@ class RoomService {
       userPicture = data['photoUrl'] ?? data['profilePicture'] ?? userPicture;
     }
 
+    // Check if user has an active co-host rental for this host
+    bool isCoHost = false;
+    int? coHostUntilMs;
+    if (hostId.isNotEmpty && user.uid != hostId) {
+      final rentalRef = _firestore.collection('cohost_rentals').doc('${hostId}_${user.uid}');
+      final rentalDoc = await rentalRef.get();
+      if (rentalDoc.exists) {
+        final data = rentalDoc.data() as Map<String, dynamic>;
+        final String status = data['status'] ?? 'expired';
+        final int totalDurationMs = data['totalDurationMs'] ?? 0;
+        int elapsedTimeMs = data['elapsedTimeMs'] ?? 0;
+        int? lastJoinedAt = data['lastJoinedAt'] as int?;
+
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+        // Reconcile if previous session didn't clean up (crashed / network lost)
+        if (lastJoinedAt != null && status == 'active') {
+          final diff = nowMs - lastJoinedAt;
+          if (diff > 0) {
+            elapsedTimeMs += diff;
+          }
+        }
+
+        if (status == 'active' && elapsedTimeMs < totalDurationMs) {
+          isCoHost = true;
+          coHostUntilMs = nowMs + (totalDurationMs - elapsedTimeMs);
+          await rentalRef.update({
+            'elapsedTimeMs': elapsedTimeMs,
+            'lastJoinedAt': nowMs,
+            'status': 'active',
+          });
+        } else {
+          await rentalRef.update({
+            'status': 'expired',
+            'lastJoinedAt': null,
+          });
+        }
+      }
+    }
+
     await participantRef.set({
       'userId': user.uid,
       'displayId': displayId,
       'userName': userName,
       'userPicture': userPicture,
-      'isCoHost': false,
+      'isCoHost': isCoHost,
       'seatNo': -1,
       'joinedAt': ServerValue.timestamp,
       'isOnline': true,
-      'isMuted': false,
+      'isMuted': isCoHost ? false : true,
+      'isApprovedSpeaker': isCoHost,
+      if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
     });
 
     await _setupPresence(roomId, user.uid, isHost: false);
@@ -262,6 +323,43 @@ class RoomService {
     final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
     try {
+      // Check if user was a cohost
+      final participantSnap = await participantRef.get();
+      if (participantSnap.exists) {
+        final data = participantSnap.value as Map<dynamic, dynamic>;
+        final bool isCoHost = data['isCoHost'] == true;
+        if (isCoHost) {
+          final roomSnap = await _roomsRef.child(roomId).get();
+          if (roomSnap.exists) {
+            final roomData = roomSnap.value as Map<dynamic, dynamic>;
+            final String hostId = roomData['hostId'] ?? '';
+            if (hostId.isNotEmpty) {
+              final rentalRef = _firestore.collection('cohost_rentals').doc('${hostId}_${user.uid}');
+              final rentalDoc = await rentalRef.get();
+              if (rentalDoc.exists) {
+                final rentalData = rentalDoc.data() as Map<String, dynamic>;
+                final int totalDurationMs = rentalData['totalDurationMs'] ?? 0;
+                final int elapsedTimeMs = rentalData['elapsedTimeMs'] ?? 0;
+                final int? lastJoinedAt = rentalData['lastJoinedAt'] as int?;
+
+                if (lastJoinedAt != null) {
+                  final nowMs = DateTime.now().millisecondsSinceEpoch;
+                  final sessionElapsed = nowMs - lastJoinedAt;
+                  final newElapsed = elapsedTimeMs + sessionElapsed;
+                  final isExpired = newElapsed >= totalDurationMs;
+
+                  await rentalRef.update({
+                    'elapsedTimeMs': newElapsed,
+                    'lastJoinedAt': null,
+                    'status': isExpired ? 'expired' : 'active',
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
       await participantRef.onDisconnect().cancel();
       await participantRef.remove();
       await _requestsRef.child('$roomId/speaker_requests/${user.uid}').remove();
@@ -280,26 +378,37 @@ class RoomService {
   static void _setupParticipantCountSync(String roomId) {
     _participantCountListeners[roomId]?.cancel();
 
-    _participantCountListeners[roomId] = _participantsRef.child(roomId).onValue.listen((event) async {
-      if (!event.snapshot.exists) {
-        await _roomsRef.child('$roomId/participantCount').set(0);
-        return;
-      }
+    _participantCountListeners[roomId] = _participantsRef
+        .child(roomId)
+        .onValue
+        .listen((event) async {
+          if (!event.snapshot.exists) {
+            await _roomsRef.child('$roomId/participantCount').set(0);
+            return;
+          }
 
-      final participants = event.snapshot.value;
-      if (participants is Map) {
-        final actualCount = participants.length;
-        final countSnapshot = await _roomsRef.child('$roomId/participantCount').get();
-        final currentCount = (countSnapshot.value as int?) ?? 0;
+          final participants = event.snapshot.value;
+          if (participants is Map) {
+            final actualCount = participants.length;
+            final countSnapshot = await _roomsRef
+                .child('$roomId/participantCount')
+                .get();
+            final currentCount = (countSnapshot.value as int?) ?? 0;
 
-        if (currentCount != actualCount) {
-          await _roomsRef.child('$roomId/participantCount').set(actualCount);
-        }
-      }
-    });
+            if (currentCount != actualCount) {
+              await _roomsRef
+                  .child('$roomId/participantCount')
+                  .set(actualCount);
+            }
+          }
+        });
   }
 
-  static Future<void> _setupPresence(String roomId, String userId, {required bool isHost}) async {
+  static Future<void> _setupPresence(
+    String roomId,
+    String userId, {
+    required bool isHost,
+  }) async {
     final roomRef = _roomsRef.child(roomId);
     final participantRef = _participantsRef.child('$roomId/$userId');
 
@@ -322,7 +431,9 @@ class RoomService {
 
   static void _startForegroundHeartbeat(String roomId) {
     _heartbeatTimers[roomId]?.cancel();
-    _heartbeatTimers[roomId] = Timer.periodic(const Duration(minutes: 1), (timer) async {
+    _heartbeatTimers[roomId] = Timer.periodic(const Duration(minutes: 1), (
+      timer,
+    ) async {
       try {
         await _roomsRef.child('$roomId/lastActive').set(ServerValue.timestamp);
       } catch (e) {
@@ -337,7 +448,11 @@ class RoomService {
 
   static Future<void> leaveSeat(String roomId) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'seatNo': -1, 'isMuted': false});
+    await _participantsRef.child('$roomId/${user.uid}').update({
+      'seatNo': -1,
+      'isMuted': true,
+      'isApprovedSpeaker': false,
+    });
   }
 
   static Future<void> takeSeat(String roomId, int newSeatNo) async {
@@ -351,7 +466,8 @@ class RoomService {
     final lockedSeatsMap = roomData['lockedSeats'];
     bool isLocked = false;
     if (lockedSeatsMap is Map) {
-      isLocked = lockedSeatsMap['seat_$newSeatNo'] == true ||
+      isLocked =
+          lockedSeatsMap['seat_$newSeatNo'] == true ||
           lockedSeatsMap[newSeatNo.toString()] == true;
     } else if (lockedSeatsMap is List) {
       if (newSeatNo < lockedSeatsMap.length) {
@@ -372,7 +488,11 @@ class RoomService {
       }
     }
 
-    await participantRef.update({'seatNo': newSeatNo, 'isMuted': false});
+    await participantRef.update({
+      'seatNo': newSeatNo,
+      'isMuted': false,
+      'isApprovedSpeaker': true,
+    });
   }
 
   static Future<void> moveSeat(String roomId, int newSeatNo) async {
@@ -388,7 +508,8 @@ class RoomService {
       final lockedSeatsMap = roomData['lockedSeats'];
       bool isLocked = false;
       if (lockedSeatsMap is Map) {
-        isLocked = lockedSeatsMap['seat_$newSeatNo'] == true ||
+        isLocked =
+            lockedSeatsMap['seat_$newSeatNo'] == true ||
             lockedSeatsMap[newSeatNo.toString()] == true;
       } else if (lockedSeatsMap is List) {
         if (newSeatNo < lockedSeatsMap.length) {
@@ -415,15 +536,29 @@ class RoomService {
 
   static Future<void> toggleMuteState(String roomId, bool newMuteState) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'isMuted': newMuteState});
+    await _participantsRef.child('$roomId/${user.uid}').update({
+      'isMuted': newMuteState,
+    });
   }
 
-  static Future<void> muteParticipant(String roomId, String userId, bool isMuted) async {
-    await _participantsRef.child('$roomId/$userId').update({'isMuted': isMuted});
+  static Future<void> muteParticipant(
+    String roomId,
+    String userId,
+    bool isMuted,
+  ) async {
+    await _participantsRef.child('$roomId/$userId').update({
+      'isMuted': isMuted,
+    });
   }
 
-  static Future<void> lockParticipant(String roomId, String userId, bool isLocked) async {
-    await _participantsRef.child('$roomId/$userId').update({'isLocked': isLocked});
+  static Future<void> lockParticipant(
+    String roomId,
+    String userId,
+    bool isLocked,
+  ) async {
+    await _participantsRef.child('$roomId/$userId').update({
+      'isLocked': isLocked,
+    });
   }
 
   static Future<void> kickParticipant(String roomId, String userId) async {
@@ -432,7 +567,11 @@ class RoomService {
     await _requestsRef.child('$roomId/cohost_requests/$userId').remove();
   }
 
-  static Future<void> blockParticipant(String roomId, String userId, {Duration? duration}) async {
+  static Future<void> blockParticipant(
+    String roomId,
+    String userId, {
+    Duration? duration,
+  }) async {
     await kickParticipant(roomId, userId);
     final expiry = duration != null
         ? DateTime.now().add(duration).millisecondsSinceEpoch
@@ -454,12 +593,19 @@ class RoomService {
 
   static Future<void> stepDownFromCoHost(String roomId) async {
     final user = _auth.currentUser!;
-    await _participantsRef.child('$roomId/${user.uid}').update({'isCoHost': false, 'isMuted': false});
+    await _participantsRef.child('$roomId/${user.uid}').update({
+      'isCoHost': false,
+      'isMuted': false,
+      'coHostUntil': null,
+    });
   }
 
   static Future<void> requestToBeCoHost(String roomId) async {
     final user = _auth.currentUser!;
-    final userProfileDoc = await _firestore.collection('users').doc(user.uid).get();
+    final userProfileDoc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
     String userName = user.displayName ?? 'Anonymous';
     String? userPicture = user.photoURL;
@@ -479,10 +625,17 @@ class RoomService {
   }
 
   static Stream<DatabaseEvent> getCoHostRequestsStream(String roomId) {
-    return _requestsRef.child('$roomId/cohost_requests').orderByChild('requestedAt').onValue;
+    return _requestsRef
+        .child('$roomId/cohost_requests')
+        .orderByChild('requestedAt')
+        .onValue;
   }
 
-  static Future<void> approveCoHostRequest(String roomId, String requestId, String userId) async {
+  static Future<void> approveCoHostRequest(
+    String roomId,
+    String requestId,
+    String userId,
+  ) async {
     final requestRef = _requestsRef.child('$roomId/cohost_requests/$requestId');
     final participantRef = _participantsRef.child('$roomId/$userId');
 
@@ -506,7 +659,11 @@ class RoomService {
       }
     }
 
-    await participantRef.update({'isCoHost': true, 'seatNo': -1, 'isMuted': false});
+    await participantRef.update({
+      'isCoHost': true,
+      'seatNo': -1,
+      'isMuted': false,
+    });
     await requestRef.remove();
   }
 
@@ -532,7 +689,11 @@ class RoomService {
       }
     }
 
-    await participantRef.update({'isCoHost': true, 'seatNo': -1, 'isMuted': false});
+    await participantRef.update({
+      'isCoHost': true,
+      'seatNo': -1,
+      'isMuted': false,
+    });
     // Also remove any existing requests from this user if any
     await _requestsRef.child('$roomId/cohost_requests/$userId').remove();
     await _requestsRef.child('$roomId/speaker_requests/$userId').remove();
@@ -540,6 +701,20 @@ class RoomService {
 
   static Future<void> removeCoHost(String roomId, String userId) async {
     final participantRef = _participantsRef.child('$roomId/$userId');
+
+    // Also mark Firestore rental as expired
+    final roomSnap = await _roomsRef.child(roomId).get();
+    if (roomSnap.exists) {
+      final roomData = roomSnap.value as Map<dynamic, dynamic>;
+      final String hostId = roomData['hostId'] ?? '';
+      if (hostId.isNotEmpty) {
+        final rentalRef = _firestore.collection('cohost_rentals').doc('${hostId}_$userId');
+        await rentalRef.update({
+          'status': 'expired',
+          'lastJoinedAt': null,
+        });
+      }
+    }
 
     // Find first available seat (1-8)
     final participantsSnapshot = await _participantsRef.child(roomId).get();
@@ -568,12 +743,168 @@ class RoomService {
     await participantRef.update({
       'isCoHost': false,
       'seatNo': targetSeatNo,
-      'isMuted': false, 
-                                     // Usually speakers are unmuted by default in this app.
+      'isMuted': targetSeatNo == -1,
+      'coHostUntil': null,
+      'isApprovedSpeaker': false,
     });
   }
 
-  static Future<void> rejectCoHostRequest(String roomId, String requestId) async {
+  static Future<void> purchaseCoHostSeat({
+    required String roomId,
+    required String hostId,
+    required int coinPrice,
+    required Duration duration,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("No user logged in");
+    if (user.uid == hostId) throw Exception("Host cannot buy the co-host seat");
+
+    // 1. Verify that co-host seat is not occupied in RTDB
+    final participantsSnapshot = await _participantsRef.child(roomId).get();
+    if (participantsSnapshot.exists) {
+      final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+      for (var entry in participants.entries) {
+        if (entry.key != hostId && entry.value is Map) {
+          final participant = entry.value as Map<dynamic, dynamic>;
+          if (participant['isCoHost'] == true) {
+            final until = participant['coHostUntil'] as int?;
+            if (until == null ||
+                until > DateTime.now().millisecondsSinceEpoch) {
+              throw Exception('Co-host seat is already occupied.');
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Perform Firestore Transaction for transfer
+    await _firestore.runTransaction((transaction) async {
+      final senderRef = _usersCollection.doc(user.uid);
+      final senderDoc = await transaction.get(senderRef);
+
+      if (!senderDoc.exists) throw Exception("Your profile not found");
+
+      final senderData = senderDoc.data() as Map<String, dynamic>;
+      final int currentBalance = senderData['balance'] ?? 0;
+
+      if (currentBalance < coinPrice) {
+        throw Exception(
+          "Insufficient balance. Need $coinPrice coins, have $currentBalance coins.",
+        );
+      }
+
+      final hostRef = _usersCollection.doc(hostId);
+      final hostDoc = await transaction.get(hostRef);
+      if (!hostDoc.exists) throw Exception("Host profile not found");
+
+      // Deduct balance from sender
+      transaction.update(senderRef, {
+        'balance': FieldValue.increment(-coinPrice),
+        'totalSent': FieldValue.increment(coinPrice),
+      });
+
+      // Add diamonds to host
+      transaction.update(hostRef, {
+        'diamonds': FieldValue.increment(coinPrice),
+        'totalReceived': FieldValue.increment(coinPrice),
+      });
+
+      // Record transaction
+      final giftDocRef = _firestore.collection('gifting_transactions').doc();
+      transaction.set(giftDocRef, {
+        'senderId': user.uid,
+        'recipientId': hostId,
+        'giftValue': coinPrice,
+        'category': 'CoHostPurchase',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    });
+
+    // 3. Update Firestore CoHost Rental
+    final rentalRef = _firestore.collection('cohost_rentals').doc('${hostId}_${user.uid}');
+    final rentalDoc = await rentalRef.get();
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (rentalDoc.exists) {
+      final data = rentalDoc.data() as Map<String, dynamic>;
+      final currentTotal = data['totalDurationMs'] as int? ?? 0;
+      final currentElapsed = data['elapsedTimeMs'] as int? ?? 0;
+      final status = data['status'] as String? ?? 'expired';
+
+      int newTotal = currentTotal;
+      int newElapsed = currentElapsed;
+      if (status == 'expired') {
+        // Reset elapsed if previous rental expired
+        newTotal = duration.inMilliseconds;
+        newElapsed = 0;
+      } else {
+        // Add to existing active rental
+        newTotal = currentTotal + duration.inMilliseconds;
+      }
+
+      await rentalRef.update({
+        'totalDurationMs': newTotal,
+        'elapsedTimeMs': newElapsed,
+        'lastJoinedAt': nowMs,
+        'status': 'active',
+      });
+    } else {
+      await rentalRef.set({
+        'hostId': hostId,
+        'userId': user.uid,
+        'totalDurationMs': duration.inMilliseconds,
+        'elapsedTimeMs': 0,
+        'lastJoinedAt': nowMs,
+        'status': 'active',
+      });
+    }
+
+    // 4. Update Realtime Database
+    final expiryTimeMs = DateTime.now().add(duration).millisecondsSinceEpoch;
+    final participantRef = _participantsRef.child('$roomId/${user.uid}');
+    await participantRef.update({
+      'isCoHost': true,
+      'seatNo': -1,
+      'isMuted': false,
+      'coHostUntil': expiryTimeMs,
+    });
+  }
+
+  static Future<void> updateCoHostElapsedTime(
+    String roomId,
+    String hostId,
+    String userId,
+    int incrementMs,
+  ) async {
+    try {
+      final rentalRef = _firestore.collection('cohost_rentals').doc('${hostId}_$userId');
+      final rentalDoc = await rentalRef.get();
+      if (rentalDoc.exists) {
+        final data = rentalDoc.data() as Map<String, dynamic>;
+        final int totalDurationMs = data['totalDurationMs'] ?? 0;
+        final int elapsedTimeMs = data['elapsedTimeMs'] ?? 0;
+        final int newElapsed = elapsedTimeMs + incrementMs;
+        final bool isExpired = newElapsed >= totalDurationMs;
+
+        await rentalRef.update({
+          'elapsedTimeMs': newElapsed,
+          'lastJoinedAt': DateTime.now().millisecondsSinceEpoch,
+          'status': isExpired ? 'expired' : 'active',
+        });
+
+        if (isExpired) {
+          await removeCoHost(roomId, userId);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error updating co-host elapsed time: $e");
+    }
+  }
+
+  static Future<void> rejectCoHostRequest(
+    String roomId,
+    String requestId,
+  ) async {
     await _requestsRef.child('$roomId/cohost_requests/$requestId').remove();
   }
 
@@ -583,7 +914,10 @@ class RoomService {
 
   static Future<void> requestToBeSpeaker(String roomId) async {
     final user = _auth.currentUser!;
-    final userProfileDoc = await _firestore.collection('users').doc(user.uid).get();
+    final userProfileDoc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
     String userName = user.displayName ?? 'Anonymous';
     String? userPicture = user.photoURL;
@@ -602,69 +936,229 @@ class RoomService {
     });
   }
 
-  static Stream<DatabaseEvent> getSpeakerRequestsStream(String roomId) {
-    return _requestsRef.child('$roomId/speaker_requests').orderByChild('requestedAt').onValue;
-  }
+  static Future<void> joinCallImmediately(String roomId) async {
+    final user = _auth.currentUser!;
+    final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
-  static Future<void> approveSpeakerRequest(String roomId, String requestId, String userId) async {
-    final requestRef = _requestsRef.child('$roomId/speaker_requests/$requestId');
-    final participantRef = _participantsRef.child('$roomId/$userId');
+    // Count current approved speakers (excluding host)
+    final roomSnap = await _roomsRef.child(roomId).get();
+    if (!roomSnap.exists) throw Exception('Room not found.');
+    final roomData = roomSnap.value as Map<dynamic, dynamic>;
+    final hostId = roomData['hostId'] ?? '';
 
     final participantsSnapshot = await _participantsRef.child(roomId).get();
+    int approvedCount = 0;
     final occupiedSeats = <int>{};
 
     if (participantsSnapshot.exists) {
       final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
       for (var participant in participants.values) {
         if (participant is Map) {
-          final seatNo = participant['seatNo'] as int?;
-          if (seatNo != null && seatNo > 0) {
+          final pUserId = participant['userId'] as String? ?? '';
+          final isApproved = participant['isApprovedSpeaker'] == true;
+          final isCoHost = participant['isCoHost'] == true;
+          final seatNo = participant['seatNo'] as int? ?? -1;
+
+          if (pUserId != hostId && (isApproved || isCoHost)) {
+            approvedCount++;
+          }
+          if (seatNo > 0) {
             occupiedSeats.add(seatNo);
           }
         }
       }
     }
 
-    final roomSnapshot = await _roomsRef.child(roomId).get();
-    final lockedSeats = <int>{};
-    if (roomSnapshot.exists) {
-      final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
-      final lockedData = roomData['lockedSeats'];
-      if (lockedData is Map) {
-        for (var key in lockedData.keys) {
-          final sKey = key.toString().replaceFirst('seat_', '');
-          final seatNo = int.tryParse(sKey);
-          if (seatNo != null && lockedData[key] == true) {
-            lockedSeats.add(seatNo);
-          }
-        }
-      } else if (lockedData is List) {
-        for (int i = 0; i < lockedData.length; i++) {
-          if (lockedData[i] == true) {
-            lockedSeats.add(i);
-          }
-        }
-      }
+    if (approvedCount >= 15) {
+      throw Exception('Maximum 15 speakers allowed in the call.');
     }
 
-    int? nextAvailableSeat;
+    // Try to assign a seat 1..8 if available, otherwise -1 (hidden)
+    int targetSeatNo = -1;
     for (int i = 1; i <= 8; i++) {
-      if (!occupiedSeats.contains(i) && !lockedSeats.contains(i)) {
-        nextAvailableSeat = i;
+      if (!occupiedSeats.contains(i)) {
+        targetSeatNo = i;
         break;
       }
     }
 
-    if (nextAvailableSeat == null) {
-      await requestRef.remove();
-      throw Exception('All seats are full or locked.');
-    }
-
-    await participantRef.update({'seatNo': nextAvailableSeat, 'isMuted': false});
-    await requestRef.remove();
+    await participantRef.update({
+      'isApprovedSpeaker': true,
+      'isMuted': false,
+      'seatNo': targetSeatNo,
+    });
   }
 
-  static Future<void> rejectSpeakerRequest(String roomId, String requestId) async {
+  static Future<void> inviteOrRemoveParticipantFromCall(
+    String roomId,
+    String userId,
+    bool addToCall,
+  ) async {
+    final roomSnap = await _roomsRef.child(roomId).get();
+    if (!roomSnap.exists) throw Exception('Room not found.');
+    final roomData = roomSnap.value as Map<dynamic, dynamic>;
+    final hostId = roomData['hostId'] ?? '';
+
+    final participantRef = _participantsRef.child('$roomId/$userId');
+
+    if (addToCall) {
+      final participantsSnapshot = await _participantsRef.child(roomId).get();
+      int approvedCount = 0;
+      final occupiedSeats = <int>{};
+
+      if (participantsSnapshot.exists) {
+        final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+        for (var participant in participants.values) {
+          if (participant is Map) {
+            final pUserId = participant['userId'] as String? ?? '';
+            final isApproved = participant['isApprovedSpeaker'] == true;
+            final isCoHost = participant['isCoHost'] == true;
+            final seatNo = participant['seatNo'] as int? ?? -1;
+
+            if (pUserId != hostId && (isApproved || isCoHost)) {
+              approvedCount++;
+            }
+            if (seatNo > 0) {
+              occupiedSeats.add(seatNo);
+            }
+          }
+        }
+      }
+
+      if (approvedCount >= 15) {
+        throw Exception('Maximum 15 speakers allowed in the call.');
+      }
+
+      int targetSeatNo = -1;
+      for (int i = 1; i <= 8; i++) {
+        if (!occupiedSeats.contains(i)) {
+          targetSeatNo = i;
+          break;
+        }
+      }
+
+      await participantRef.update({
+        'isApprovedSpeaker': true,
+        'isMuted': false,
+        'seatNo': targetSeatNo,
+      });
+    } else {
+      await participantRef.update({
+        'isApprovedSpeaker': false,
+        'isMuted': true,
+        'seatNo': -1,
+      });
+
+      // Automatically promote any hidden speakers
+      await promoteHiddenSpeakers(roomId);
+    }
+  }
+
+  static Future<void> promoteHiddenSpeakers(String roomId) async {
+    try {
+      final roomSnap = await _roomsRef.child(roomId).get();
+      if (!roomSnap.exists) return;
+      final roomData = roomSnap.value as Map<dynamic, dynamic>;
+      final hostId = roomData['hostId'] ?? '';
+
+      final participantsSnapshot = await _participantsRef.child(roomId).get();
+      if (participantsSnapshot.exists) {
+        final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+        final occupiedSeats = <int>{};
+        final hiddenSpeakers = <String>[];
+
+        for (var participant in participants.values) {
+          if (participant is Map) {
+            final pUserId = participant['userId'] as String? ?? '';
+            final seatNo = participant['seatNo'] as int? ?? -1;
+            final isApproved = participant['isApprovedSpeaker'] == true;
+
+            if (seatNo > 0) {
+              occupiedSeats.add(seatNo);
+            } else if (isApproved && seatNo == -1 && pUserId != hostId) {
+              hiddenSpeakers.add(pUserId);
+            }
+          }
+        }
+
+        for (int i = 1; i <= 8; i++) {
+          if (!occupiedSeats.contains(i) && hiddenSpeakers.isNotEmpty) {
+            final nextHiddenUserId = hiddenSpeakers.removeAt(0);
+            await _participantsRef.child('$roomId/$nextHiddenUserId').update({
+              'seatNo': i,
+            });
+            occupiedSeats.add(i);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error promoting hidden speakers: $e");
+    }
+  }
+
+  static Stream<DatabaseEvent> getSpeakerRequestsStream(String roomId) {
+    return _requestsRef
+        .child('$roomId/speaker_requests')
+        .orderByChild('requestedAt')
+        .onValue;
+  }
+
+  static Future<void> approveSpeakerRequest(
+    String roomId,
+    String requestId,
+    String userId,
+  ) async {
+    final requestRef = _requestsRef.child(
+      '$roomId/speaker_requests/$requestId',
+    );
+    final participantRef = _participantsRef.child('$roomId/$userId');
+
+    final participantsSnapshot = await _participantsRef.child(roomId).get();
+    int approvedSpeakerCount = 0;
+    if (participantsSnapshot.exists) {
+      final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+      for (var participant in participants.values) {
+        if (participant is Map) {
+          final isApproved = participant['isApprovedSpeaker'] == true;
+          final seatNo = participant['seatNo'] as int? ?? -1;
+          if (isApproved && seatNo == -1) {
+            approvedSpeakerCount++;
+          }
+        }
+      }
+    }
+
+    if (approvedSpeakerCount >= 15) {
+      throw Exception('Maximum 15 approved speakers allowed.');
+    }
+
+    print(
+      "DEBUG: approveSpeakerRequest called for roomId: $roomId, requestId: $requestId, userId: $userId",
+    );
+    await participantRef.update({'isApprovedSpeaker': true, 'isMuted': true});
+    await requestRef.remove();
+    print(
+      "DEBUG: approveSpeakerRequest successfully completed and updated database",
+    );
+  }
+
+  static Future<void> seatApprovedParticipant(
+    String roomId,
+    String userId,
+    int seatNo,
+  ) async {
+    final participantRef = _participantsRef.child('$roomId/$userId');
+    await participantRef.update({
+      'seatNo': seatNo,
+      'isMuted': false,
+      'isApprovedSpeaker': true,
+    });
+  }
+
+  static Future<void> rejectSpeakerRequest(
+    String roomId,
+    String requestId,
+  ) async {
     await _requestsRef.child('$roomId/speaker_requests/$requestId').remove();
   }
 
@@ -676,7 +1170,10 @@ class RoomService {
     await _roomsRef.child(roomId).update({'notice': notice});
   }
 
-  static Future<void> updateRoomBackground(String roomId, String backgroundUrl) async {
+  static Future<void> updateRoomBackground(
+    String roomId,
+    String backgroundUrl,
+  ) async {
     await _roomsRef.child(roomId).update({
       'backgroundUrl': backgroundUrl,
       'backgroundUpdatedAt': ServerValue.timestamp,
@@ -687,12 +1184,23 @@ class RoomService {
     await _roomsRef.child(roomId).update({'isMoveAllowed': isAllowed});
   }
 
-  static Future<void> toggleSeatApprovalRequired(String roomId, bool isRequired) async {
-    await _roomsRef.child(roomId).update({'isSeatApprovalRequired': isRequired});
+  static Future<void> toggleSeatApprovalRequired(
+    String roomId,
+    bool isRequired,
+  ) async {
+    await _roomsRef.child(roomId).update({
+      'isSeatApprovalRequired': isRequired,
+    });
   }
 
-  static Future<void> setOrChangeRoomPassword(String roomId, String password) async {
-    await _roomsRef.child(roomId).update({'isLocked': true, 'password': password});
+  static Future<void> setOrChangeRoomPassword(
+    String roomId,
+    String password,
+  ) async {
+    await _roomsRef.child(roomId).update({
+      'isLocked': true,
+      'password': password,
+    });
   }
 
   static Future<void> removeRoomPassword(String roomId) async {
@@ -711,11 +1219,18 @@ class RoomService {
   // FAST EVENTS (EMOJIS & GIFTS) - LATEST OVERWRITE ONLY
   // ============================================================================
 
-  static Future<void> sendEmoji(String roomId, String emojiUrl, String emojiName) async {
+  static Future<void> sendEmoji(
+    String roomId,
+    String emojiUrl,
+    String emojiName,
+  ) async {
     final user = _auth.currentUser!;
-    final participantSnapshot = await _participantsRef.child('$roomId/${user.uid}').get();
+    final participantSnapshot = await _participantsRef
+        .child('$roomId/${user.uid}')
+        .get();
 
-    if (!participantSnapshot.exists) throw Exception('You must join the room first.');
+    if (!participantSnapshot.exists)
+      throw Exception('You must join the room first.');
 
     final participantData = participantSnapshot.value as Map<dynamic, dynamic>;
     final int seatNo = participantData['seatNo'] ?? -1;
@@ -729,7 +1244,9 @@ class RoomService {
     final bool isHost = user.uid == hostId;
 
     if (!isHost && !isCoHost && seatNo <= 0) {
-      throw Exception('Only host, co-host, and seated participants can send emojis.');
+      throw Exception(
+        'Only host, co-host, and seated participants can send emojis.',
+      );
     }
 
     String userName = participantData['userName'] ?? 'User';
@@ -745,7 +1262,9 @@ class RoomService {
   }
 
   static Stream<DatabaseEvent> getEmojiStream(String roomId) {
-    return _eventsRef.child('$roomId/latest_emoji').onValue; // Changed from onChildAdded
+    return _eventsRef
+        .child('$roomId/latest_emoji')
+        .onValue; // Changed from onChildAdded
   }
 
   static Future<void> sendGiftNotification({
@@ -766,7 +1285,9 @@ class RoomService {
   }
 
   static Stream<DatabaseEvent> getGiftNotificationsStream(String roomId) {
-    return _eventsRef.child('$roomId/latest_gift_notification').onValue; // Changed from onChildAdded
+    return _eventsRef
+        .child('$roomId/latest_gift_notification')
+        .onValue; // Changed from onChildAdded
   }
 
   static Future<void> sendGift({
@@ -782,9 +1303,12 @@ class RoomService {
     int? person,
   }) async {
     final user = _auth.currentUser!;
-    final participantSnapshot = await _participantsRef.child('$roomId/${user.uid}').get();
+    final participantSnapshot = await _participantsRef
+        .child('$roomId/${user.uid}')
+        .get();
 
-    if (!participantSnapshot.exists) throw Exception('You must join the room first.');
+    if (!participantSnapshot.exists)
+      throw Exception('You must join the room first.');
 
     final participantData = participantSnapshot.value as Map<dynamic, dynamic>;
     String userName = participantData['userName'] ?? 'User';
@@ -809,6 +1333,8 @@ class RoomService {
   }
 
   static Stream<DatabaseEvent> getGiftStream(String roomId) {
-    return _eventsRef.child('$roomId/latest_gift').onValue; // Changed from onChildAdded
+    return _eventsRef
+        .child('$roomId/latest_gift')
+        .onValue; // Changed from onChildAdded
   }
 }
