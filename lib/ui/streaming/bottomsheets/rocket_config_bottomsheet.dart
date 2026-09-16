@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -24,6 +25,8 @@ class RocketConfigBottomSheet extends StatefulWidget {
 class _RocketConfigBottomSheetState extends State<RocketConfigBottomSheet> {
   bool _isSending = false;
   bool _isCustomConfig = false;
+  StreamSubscription<bool>? _lockSubscription;
+  bool _isAccountLocked = false;
 
   final TextEditingController _coinController = TextEditingController(text: "10000");
   final TextEditingController _durationController = TextEditingController(text: "5");
@@ -35,6 +38,30 @@ class _RocketConfigBottomSheetState extends State<RocketConfigBottomSheet> {
   void initState() {
     super.initState();
     _fetchRoomAudience();
+    _checkLockStatus();
+    _lockSubscription = ProfileService.getCurrentUserLockStream().listen((locked) {
+      if (mounted) {
+        setState(() {
+          _isAccountLocked = locked;
+        });
+      }
+    });
+  }
+
+  Future<void> _checkLockStatus() async {
+    final locked = await ProfileService.isCurrentUserLocked();
+    if (!mounted) return;
+    setState(() {
+      _isAccountLocked = locked;
+    });
+  }
+
+  @override
+  void dispose() {
+    _lockSubscription?.cancel();
+    _coinController.dispose();
+    _durationController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchRoomAudience() async {
@@ -69,14 +96,17 @@ class _RocketConfigBottomSheetState extends State<RocketConfigBottomSheet> {
     }
   }
 
-  @override
-  void dispose() {
-    _coinController.dispose();
-    _durationController.dispose();
-    super.dispose();
-  }
-
   Future<void> _sendRocket() async {
+    if (_isAccountLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Your account is locked. You cannot send gifts."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     FocusManager.instance.primaryFocus?.unfocus();
 
     final int coins = _isCustomConfig ? (int.tryParse(_coinController.text.trim()) ?? 10000) : 10000;
@@ -115,6 +145,7 @@ class _RocketConfigBottomSheetState extends State<RocketConfigBottomSheet> {
       await ProfileService.sendRocketGift(
         totalCoins: coins,
         recipientIds: recipients,
+        roomId: widget.roomId,
       );
 
       const rocketAnimationUrl = 'assets/animations/gift_gif_31.svga';
@@ -383,6 +414,33 @@ class _RocketConfigBottomSheetState extends State<RocketConfigBottomSheet> {
               ),
             ),
             const SizedBox(height: 16),
+            if (_isAccountLocked) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.lock, color: Colors.redAccent, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your account is locked. You cannot send gifts.',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (!_isCustomConfig) ...[
               const Text(
                 "Config rocket",

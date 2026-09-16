@@ -19,77 +19,105 @@ class InboxPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // --- Header ---
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
+      backgroundColor: const Color(0xFF091433),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFE62563),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(CupertinoIcons.back, color: Colors.white),
+          onPressed: () => context.pop(),
+        ),
+        title: Text(
+          AppLocalizations.of(context).navInbox,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+      ),
+      body: StreamBuilder<List<ConversationSummary>>(
+        stream: InboxService.getUserChatsStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)));
+          }
+
+          final chats = snapshot.data ?? [];
+
+          if (chats.isEmpty) {
+            return Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F1E42),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, spreadRadius: 2),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      icon: const Icon(CupertinoIcons.back, color: Colors.white),
-                      onPressed: () => context.pop(),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                      ),
+                      child: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 50,
+                        color: Color(0xFFE62563),
+                      ),
                     ),
-                     Text(
-                      AppLocalizations.of(context).navInbox,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                    const SizedBox(height: 20),
+                    Text(
+                      AppLocalizations.of(context).noMessagesYet,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Start a new conversation",
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
+            );
+          }
 
-              // --- Chat List ---
-              Expanded(
-                child: StreamBuilder<List<ConversationSummary>>(
-                  stream: InboxService.getUserChatsStream(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator(color: AppColors.pinkLight));
-                    }
-
-                    final chats = snapshot.data ?? [];
-
-                    if (chats.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                             Icon(Icons.chat_bubble_outline, size: 60, color: Colors.white.withValues(alpha: 0.3)),
-                            const SizedBox(height: 10),
-                            Text(AppLocalizations.of(context).noMessagesYet, style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      itemCount: chats.length,
-                      itemBuilder: (context, index) {
-                        return _InboxTile(summary: chats[index]);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: chats.length,
+            separatorBuilder: (context, index) => Divider(
+              color: Colors.white.withValues(alpha: 0.08),
+              height: 1,
+              indent: 85,
+            ),
+            itemBuilder: (context, index) {
+              return _InboxTile(summary: chats[index]);
+            },
+          );
+        },
       ),
     );
   }
 }
-
-// Add this to your InboxPage file, replacing the existing _InboxTile
 
 class _InboxTile extends StatelessWidget {
   final ConversationSummary summary;
 
   const _InboxTile({required this.summary});
 
-  // Helper to get the display text with icon based on message type
   String _getLastMessageDisplay(BuildContext context) {
     switch (summary.lastMessageType) {
       case MessageType.emoji:
@@ -130,7 +158,7 @@ class _InboxTile extends StatelessWidget {
           onTap: () {
             context.push(Routes.chat.path, extra: {'peerId': summary.peerId, 'peerName': name, 'peerAvatar': photoUrl});
           },
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           leading: SizedBox(
             width: 55,
             height: 55,
@@ -143,19 +171,18 @@ class _InboxTile extends StatelessWidget {
                   height: 55,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.pinkLight.withValues(alpha: 0.5)),
+                    border: Border.all(color: const Color(0xFFE62563).withValues(alpha: 0.5), width: 1.5),
                   ),
                   child: ClipOval(
                     child: photoUrl.isNotEmpty
                         ? CachedNetworkImage(
-                      imageUrl: photoUrl,
-                      fit: BoxFit.cover,
-                      errorWidget: (context, url, error) => const Icon(Icons.person, color: Colors.white),
-                    )
-                        : const Icon(Icons.person, color: Colors.white),
+                            imageUrl: photoUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, url, error) => const Icon(Icons.person, color: Color(0xFF8E8E93)),
+                          )
+                        : const Icon(Icons.person, color: Color(0xFF8E8E93)),
                   ),
                 ),
-                // Overlay the Frame (55 * 1.3 = 71.5)
                 Positioned(
                   width: 71.5,
                   height: 71.5,
@@ -168,7 +195,7 @@ class _InboxTile extends StatelessWidget {
           ),
           title: Text(
             name,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4.0),
@@ -177,16 +204,15 @@ class _InboxTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               text: TextSpan(
                 style: TextStyle(
-                  color: summary.unreadCount > 0 ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                  color: summary.unreadCount > 0 ? Colors.white : Colors.white60,
                   fontWeight: summary.unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                  fontFamily: 'Roboto',
                   fontSize: 14,
                 ),
                 children: [
                   if (isMe)
                     TextSpan(
                       text: "${AppLocalizations.of(context).you}: ",
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontWeight: FontWeight.normal),
+                      style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.normal),
                     ),
                   TextSpan(text: _getLastMessageDisplay(context)),
                 ],
@@ -197,15 +223,18 @@ class _InboxTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(timeString, style: TextStyle(color: AppColors.pinkLight, fontSize: 12)),
+              Text(timeString, style: const TextStyle(color: Color(0xFFE62563), fontSize: 12, fontWeight: FontWeight.w500)),
               const SizedBox(height: 6),
               if (summary.unreadCount > 0)
                 Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE62563),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Text(
                     summary.unreadCount.toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],

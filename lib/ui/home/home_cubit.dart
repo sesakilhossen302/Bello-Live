@@ -150,6 +150,57 @@ class HomeCubit extends Cubit<HomeState> {
 
   // --- Processing Functions ---
 
+  int _compareStreamerRooms({
+    required bool aHasPackage,
+    required bool bHasPackage,
+    required int aPackagePriority,
+    required int bPackagePriority,
+    required int aParticipants,
+    required int bParticipants,
+    required int aSecondary,
+    required int bSecondary,
+  }) {
+    final bool aIsRoyal = aHasPackage && aPackagePriority >= 4;
+    final bool bIsRoyal = bHasPackage && bPackagePriority >= 4;
+
+    // 1. Royal package hosts: ALWAYS at the very top (even with fewer participants)
+    if (aIsRoyal && !bIsRoyal) return -1;
+    if (!aIsRoyal && bIsRoyal) return 1;
+    if (aIsRoyal && bIsRoyal) {
+      // If multiple Royals, sort by participant count descending
+      if (aParticipants != bParticipants) {
+        return bParticipants.compareTo(aParticipants);
+      }
+      return bSecondary.compareTo(aSecondary);
+    }
+
+    // 2. King, Queen, Crown package hosts come next (above general hosts)
+    final bool aIsOtherPackage = aHasPackage && aPackagePriority >= 1;
+    final bool bIsOtherPackage = bHasPackage && bPackagePriority >= 1;
+
+    if (aIsOtherPackage && !bIsOtherPackage) return -1;
+    if (!aIsOtherPackage && bIsOtherPackage) return 1;
+
+    if (aIsOtherPackage && bIsOtherPackage) {
+      // King, Queen, Crown: rank among each other by participant count descending
+      // (e.g. Queen with 50 participants ranks above King with 5 participants)
+      if (aParticipants != bParticipants) {
+        return bParticipants.compareTo(aParticipants);
+      }
+      // If participant count is tied, higher package tier wins (King > Queen > Crown)
+      if (aPackagePriority != bPackagePriority) {
+        return bPackagePriority.compareTo(aPackagePriority);
+      }
+      return bSecondary.compareTo(aSecondary);
+    }
+
+    // 3. General hosts without package: ranked by participant count descending
+    if (aParticipants != bParticipants) {
+      return bParticipants.compareTo(aParticipants);
+    }
+    return bSecondary.compareTo(aSecondary);
+  }
+
   Future<List<StreamerModel>> _processRoomsWithDiamonds(
     DatabaseEvent audioEvent,
     DatabaseEvent liveEvent,
@@ -163,10 +214,32 @@ class HomeCubit extends Cubit<HomeState> {
         final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
         futures.add(() async {
+          final rawCount = roomData['participantCount'];
+          final int participants = (rawCount is num)
+              ? rawCount.toInt()
+              : (int.tryParse(rawCount?.toString() ?? '') ?? 0);
+
           int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          final packageData = await _fetchHostPackageData(roomData['hostId']);
+
+          final int rtdbPriority = (roomData['packagePriority'] as num?)?.toInt() ?? 0;
+          final int finalPriority = packageData.priority > 0 ? packageData.priority : rtdbPriority;
+          final bool finalHasPackage = packageData.hasPackage || (roomData['hasPackage'] == true) || finalPriority > 0;
+          final String? finalBadgeUrl = packageData.badgeUrl ?? roomData['packageBadgeUrl']?.toString();
+
+          roomData['packageBadgeUrl'] = finalBadgeUrl;
+          roomData['hasPackage'] = finalHasPackage;
+          roomData['packagePriority'] = finalPriority;
+          final roles = await _fetchHostRoles(roomData['hostId']);
+          roomData['isHost'] = roles['isHost'];
+          roomData['isAgency'] = roles['isAgency'];
+          roomData['isReseller'] = roles['isReseller'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             diamonds: hostDiamonds,
+            hasPackage: finalHasPackage,
+            packagePriority: finalPriority,
+            participantCount: participants,
           );
         }());
       }
@@ -179,17 +252,48 @@ class HomeCubit extends Cubit<HomeState> {
         final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
         futures.add(() async {
+          final rawCount = roomData['participantCount'];
+          final int participants = (rawCount is num)
+              ? rawCount.toInt()
+              : (int.tryParse(rawCount?.toString() ?? '') ?? 0);
+
           int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          final packageData = await _fetchHostPackageData(roomData['hostId']);
+
+          final int rtdbPriority = (roomData['packagePriority'] as num?)?.toInt() ?? 0;
+          final int finalPriority = packageData.priority > 0 ? packageData.priority : rtdbPriority;
+          final bool finalHasPackage = packageData.hasPackage || (roomData['hasPackage'] == true) || finalPriority > 0;
+          final String? finalBadgeUrl = packageData.badgeUrl ?? roomData['packageBadgeUrl']?.toString();
+
+          roomData['packageBadgeUrl'] = finalBadgeUrl;
+          roomData['hasPackage'] = finalHasPackage;
+          roomData['packagePriority'] = finalPriority;
+          final roles = await _fetchHostRoles(roomData['hostId']);
+          roomData['isHost'] = roles['isHost'];
+          roomData['isAgency'] = roles['isAgency'];
+          roomData['isReseller'] = roles['isReseller'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
             diamonds: hostDiamonds,
+            hasPackage: finalHasPackage,
+            packagePriority: finalPriority,
+            participantCount: participants,
           );
         }());
       }
     }
 
     final results = await Future.wait(futures);
-    results.sort((a, b) => b.diamonds.compareTo(a.diamonds));
+    results.sort((a, b) => _compareStreamerRooms(
+      aHasPackage: a.hasPackage,
+      bHasPackage: b.hasPackage,
+      aPackagePriority: a.packagePriority,
+      bPackagePriority: b.packagePriority,
+      aParticipants: a.participantCount,
+      bParticipants: b.participantCount,
+      aSecondary: a.diamonds,
+      bSecondary: b.diamonds,
+    ));
     return results.map((e) => e.streamer).toList();
   }
 
@@ -204,17 +308,48 @@ class HomeCubit extends Cubit<HomeState> {
         final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
         futures.add(() async {
+          final rawCount = roomData['participantCount'];
+          final int participants = (rawCount is num)
+              ? rawCount.toInt()
+              : (int.tryParse(rawCount?.toString() ?? '') ?? 0);
+
           int hostDiamonds = await _fetchHostDiamonds(roomData['hostId']);
+          final packageData = await _fetchHostPackageData(roomData['hostId']);
+
+          final int rtdbPriority = (roomData['packagePriority'] as num?)?.toInt() ?? 0;
+          final int finalPriority = packageData.priority > 0 ? packageData.priority : rtdbPriority;
+          final bool finalHasPackage = packageData.hasPackage || (roomData['hasPackage'] == true) || finalPriority > 0;
+          final String? finalBadgeUrl = packageData.badgeUrl ?? roomData['packageBadgeUrl']?.toString();
+
+          roomData['packageBadgeUrl'] = finalBadgeUrl;
+          roomData['hasPackage'] = finalHasPackage;
+          roomData['packagePriority'] = finalPriority;
+          final roles = await _fetchHostRoles(roomData['hostId']);
+          roomData['isHost'] = roles['isHost'];
+          roomData['isAgency'] = roles['isAgency'];
+          roomData['isReseller'] = roles['isReseller'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             diamonds: hostDiamonds,
+            hasPackage: finalHasPackage,
+            packagePriority: finalPriority,
+            participantCount: participants,
           );
         }());
       }
     }
 
     final results = await Future.wait(futures);
-    results.sort((a, b) => b.diamonds.compareTo(a.diamonds));
+    results.sort((a, b) => _compareStreamerRooms(
+      aHasPackage: a.hasPackage,
+      bHasPackage: b.hasPackage,
+      aPackagePriority: a.packagePriority,
+      bPackagePriority: b.packagePriority,
+      aParticipants: a.participantCount,
+      bParticipants: b.participantCount,
+      aSecondary: a.diamonds,
+      bSecondary: b.diamonds,
+    ));
     return results.map((e) => e.streamer).toList();
   }
 
@@ -231,10 +366,32 @@ class HomeCubit extends Cubit<HomeState> {
         final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
         futures.add(() async {
+          final rawCount = roomData['participantCount'];
+          final int participants = (rawCount is num)
+              ? rawCount.toInt()
+              : (int.tryParse(rawCount?.toString() ?? '') ?? 0);
+
           int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
+          final packageData = await _fetchHostPackageData(roomData['hostId']);
+
+          final int rtdbPriority = (roomData['packagePriority'] as num?)?.toInt() ?? 0;
+          final int finalPriority = packageData.priority > 0 ? packageData.priority : rtdbPriority;
+          final bool finalHasPackage = packageData.hasPackage || (roomData['hasPackage'] == true) || finalPriority > 0;
+          final String? finalBadgeUrl = packageData.badgeUrl ?? roomData['packageBadgeUrl']?.toString();
+
+          roomData['packageBadgeUrl'] = finalBadgeUrl;
+          roomData['hasPackage'] = finalHasPackage;
+          roomData['packagePriority'] = finalPriority;
+          final roles = await _fetchHostRoles(roomData['hostId']);
+          roomData['isHost'] = roles['isHost'];
+          roomData['isAgency'] = roles['isAgency'];
+          roomData['isReseller'] = roles['isReseller'];
           return _RoomWithTimestamp(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             timestamp: hostCreatedAt,
+            hasPackage: finalHasPackage,
+            packagePriority: finalPriority,
+            participantCount: participants,
           );
         }());
       }
@@ -247,17 +404,48 @@ class HomeCubit extends Cubit<HomeState> {
         final roomId = entry.key.toString();
         final roomData = entry.value as Map<dynamic, dynamic>;
         futures.add(() async {
+          final rawCount = roomData['participantCount'];
+          final int participants = (rawCount is num)
+              ? rawCount.toInt()
+              : (int.tryParse(rawCount?.toString() ?? '') ?? 0);
+
           int hostCreatedAt = await _fetchHostCreatedAt(roomData['hostId']);
+          final packageData = await _fetchHostPackageData(roomData['hostId']);
+
+          final int rtdbPriority = (roomData['packagePriority'] as num?)?.toInt() ?? 0;
+          final int finalPriority = packageData.priority > 0 ? packageData.priority : rtdbPriority;
+          final bool finalHasPackage = packageData.hasPackage || (roomData['hasPackage'] == true) || finalPriority > 0;
+          final String? finalBadgeUrl = packageData.badgeUrl ?? roomData['packageBadgeUrl']?.toString();
+
+          roomData['packageBadgeUrl'] = finalBadgeUrl;
+          roomData['hasPackage'] = finalHasPackage;
+          roomData['packagePriority'] = finalPriority;
+          final roles = await _fetchHostRoles(roomData['hostId']);
+          roomData['isHost'] = roles['isHost'];
+          roomData['isAgency'] = roles['isAgency'];
+          roomData['isReseller'] = roles['isReseller'];
           return _RoomWithTimestamp(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
             timestamp: hostCreatedAt,
+            hasPackage: finalHasPackage,
+            packagePriority: finalPriority,
+            participantCount: participants,
           );
         }());
       }
     }
 
     final results = await Future.wait(futures);
-    results.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    results.sort((a, b) => _compareStreamerRooms(
+      aHasPackage: a.hasPackage,
+      bHasPackage: b.hasPackage,
+      aPackagePriority: a.packagePriority,
+      bPackagePriority: b.packagePriority,
+      aParticipants: a.participantCount,
+      bParticipants: b.participantCount,
+      aSecondary: a.timestamp,
+      bSecondary: b.timestamp,
+    ));
     return results.map((e) => e.streamer).toList();
   }
 
@@ -321,20 +509,169 @@ class HomeCubit extends Cubit<HomeState> {
       name: data['hostName']?.toString() ?? 'Unknown',
       imageUrl: data['hostPicture']?.toString(),
       bio: data['notice']?.toString() ?? '',
-      viewCount: data['participantCount'] ?? 0,
+      viewCount: (data['participantCount'] is num)
+          ? (data['participantCount'] as num).toInt()
+          : (int.tryParse(data['participantCount']?.toString() ?? '') ?? 0),
       isPremium: false,
       isVideo: isVideo,
       isLiveStream: isVideo,
       isLocked: data['isLocked'] == true,
       country: data['hostCountry']?.toString() ?? 'Unknown',
+      packageBadgeUrl: data['packageBadgeUrl']?.toString(), // Pass the fetched url
+      isHost: data['isHost'] == true,
+      isAgency: data['isAgency'] == true,
+      isReseller: data['isReseller'] == true,
+      hasPackage: data['hasPackage'] == true,
+      packagePriority: (data['packagePriority'] as int?) ?? 0,
     );
   }
 
   // --- Caching for host data to improve performance ---
   final Map<String, int> _diamondsCache = {};
   final Map<String, int> _createdAtCache = {};
+  final Map<String, String?> _packageBadgeCache = {};
+  final Map<String, _HostPackageData> _hostPackageDataCache = {};
+  final Map<String, Map<String, bool>> _hostRolesCache = {};
   final Map<String, Future<int>> _diamondsFetchFutures = {};
   final Map<String, Future<int>> _createdAtFetchFutures = {};
+  final Map<String, Future<_HostPackageData>> _hostPackageDataFetchFutures = {};
+  final Map<String, Future<Map<String, bool>>> _hostRolesFetchFutures = {};
+
+  Future<Map<String, bool>> _fetchHostRoles(String? hostId) async {
+    if (hostId == null) return {'isHost': false, 'isAgency': false, 'isReseller': false};
+    if (_hostRolesCache.containsKey(hostId)) return _hostRolesCache[hostId]!;
+
+    if (_hostRolesFetchFutures.containsKey(hostId)) {
+      return await _hostRolesFetchFutures[hostId]!;
+    }
+
+    final Future<Map<String, bool>> future = () async {
+      try {
+        final userDoc = await _firestore.collection('users').doc(hostId).get();
+        if (userDoc.exists) {
+          final data = userDoc.data();
+          if (data != null) {
+            final roles = {
+              'isHost': data['isHost'] == true || data['role'] == 'host',
+              'isAgency': data['isAgency'] == true || data['role'] == 'agency',
+              'isReseller': data['isReseller'] == true || data['role'] == 'reseller',
+            };
+            _hostRolesCache[hostId] = roles;
+            return roles;
+          }
+        }
+      } catch (_) {}
+      final defaultRoles = {'isHost': false, 'isAgency': false, 'isReseller': false};
+      _hostRolesCache[hostId] = defaultRoles;
+      return defaultRoles;
+    }();
+
+    _hostRolesFetchFutures[hostId] = future;
+    final result = await future;
+    _hostRolesFetchFutures.remove(hostId);
+    return result;
+  }
+
+  Future<_HostPackageData> _fetchHostPackageData(String? hostId) async {
+    if (hostId == null) return _HostPackageData.empty;
+    if (_hostPackageDataCache.containsKey(hostId)) return _hostPackageDataCache[hostId]!;
+
+    if (_hostPackageDataFetchFutures.containsKey(hostId)) {
+      return await _hostPackageDataFetchFutures[hostId]!;
+    }
+
+    final Future<_HostPackageData> future = () async {
+      try {
+        final userDoc = await _firestore.collection('users').doc(hostId).get();
+        if (userDoc.exists) {
+          final data = userDoc.data();
+          if (data != null) {
+            final now = DateTime.now();
+            int highestPriority = 0;
+            String? badgeUrl;
+
+            if (data.containsKey('activeAddOns')) {
+              final addOns = data['activeAddOns'] as Map<String, dynamic>;
+              for (var entry in addOns.entries) {
+                final key = entry.key.toLowerCase().trim();
+                final itemData = entry.value as Map<String, dynamic>?;
+                if (itemData != null) {
+                  final expiry = itemData['expiresAt'] as Timestamp?;
+                  if (expiry == null || expiry.toDate().isAfter(now)) {
+                    final itemName = (itemData['name'] ?? itemData['title'] ?? '').toString().toLowerCase();
+                    final itemUrl = (itemData['imageUrl'] ?? itemData['imageURL'] ?? '').toString().toLowerCase();
+                    final fullStr = '$key $itemName $itemUrl';
+
+                    if (fullStr.contains('package') ||
+                        fullStr.contains('royal') ||
+                        fullStr.contains('king') ||
+                        fullStr.contains('queen') ||
+                        fullStr.contains('crown')) {
+                      int p = 1;
+                      if (fullStr.contains('royal')) {
+                        p = 4;
+                      } else if (fullStr.contains('king')) {
+                        p = 3;
+                      } else if (fullStr.contains('queen')) {
+                        p = 2;
+                      } else if (fullStr.contains('crown')) {
+                        p = 1;
+                      }
+
+                      final String? url = (itemData['imageUrl'] ?? itemData['imageURL'])?.toString();
+                      if (p > highestPriority) {
+                        highestPriority = p;
+                        badgeUrl = (url != null && url.isNotEmpty) ? url : badgeUrl;
+                      } else {
+                        badgeUrl ??= url;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            final directPkg = (data['package'] ?? data['activePackage'] ?? data['vip'] ?? '').toString().toLowerCase();
+            if (directPkg.isNotEmpty) {
+              int p = 0;
+              if (directPkg.contains('royal')) {
+                p = 4;
+              } else if (directPkg.contains('king')) {
+                p = 3;
+              } else if (directPkg.contains('queen')) {
+                p = 2;
+              } else if (directPkg.contains('crown')) {
+                p = 1;
+              }
+              if (p > highestPriority) {
+                highestPriority = p;
+              }
+            }
+
+            if (highestPriority > 0) {
+              final pkg = _HostPackageData(
+                hasPackage: true,
+                priority: highestPriority,
+                badgeUrl: badgeUrl,
+              );
+              _hostPackageDataCache[hostId] = pkg;
+              _packageBadgeCache[hostId] = badgeUrl;
+              return pkg;
+            }
+          }
+        }
+      } catch (_) {}
+      _hostPackageDataCache[hostId] = _HostPackageData.empty;
+      _packageBadgeCache[hostId] = null;
+      return _HostPackageData.empty;
+    }();
+
+    _hostPackageDataFetchFutures[hostId] = future;
+    final result = await future;
+    _hostPackageDataFetchFutures.remove(hostId);
+    return result;
+  }
+
 
   Future<int> _fetchHostDiamonds(String? hostId) async {
     if (hostId == null) return 0;
@@ -413,14 +750,48 @@ class HomeCubit extends Cubit<HomeState> {
   }
 }
 
+class _HostPackageData {
+  final bool hasPackage;
+  final int priority;
+  final String? badgeUrl;
+
+  const _HostPackageData({
+    required this.hasPackage,
+    required this.priority,
+    this.badgeUrl,
+  });
+
+  static const empty = _HostPackageData(hasPackage: false, priority: 0, badgeUrl: null);
+}
+
 class _RoomWithDiamonds {
   final StreamerModel streamer;
   final int diamonds;
-  _RoomWithDiamonds({required this.streamer, required this.diamonds});
+  final bool hasPackage;
+  final int packagePriority;
+  final int participantCount;
+
+  _RoomWithDiamonds({
+    required this.streamer,
+    required this.diamonds,
+    this.hasPackage = false,
+    this.packagePriority = 0,
+    required this.participantCount,
+  });
 }
 
 class _RoomWithTimestamp {
   final StreamerModel streamer;
   final int timestamp;
-  _RoomWithTimestamp({required this.streamer, required this.timestamp});
+  final bool hasPackage;
+  final int packagePriority;
+  final int participantCount;
+
+  _RoomWithTimestamp({
+    required this.streamer,
+    required this.timestamp,
+    this.hasPackage = false,
+    this.packagePriority = 0,
+    required this.participantCount,
+  });
 }

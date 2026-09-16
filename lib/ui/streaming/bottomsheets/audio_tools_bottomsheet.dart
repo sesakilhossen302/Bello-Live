@@ -1,42 +1,39 @@
-import 'package:flutter/foundation.dart';
 import 'package:picture_live/ui/streaming/bottomsheets/room_skin.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:picture_live/ui/streaming/bottomsheets/play_music_bottomsheet.dart';
-import 'package:zego_express_engine/zego_express_engine.dart';
+import 'package:picture_live/core/services/livekit_service.dart';
 
 import '../../../data/remote/firebase/room_services.dart';
 import '../../live_streaming/bottomsheets/share_bottomsheet.dart';
 import '../blocked_users_page.dart';
-import 'game_list_bottomsheet.dart';
+
 import 'rocket_config_bottomsheet.dart';
 
 class _ToolItem {
   final String label;
   final IconData icon;
-  final Color iconBgColor;
+  final List<Color> gradientColors;
 
-  _ToolItem({required this.label, required this.icon, required this.iconBgColor});
+  _ToolItem({required this.label, required this.icon, required this.gradientColors});
 }
 
 final List<_ToolItem> _hostTools = [
-  _ToolItem(label: 'Share', icon: Icons.share, iconBgColor: Colors.blue.shade700),
-  _ToolItem(label: 'Inbox', icon: CupertinoIcons.mail_solid, iconBgColor: Colors.red.shade700),
-  _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, iconBgColor: Colors.blue.shade600),
-  _ToolItem(label: 'Rocket', icon: Icons.rocket_launch, iconBgColor: Colors.purple.shade600),
-  _ToolItem(label: 'Room skin', icon: Icons.color_lens_outlined, iconBgColor: Colors.teal.shade600),
-  _ToolItem(label: 'Notice', icon: Icons.campaign_outlined, iconBgColor: Colors.indigo.shade600),
-  _ToolItem(label: 'Play music', icon: Icons.music_note_outlined, iconBgColor: Colors.pink.shade600),
-  _ToolItem(label: 'Games', icon: Icons.games_outlined, iconBgColor: Colors.green.shade700),
-  _ToolItem(label: 'Block', icon: Icons.block, iconBgColor: Colors.grey.shade700),
+  _ToolItem(label: 'Share', icon: Icons.ios_share_rounded, gradientColors: [const Color(0xFF3DA5FE), const Color(0xFF5682FE)]),
+  _ToolItem(label: 'Inbox', icon: CupertinoIcons.envelope_fill, gradientColors: [const Color(0xFFFF5252), const Color(0xFFFF1744)]),
+  _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, gradientColors: [const Color(0xFF00E5FF), const Color(0xFF00B0FF)]),
+  _ToolItem(label: 'Coin Bag', icon: Icons.shopping_bag_rounded, gradientColors: [const Color(0xFFD500F9), const Color(0xFF651FFF)]),
+  _ToolItem(label: 'Room skin', icon: Icons.palette_rounded, gradientColors: [const Color(0xFF1DE9B6), const Color(0xFF00BFA5)]),
+  _ToolItem(label: 'Notice', icon: Icons.campaign_rounded, gradientColors: [const Color(0xFF5A5EF6), const Color(0xFF3D5AFE)]),
+  _ToolItem(label: 'Play music', icon: CupertinoIcons.music_note_2, gradientColors: [const Color(0xFFFF4081), const Color(0xFFF50057)]),
+  _ToolItem(label: 'Block', icon: CupertinoIcons.nosign, gradientColors: [const Color(0xFF9E9E9E), const Color(0xFF616161)]),
 ];
 
 final List<_ToolItem> _guestTools = [
-  _ToolItem(label: 'Share', icon: Icons.share, iconBgColor: Colors.blue.shade700),
-  _ToolItem(label: 'Inbox', icon: CupertinoIcons.mail_solid, iconBgColor: Colors.red.shade700),
-  _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, iconBgColor: Colors.blue.shade600),
-  _ToolItem(label: 'Rocket', icon: Icons.rocket_launch, iconBgColor: Colors.purple.shade600),
-  _ToolItem(label: 'Games', icon: Icons.games_outlined, iconBgColor: Colors.green.shade700),
+  _ToolItem(label: 'Share', icon: Icons.ios_share_rounded, gradientColors: [const Color(0xFF3DA5FE), const Color(0xFF5682FE)]),
+  _ToolItem(label: 'Inbox', icon: CupertinoIcons.envelope_fill, gradientColors: [const Color(0xFFFF5252), const Color(0xFFFF1744)]),
+  _ToolItem(label: 'Speaker', icon: CupertinoIcons.speaker_2_fill, gradientColors: [const Color(0xFF00E5FF), const Color(0xFF00B0FF)]),
+  _ToolItem(label: 'Coin Bag', icon: Icons.shopping_bag_rounded, gradientColors: [const Color(0xFFD500F9), const Color(0xFF651FFF)]),
 ];
 
 class AudioToolsBottomSheet extends StatefulWidget {
@@ -68,7 +65,7 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
   }
 
   Future<void> _loadSpeakerState() async {
-    final isMuted = await ZegoExpressEngine.instance.isSpeakerMuted();
+    final isMuted = LiveKitService.instance.isSpeakerMuted;
     if (mounted) {
       setState(() {
         _isSpeakerMuted = isMuted;
@@ -118,19 +115,14 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                       Navigator.pop(context);
                       showPlayMusicBottomSheet(context, musicManager: widget.musicManager, isHost: widget.isHost);
                     };
-                  } else if (tool.label == 'Games') {
-                    onTapLogic = () {
-                      Navigator.pop(context);
-                      showGamesListBottomSheet(context);
-                    };
                   } else if (tool.label == 'Speaker') {
                     onTapLogic = () async {
                       setState(() {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
-                      await ZegoExpressEngine.instance.muteSpeaker(_isSpeakerMuted);
+                      await LiveKitService.instance.setSpeakerMuted(_isSpeakerMuted);
                     };
-                  } else if (tool.label == 'Rocket') {
+                  } else if (tool.label == 'Coin Bag') {
                     onTapLogic = () {
                       Navigator.pop(context);
                       showRocketConfigBottomSheet(
@@ -179,7 +171,7 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                   return _buildToolButton(
                     icon: displayIcon,
                     label: tool.label,
-                    iconBgColor: tool.iconBgColor,
+                    gradientColors: tool.gradientColors,
                     onTap: onTapLogic,
                   );
                 },
@@ -194,34 +186,47 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
   Widget _buildToolButton({
     required IconData icon,
     required String label,
-    required Color iconBgColor,
+    required List<Color> gradientColors,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-        child: Container(
-          decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(10.5)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: iconBgColor),
-                child: Icon(icon, color: Colors.white, size: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: gradientColors.last.withValues(alpha: 0.4),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -295,15 +300,28 @@ void showAudioToolsBottomSheet(
 }) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF2d1b2b),
+    backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (context) {
-      return AudioToolsBottomSheet(
-        currentRoomId: currentRoomId,
-        isHost: isHost,
-        musicManager: musicManager,
-        hostId: hostId,
-        hostName: hostName,
+      return Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2d1b2b), Color(0xFF1a0a0a)],
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          ),
+        ),
+        child: AudioToolsBottomSheet(
+          currentRoomId: currentRoomId,
+          isHost: isHost,
+          musicManager: musicManager,
+          hostId: hostId,
+          hostName: hostName,
+        ),
       );
     },
   );

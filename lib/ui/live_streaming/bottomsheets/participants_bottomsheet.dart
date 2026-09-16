@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
-import '../../../core/widgets/auto_scroll_text.dart';
+import 'profile_info_bottomsheet.dart';
 import '../live_room_page.dart';
 import '../../../data/remote/firebase/live_streaming_services.dart';
 import '../../../data/remote/firebase/profile_services.dart';
@@ -11,6 +11,7 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
   final String currentUserId;
   final String hostId;
   final String roomId;
+  final bool isCurrentUserModerator;
 
   const LiveStreamParticipantsBottomSheet({
     super.key,
@@ -18,16 +19,18 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
     required this.currentUserId,
     required this.hostId,
     required this.roomId,
+    this.isCurrentUserModerator = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final sortedParticipants = List<LiveStreamParticipant>.from(participants);
+    // Filter out host from participants list
+    final filteredParticipants = participants
+        .where((p) => p.userId != hostId)
+        .toList();
 
-    sortedParticipants.sort((a, b) {
-      if (a.userId == hostId) return -1;
-      if (b.userId == hostId) return 1;
-      return a.userName.compareTo(b.userName);
+    filteredParticipants.sort((a, b) {
+      return a.userName.toLowerCase().compareTo(b.userName.toLowerCase());
     });
 
     return Column(
@@ -35,29 +38,49 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16.0),
           child: Text(
-            'Participants (${participants.length})',
+            'Participants (${filteredParticipants.length})',
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
         const Divider(color: Colors.white24, height: 1),
         Expanded(
-          child: ListView.builder(
-            itemCount: sortedParticipants.length,
-            itemBuilder: (context, index) {
-              final participant = sortedParticipants[index];
-              return _buildParticipantTile(context, participant);
-            },
-          ),
+          child: filteredParticipants.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Text(
+                      'No participants yet',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filteredParticipants.length,
+                  itemBuilder: (context, index) {
+                    final participant = filteredParticipants[index];
+                    return _buildParticipantTile(context, participant);
+                  },
+                ),
         ),
       ],
     );
   }
 
   Widget _buildParticipantTile(BuildContext context, LiveStreamParticipant participant) {
-    final String role = participant.userId == hostId ? 'Host' : 'Guest';
+    const String role = 'Guest';
     final bool isCurrentUser = participant.userId == currentUserId;
 
     return ListTile(
+      onTap: () {
+        Navigator.of(context).pop();
+        showProfileInfoBottomSheet(
+          context,
+          userId: participant.userId,
+          hostId: hostId,
+          roomId: roomId,
+          isCurrentUserAdmin: currentUserId == hostId || isCurrentUserModerator,
+        );
+      },
       leading: SizedBox(
         width: 40,
         height: 40,
@@ -134,7 +157,7 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
                 );
               },
             ),
-          if (currentUserId == hostId && participant.userId != hostId) ...[
+          if ((currentUserId == hostId || isCurrentUserModerator) && participant.userId != hostId) ...[
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white70),
               color: const Color(0xFF2d1b2b),
@@ -148,6 +171,21 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
                   _showBlockOptions(context, participant.userName, participant.userId);
                 } else if (value == 'lock') {
                   await LiveStreamService.lockParticipant(roomId, participant.userId, !participant.isLocked);
+                } else if (value == 'remove_from_call') {
+                  try {
+                    await LiveStreamService.removeUserFromSeat(roomId, participant.userId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${participant.userName} removed from call.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
                 }
               },
               itemBuilder: (context) => [
@@ -173,7 +211,7 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(Icons.person_remove_outlined, color: Colors.orange, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text('Kick', style: TextStyle(color: Colors.white)),
                     ],
                   ),
@@ -183,7 +221,7 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(Icons.block_flipped, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text('Block', style: TextStyle(color: Colors.white)),
                     ],
                   ),
@@ -205,6 +243,17 @@ class LiveStreamParticipantsBottomSheet extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (participant.isOnSeat)
+                  const PopupMenuItem(
+                    value: 'remove_from_call',
+                    child: Row(
+                      children: [
+                        Icon(Icons.call_end_outlined, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 8),
+                        Text('Remove from Call', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ],
@@ -269,6 +318,7 @@ void showLiveStreamParticipantsBottomSheet(
   required String currentUserId,
   required String hostId,
   required String roomId,
+  bool isCurrentUserModerator = false,
 }) {
   showModalBottomSheet(
     context: context,
@@ -282,6 +332,7 @@ void showLiveStreamParticipantsBottomSheet(
           currentUserId: currentUserId,
           hostId: hostId,
           roomId: roomId,
+          isCurrentUserModerator: isCurrentUserModerator,
         ),
       );
     },

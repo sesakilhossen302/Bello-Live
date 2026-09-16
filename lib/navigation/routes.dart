@@ -15,6 +15,7 @@ enum Routes {
   topUp,
   earnings,
   store,
+  packageStore,
   myBag,
   myLevel,
   feedback,
@@ -24,13 +25,14 @@ enum Routes {
   hostPage,
   videoRoom,
   liveStream,
-  greedy,
-  spinner,
-  teenPatti,
-  animalGame,
+
   editProfile,
   applyHosting,
   applyAgency,
+  applyCoinSeller,
+  coinSellerPortal,
+  coinSellerHistory,
+  agencyPortal,
   inbox,
   chat,
   settingsPage,
@@ -41,11 +43,19 @@ enum Routes {
   languageSelection,
   liveNow,
   aboutUs,
+  withdrawPage,
+  hostManagement,
+  resellerHub,
+  rechargeDiamonds,
+  resellerList,
+  notificationNotice,
 }
 
 extension RoutesExtension on Routes {
   String get path {
     switch (this) {
+      case Routes.withdrawPage:
+        return '/withdrawPage';
       case Routes.login:
         return '/login';
       case Routes.register:
@@ -78,6 +88,8 @@ extension RoutesExtension on Routes {
         return '/earnings';
       case Routes.store:
         return '/store';
+      case Routes.packageStore:
+        return '/packageStore';
       case Routes.myBag:
         return '/my-bag';
       case Routes.myLevel:
@@ -96,20 +108,21 @@ extension RoutesExtension on Routes {
         return '/videoRoom';
       case Routes.liveStream:
         return '/liveStream';
-      case Routes.greedy:
-        return '/greedy';
-      case Routes.spinner:
-        return '/spinner';
-      case Routes.teenPatti:
-        return '/teenPatti';
-      case Routes.animalGame:
-        return '/animalGame';
+
       case Routes.editProfile:
         return '/editProfile';
       case Routes.applyHosting:
         return '/applyHosting';
       case Routes.applyAgency:
         return '/applyAgency';
+      case Routes.applyCoinSeller:
+        return '/applyCoinSeller';
+      case Routes.coinSellerPortal:
+        return '/coinSellerPortal';
+      case Routes.coinSellerHistory:
+        return '/coinSellerHistory';
+      case Routes.agencyPortal:
+        return '/agencyPortal';
       case Routes.inbox:
         return '/inbox';
       case Routes.chat:
@@ -130,6 +143,16 @@ extension RoutesExtension on Routes {
         return '/liveNow';
       case Routes.aboutUs:
         return '/aboutUs';
+      case Routes.hostManagement:
+        return '/hostManagement';
+      case Routes.resellerHub:
+        return '/resellerHub';
+      case Routes.rechargeDiamonds:
+        return '/rechargeDiamonds';
+      case Routes.resellerList:
+        return '/resellerList';
+      case Routes.notificationNotice:
+        return '/notificationNotice';
     }
   }
 }

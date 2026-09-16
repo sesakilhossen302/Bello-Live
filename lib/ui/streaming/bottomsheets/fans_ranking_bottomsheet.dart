@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/widgets/active_frame_widget.dart';
 import '../../../data/remote/firebase/profile_services.dart';
-import '../../../core/localization/app_localizations.dart';
-import '../../../theme/app_theme.dart';
 import '../../profile/profile_page.dart'; // For getSentLevel
 
 class FansRankingBottomSheet extends StatefulWidget {
@@ -23,7 +19,7 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
   late TabController _periodController;
   List<LeaderboardUser> _leaderboardData = [];
   bool _isLoading = true;
-  int _totalDiamonds = 0;
+  int _totalCoins = 0;
 
   @override
   void initState() {
@@ -31,7 +27,7 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
     _periodController = TabController(length: 3, vsync: this, initialIndex: 0);
     _periodController.addListener(_handleTabSelection);
     _loadRanking();
-    _loadTotalDiamonds();
+    _loadTotalCoins();
   }
 
   void _handleTabSelection() {
@@ -40,16 +36,19 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
     }
   }
 
-  Future<void> _loadTotalDiamonds() async {
+  Future<void> _loadTotalCoins() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(widget.hostId).get();
       if (doc.exists) {
         setState(() {
-          _totalDiamonds = doc.data()?['diamonds'] ?? 0;
+          final data = doc.data();
+          if (data != null) {
+            _totalCoins = (data['balance'] as num?)?.toInt() ?? 0;
+          }
         });
       }
     } catch (e) {
-      debugPrint('Error loading total diamonds: $e');
+      debugPrint('Error loading total coins: $e');
     }
   }
 
@@ -165,7 +164,7 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
           const Icon(Icons.diamond_outlined, color: Colors.cyan, size: 16),
           const SizedBox(width: 6),
           Text(
-            'Total Received: ${_formatNumber(_totalDiamonds)}',
+            'Total Received: ${_formatNumber(_totalCoins)}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.7),
               fontSize: 14,
@@ -247,9 +246,9 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
 
     Color rankColor = Colors.white54;
     double rankSize = 16.0;
-    if (rank == 1) rankColor = const Color(0xFFFFD700); // Gold
-    else if (rank == 2) rankColor = const Color(0xFFC0C0C0); // Silver
-    else if (rank == 3) rankColor = const Color(0xFFCD7F32); // Bronze
+    if (rank == 1) { rankColor = const Color(0xFFFFD700); } // Gold
+    else if (rank == 2) { rankColor = const Color(0xFFC0C0C0); } // Silver
+    else if (rank == 3) { rankColor = const Color(0xFFCD7F32); } // Bronze
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -365,7 +364,7 @@ class _FansRankingBottomSheetState extends State<FansRankingBottomSheet> with Si
               ),
               const SizedBox(height: 2),
               Text(
-                'Diamonds',
+                'Coins',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.3),
                   fontSize: 10,

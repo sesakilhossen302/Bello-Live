@@ -12,6 +12,7 @@ class ParticipantsBottomSheet extends StatelessWidget {
   final String currentUserId;
   final String hostId;
   final String roomId;
+  final bool isCurrentUserAdmin;
 
   const ParticipantsBottomSheet({
     super.key,
@@ -19,23 +20,27 @@ class ParticipantsBottomSheet extends StatelessWidget {
     required this.currentUserId,
     required this.hostId,
     required this.roomId,
+    this.isCurrentUserAdmin = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Create a mutable copy of the list to sort it.
-    final sortedParticipants = List<RoomParticipant>.from(participants);
+    // Filter out host from participants list
+    final filteredParticipants = participants
+        .where((p) => p.userId != hostId && p.seatNo != 0)
+        .toList();
 
-    // Sort the list based on role priority: Host > Co-host > Speaker > Listener
-    sortedParticipants.sort((a, b) {
+    // Sort the list based on role priority: Co-host > Speaker > Listener
+    filteredParticipants.sort((a, b) {
       int getRoleValue(RoomParticipant p) {
-        if (p.seatNo == 0) return 0; // Host
         if (p.isCoHost) return 1; // Co-host
         if (p.seatNo > 0) return 2; // Speaker
         return 3; // Listener
       }
 
-      return getRoleValue(a).compareTo(getRoleValue(b));
+      final roleCompare = getRoleValue(a).compareTo(getRoleValue(b));
+      if (roleCompare != 0) return roleCompare;
+      return a.userName.toLowerCase().compareTo(b.userName.toLowerCase());
     });
 
     return Column(
@@ -45,21 +50,31 @@ class ParticipantsBottomSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16.0),
           child: AutoScrollText(
             alignment: Alignment.centerLeft,
-            text: 'Participants (${participants.length})',
+            text: 'Participants (${filteredParticipants.length})',
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
         const Divider(color: Colors.white24, height: 1),
         // --- Participants List ---
         Expanded(
-          child: ListView.builder(
-            itemCount: sortedParticipants.length,
-            itemBuilder: (context, index) {
-              final participant = sortedParticipants[index];
-              // Pass context to the tile builder
-              return _buildParticipantTile(context, participant);
-            },
-          ),
+          child: filteredParticipants.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Text(
+                      'No participants yet',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filteredParticipants.length,
+                  itemBuilder: (context, index) {
+                    final participant = filteredParticipants[index];
+                    // Pass context to the tile builder
+                    return _buildParticipantTile(context, participant);
+                  },
+                ),
         ),
       ],
     );
@@ -161,7 +176,7 @@ class ParticipantsBottomSheet extends StatelessWidget {
                 );
               },
             ),
-          if (currentUserId == hostId && participant.userId != hostId) ...[
+          if ((currentUserId == hostId || isCurrentUserAdmin) && participant.userId != hostId && participant.userId != currentUserId) ...[
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white70),
               color: const Color(0xFF2d1b2b),
@@ -252,7 +267,7 @@ class ParticipantsBottomSheet extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(Icons.person_remove_outlined, color: Colors.orange, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text('Kick', style: TextStyle(color: Colors.white)),
                     ],
                   ),
@@ -262,7 +277,7 @@ class ParticipantsBottomSheet extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(Icons.block_flipped, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text('Block', style: TextStyle(color: Colors.white)),
                     ],
                   ),
@@ -342,13 +357,13 @@ class ParticipantsBottomSheet extends StatelessWidget {
   }
 }
 
-/// A top-level function to display the participants bottom sheet.
 void showParticipantsBottomSheet(
   BuildContext context, {
   required List<RoomParticipant> participants,
   required String currentUserId,
   required String hostId,
   required String roomId,
+  bool isCurrentUserAdmin = false,
 }) {
   showModalBottomSheet(
     context: context,
@@ -363,6 +378,7 @@ void showParticipantsBottomSheet(
           participants: participants,
           currentUserId: currentUserId,
           hostId: hostId,
+          isCurrentUserAdmin: isCurrentUserAdmin,
         ),
       );
     },

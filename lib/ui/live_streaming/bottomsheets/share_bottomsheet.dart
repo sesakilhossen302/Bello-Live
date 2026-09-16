@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 // import 'package:flutter/services.dart'; // No longer needed for Clipboard if we strictly use Share.share
 import 'package:share_plus/share_plus.dart'; // REQUIRED: Add 'share_plus' to pubspec.yaml
-import '../../../data/remote/firebase/inbox_service.dart';
+import '../../../data/remote/firebase/inbox_services.dart';
 
 // Helper Enum to ensure consistency
 enum RoomType { audio, video, live }
@@ -15,7 +15,12 @@ class ShareUser {
   final String? photoUrl;
   final String relationship;
 
-  ShareUser({required this.id, required this.name, this.photoUrl, required this.relationship});
+  ShareUser({
+    required this.id,
+    required this.name,
+    this.photoUrl,
+    required this.relationship,
+  });
 }
 
 class ShareBottomSheet extends StatefulWidget {
@@ -23,7 +28,12 @@ class ShareBottomSheet extends StatefulWidget {
   final String hostName;
   final RoomType roomType;
 
-  const ShareBottomSheet({super.key, required this.roomId, required this.hostName, required this.roomType});
+  const ShareBottomSheet({
+    super.key,
+    required this.roomId,
+    required this.hostName,
+    required this.roomType,
+  });
 
   @override
   State<ShareBottomSheet> createState() => _ShareBottomSheetState();
@@ -61,11 +71,23 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
     setState(() => _isLoading = true);
 
     try {
-      final followingSnap = await _firestore.collection('users').doc(uid).collection('following').get();
-      final followersSnap = await _firestore.collection('users').doc(uid).collection('followers').get();
+      final followingSnap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('following')
+          .get();
+      final followersSnap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('followers')
+          .get();
 
-      final Set<String> followingIds = followingSnap.docs.map((doc) => doc.id).toSet();
-      final Set<String> followerIds = followersSnap.docs.map((doc) => doc.id).toSet();
+      final Set<String> followingIds = followingSnap.docs
+          .map((doc) => doc.id)
+          .toSet();
+      final Set<String> followerIds = followersSnap.docs
+          .map((doc) => doc.id)
+          .toSet();
 
       final Set<String> allIdsToFetch = {};
       allIdsToFetch.addAll(followingIds);
@@ -162,11 +184,17 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sent invites to ${_selectedUserIds.length} users!'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text('Sent invites to ${_selectedUserIds.length} users!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
@@ -175,14 +203,15 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
     final String typeStr = widget.roomType.name;
 
     // 1. Generate Link using the new Firebase Hosting site
-    final String link = "https://picture-live-links.web.app/room/${widget.roomId}?type=$typeStr";
+    final String link =
+        "https://picture-live-links.web.app/room/${widget.roomId}?type=$typeStr";
 
     // 2. Create Message with the new app name
-    final String message = "Join my $typeStr room on Picture Live! \n$link";
+    final String message = "Join my $typeStr room on ProLive! \n$link";
 
     // 3. Trigger Native Share Sheet (WhatsApp, Telegram, etc.)
     // ignore: deprecated_member_use
-    Share.share(message, subject: "Join Picture Live Room");
+    Share.share(message, subject: "Join ProLive Room");
   }
 
   @override
@@ -193,7 +222,11 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
           padding: EdgeInsets.symmetric(vertical: 16),
           child: Text(
             "Share Board",
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         const Divider(color: Colors.white24, height: 1),
@@ -215,7 +248,11 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                     decoration: const InputDecoration(
                       hintText: 'Search users...',
                       hintStyle: TextStyle(color: Colors.white54, fontSize: 14),
-                      prefixIcon: Icon(Icons.search, color: Colors.white54, size: 20),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(vertical: 3),
                     ),
@@ -234,10 +271,16 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                   child: DropdownButton<String>(
                     value: _filterMode,
                     dropdownColor: const Color(0xFF2d1b2b),
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white70),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.white70,
+                    ),
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     items: ['All', 'Marked', 'Unmarked'].map((String value) {
-                      return DropdownMenuItem<String>(value: value, child: Text(value));
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
                     }).toList(),
                     onChanged: (newValue) {
                       setState(() {
@@ -257,28 +300,33 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
             children: [
               Text(
                 "${_selectedUserIds.length} Selected",
-                style: const TextStyle(color: Colors.pink, fontWeight: FontWeight.bold, fontSize: 15),
+                style: const TextStyle(
+                  color: Colors.pink,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
               ),
               const Spacer(),
-
-              // --- UPDATED BUTTON: System Share ---
-              // Renamed from Copy to Share, changed icon to share_rounded, kept Yellow color
               IconButton(
-                onPressed: _handleExternalShare,
-                icon: const Icon(Icons.share_rounded, color: Colors.yellow, size: 28),
-                tooltip: 'Share via...',
+                onPressed: null, // Locked
+                icon: const Icon(
+                  Icons.share,
+                  color: Colors.white24, // Disabled look
+                  size: 26,
+                ),
+                tooltip: 'Share Externally (Locked)',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-
               const SizedBox(width: 16),
-
               // --- Internal Share Button ---
               IconButton(
                 onPressed: _selectedUserIds.isEmpty ? null : _handleShare,
                 icon: Icon(
                   Icons.send_rounded,
-                  color: _selectedUserIds.isEmpty ? Colors.grey : Colors.blueAccent,
+                  color: _selectedUserIds.isEmpty
+                      ? Colors.grey
+                      : Colors.blueAccent,
                   size: 28,
                 ),
                 tooltip: 'Send Invite to Selected',
@@ -292,10 +340,15 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
         const Divider(color: Colors.white24, height: 24),
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.pink))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.pink),
+                )
               : _filteredUsers.isEmpty
               ? const Center(
-                  child: Text("No users found", style: TextStyle(color: Colors.white54)),
+                  child: Text(
+                    "No users found",
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 )
               : ListView.builder(
                   itemCount: _filteredUsers.length,
@@ -305,26 +358,48 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
 
                     return ListTile(
                       onTap: () => _toggleSelection(user.id),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       leading: CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.white10,
-                        backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                        child: user.photoUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+                        backgroundImage: user.photoUrl != null
+                            ? NetworkImage(user.photoUrl!)
+                            : null,
+                        child: user.photoUrl == null
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
                       ),
                       title: Text(
                         user.name,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      subtitle: Text(user.relationship, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      subtitle: Text(
+                        user.relationship,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
                       trailing: Checkbox(
                         value: isSelected,
                         activeColor: Colors.pink,
                         checkColor: Colors.white,
-                        side: const BorderSide(color: Colors.white54, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        side: const BorderSide(
+                          color: Colors.white54,
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                         onChanged: (val) => _toggleSelection(user.id),
                       ),
                     );
@@ -337,15 +412,26 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
 }
 
 // Updated Helper Function
-void showShareBottomSheet(BuildContext context, String roomId, String hostName, RoomType roomType) {
+void showShareBottomSheet(
+  BuildContext context,
+  String roomId,
+  String hostName,
+  RoomType roomType,
+) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: const Color(0xFF2d1b2b),
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
     builder: (context) => FractionallySizedBox(
       heightFactor: 0.85,
-      child: ShareBottomSheet(roomId: roomId, hostName: hostName, roomType: roomType),
+      child: ShareBottomSheet(
+        roomId: roomId,
+        hostName: hostName,
+        roomType: roomType,
+      ),
     ),
   );
 }

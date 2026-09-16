@@ -1,15 +1,12 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/cubits/app_cubit.dart';
-import '../../core/widgets/active_frame_widget.dart';
 import '../../navigation/routes.dart';
 import '../../navigation/my_router.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/room_services.dart';
-import 'package:zego_uikit/zego_uikit.dart';
+import '../../core/services/livekit_service.dart';
 
 class FloatingMinimizedRoom extends StatefulWidget {
   const FloatingMinimizedRoom({super.key});
@@ -124,17 +121,19 @@ class _FloatingMinimizedRoomState extends State<FloatingMinimizedRoom>
                       onTap: () {
                         // End room logic
                         if (data.isAudioRoom) {
-                          RoomService.leaveRoom(data.roomId);
+                          if (data.isHost) {
+                            RoomService.deleteRoom(data.roomId);
+                          } else {
+                            RoomService.leaveRoom(data.roomId);
+                          }
                         } else {
-                          LiveStreamService.deleteRoom(data.roomId);
+                          if (data.isHost) {
+                            LiveStreamService.deleteRoom(data.roomId);
+                          } else {
+                            LiveStreamService.leaveRoom(data.roomId);
+                          }
                         }
-                        ZegoUIKit().leaveRoom();
-                        ZegoUIKit().logout();
-                        Future.delayed(const Duration(milliseconds: 500), () {
-                          try {
-                            ZegoUIKit().uninit();
-                          } catch (_) {}
-                        });
+                        LiveKitService.instance.disconnect();
                         context.read<AppCubit>().closeMinimizedRoom();
                       },
                       child: Container(

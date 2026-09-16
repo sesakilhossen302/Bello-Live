@@ -110,7 +110,7 @@ class AssetsService {
             final data = doc.data() as Map<String, dynamic>;
             return data['subCategory'] as String? ?? data['subcategory'] as String? ?? '';
           })
-          .where((subCat) => subCat.isNotEmpty && subCat != 'Lucky' && subCat.toLowerCase() != 'uncategorized' && subCat.toLowerCase() != 'gift')
+          .where((subCat) => subCat.isNotEmpty && subCat.toLowerCase() != 'gift')
           .toSet()
           .toList();
       return subCategories;

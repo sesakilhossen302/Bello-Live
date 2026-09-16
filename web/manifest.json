@@ -1,11 +1,11 @@
 {
-    "name": "cute_live",
-    "short_name": "cute_live",
+    "name": "SB Live",
+    "short_name": "SB Live",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "App for PICTURE LIVE",
+    "description": "App for SB Live",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

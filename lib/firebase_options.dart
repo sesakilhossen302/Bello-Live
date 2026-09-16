@@ -40,12 +40,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDM5vWelkq7zeIeg6x2vGrqQlDwJkTeVXY',
-    appId: '1:893744414245:android:2a8ba41fc77f5212d1c9cc',
-    messagingSenderId: '893744414245',
-    projectId: 'mplive-e556c',
-    databaseURL: 'https://mplive-e556c-default-rtdb.firebaseio.com',
-    storageBucket: 'mplive-e556c.firebasestorage.app',
+    apiKey: 'AIzaSyCYOOxG92sQMHOF8uc0zFwSdYuj-f1vSe8',
+    appId: '1:237642997621:android:32a189e92d8a3b815ebd3c',
+    messagingSenderId: '237642997621',
+    projectId: 'sblivebd',
+    storageBucket: 'sblivebd.firebasestorage.app',
   );
 }
 

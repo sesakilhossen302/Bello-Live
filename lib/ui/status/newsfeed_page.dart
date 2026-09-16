@@ -240,107 +240,129 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildAppBar(),
-              _buildTabBar(),
-              const SizedBox(height: 10),
-
-              // New Input Area wrapped in a Container to manage layout
-              _buildPostInputArea(),
-
-              const SizedBox(height: 10),
-              Expanded(
-                child: _isLoadingInitial
-                    ? const Center(child: CircularProgressIndicator(color: Colors.pink))
-                    : RefreshIndicator(
-                  onRefresh: _loadInitialPosts,
-                  color: Colors.pink,
-                  child: _posts.isEmpty
-                      ? Center(
-                    child: Text(AppLocalizations.of(context).noPostsYet, style: const TextStyle(color: Colors.white54)),
-                  )
-                      : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: _posts.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _posts.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Center(child: CircularProgressIndicator(color: Colors.pink)),
-                        );
-                      }
-                      return PostCard(
-                        post: _posts[index],
-                        onPostChanged: _loadInitialPosts,
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-    );
-  }
-
-  // --- UI COMPONENTS ---
-
-  Widget _buildAppBar() {
-    return Container(
-      color: AppColors.barColor,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: const Color(0xFF091433),
+      appBar: _buildAppBar(),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            icon: const Icon(CupertinoIcons.back, size: 28, color: Colors.white),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          Text(
-            AppLocalizations.of(context).status,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person_outline, size: 28, color: Colors.white),
-            onPressed: () => context.push(Routes.myFeed.path),
+          _buildTabBar(),
+          const SizedBox(height: 6),
+          _buildPostInputArea(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _isLoadingInitial
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                : RefreshIndicator(
+                    onRefresh: _loadInitialPosts,
+                    color: const Color(0xFFE62563),
+                    child: _posts.isEmpty
+                        ? Center(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 40),
+                              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F1E42),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, spreadRadius: 2),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                                    ),
+                                    child: const Icon(
+                                      Icons.article_outlined,
+                                      size: 50,
+                                      color: Color(0xFFE62563),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    AppLocalizations.of(context).noPostsYet,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            itemCount: _posts.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == _posts.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Center(child: CircularProgressIndicator(color: Color(0xFFE62563))),
+                                );
+                              }
+                              return PostCard(
+                                post: _posts[index],
+                                onPostChanged: _loadInitialPosts,
+                              );
+                            },
+                          ),
+                  ),
           ),
         ],
       ),
     );
   }
 
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: const Color(0xFFE62563),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(CupertinoIcons.back, color: Colors.white),
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+      title: Text(
+        AppLocalizations.of(context).status,
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.person_outline_rounded, size: 26, color: Colors.white),
+          onPressed: () => context.push(Routes.myFeed.path),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTabBar() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
-        color: AppColors.white.withValues(alpha: 0.1),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Row(
-            children: [
-              _buildTabItem(AppLocalizations.of(context).hot, 0, Icons.whatshot),
-              _buildTabItem(AppLocalizations.of(context).newTab, 1, Icons.fiber_new),
-              _buildTabItem(AppLocalizations.of(context).followed, 2, Icons.favorite),
-            ],
-          ),
-        ),
+      color: const Color(0xFF091433),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+      child: Row(
+        children: [
+          _buildTabItem(AppLocalizations.of(context).hot, 0, Icons.whatshot_rounded),
+          const SizedBox(width: 8),
+          _buildTabItem(AppLocalizations.of(context).newTab, 1, Icons.fiber_new_rounded),
+          const SizedBox(width: 8),
+          _buildTabItem(AppLocalizations.of(context).followed, 2, Icons.favorite_rounded),
+        ],
       ),
     );
   }
 
   Widget _buildTabItem(String title, int index, IconData icon) {
     bool isSelected = selectedTabIndex == index;
+    const primaryColor = Color(0xFFE62563);
+
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -351,23 +373,35 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
           _loadInitialPosts();
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.all(2),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: isSelected ? LinearGradient(colors: [AppColors.pinkLight, AppColors.pinkDark]) : null,
+            color: isSelected ? primaryColor : Colors.white.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: isSelected ? primaryColor : Colors.white.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              if (isSelected)
+                BoxShadow(
+                  color: primaryColor.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6), size: 18),
+              Icon(icon, color: Colors.white, size: 16),
               const SizedBox(width: 6),
               Text(
                 title,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
               ),
             ],
@@ -383,137 +417,133 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Container(
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(25),
-          color: AppColors.white.withValues(alpha: 0.1),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFF0F1E42),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Column(
-              children: [
-                // Text Input and Buttons
-                TextField(
-                  controller: _postController,
-                  style: const TextStyle(color: Colors.white),
-                  maxLines: null, // Allows expanding if text gets long
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                    hintText: AppLocalizations.of(context).whatsOnYourMind,
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundImage: currentAvatar.isNotEmpty ? NetworkImage(currentAvatar) : null,
-                        child: currentAvatar.isEmpty ? const Icon(Icons.person, size: 20) : null,
-                      ),
-                    ),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Attachment Button
-                        IconButton(
-                          icon: const Icon(Icons.photo_library_outlined, color: Colors.white70),
-                          onPressed: _isUploadingPost ? null : _showMediaOptions,
-                        ),
-                        // Send Button
-                        _isUploadingPost
-                            ? const Padding(
-                          padding: EdgeInsets.only(right: 16.0, left: 8.0),
-                          child: SizedBox(
-                              width: 20, height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.pink)
-                          ),
-                        )
-                            : IconButton(
-                          icon: Icon(Icons.send, color: Colors.pink.shade300),
-                          onPressed: _handleCreatePost,
-                        ),
-                      ],
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            TextField(
+              controller: _postController,
+              style: const TextStyle(color: Colors.white),
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).whatsOnYourMind,
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundImage: currentAvatar.isNotEmpty ? NetworkImage(currentAvatar) : null,
+                    child: currentAvatar.isEmpty ? const Icon(Icons.person, size: 18) : null,
                   ),
                 ),
-
-                // Media Preview Area
-                if (_selectedMedia != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-                    child: Stack(
-                      children: [
-                        // Preview
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: _selectedMediaType == PostMediaType.image
-                              ? Image.file(
-                            _selectedMedia!,
-                            height: 150,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.collections, color: Color(0xFFE62563)),
+                      onPressed: () => _handleImagePick(ImageSource.gallery),
+                    ),
+                    _isUploadingPost
+                        ? const Padding(
+                            padding: EdgeInsets.all(12.0),
+                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE62563))),
                           )
-                              : Container(
-                            height: 150,
-                            width: double.infinity,
-                            color: Colors.black.withValues(alpha: 0.5),
-                            child: const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.videocam, color: Colors.white, size: 40),
-                                  SizedBox(height: 8),
-                                  Text('Video Selected', style: TextStyle(color: Colors.white)),
-                                ],
+                        : IconButton(
+                            icon: const Icon(Icons.send_rounded, color: Color(0xFFE62563)),
+                            onPressed: _handleCreatePost,
+                          ),
+                  ],
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              ),
+            ),
+
+            // Media Preview Area
+            if (_selectedMedia != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                child: Stack(
+                  children: [
+                    // Preview
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _selectedMediaType == PostMediaType.image
+                          ? Image.file(
+                              _selectedMedia!,
+                              height: 150,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              height: 150,
+                              width: double.infinity,
+                              color: Colors.black.withValues(alpha: 0.5),
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.videocam, color: Colors.white, size: 40),
+                                    SizedBox(height: 8),
+                                    Text('Video Selected', style: TextStyle(color: Colors.white)),
+                                  ],
+                                ),
                               ),
                             ),
+                    ),
+
+                    // Remove Media Button
+                    if (!_isUploadingPost)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedMedia = null;
+                              _selectedMediaType = PostMediaType.text;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close, color: Colors.white, size: 20),
                           ),
                         ),
+                      ),
 
-                        // Remove Media Button
-                        if (!_isUploadingPost)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedMedia = null;
-                                  _selectedMediaType = PostMediaType.text;
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 20),
-                              ),
-                            ),
+                    // Upload Overlay
+                    if (_isUploadingPost)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-
-                        // Upload Overlay
-                        if (_isUploadingPost)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Center(
-                                child: Text(AppLocalizations.of(context).uploadingMedia, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
+                          child: Center(
+                            child: Text(AppLocalizations.of(context).uploadingMedia, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

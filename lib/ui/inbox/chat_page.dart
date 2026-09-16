@@ -366,17 +366,15 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(context),
-              Expanded(child: _buildMessagesList()),
-              if (_isUploadingMedia) _buildUploadingIndicator(),
-              _isRecordingVoice ? _buildVoiceRecorder() : _buildInputArea(),
-            ],
-          ),
+      backgroundColor: const Color(0xFFF7F8F9),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(context),
+            Expanded(child: _buildMessagesList()),
+            if (_isUploadingMedia) _buildUploadingIndicator(),
+            _isRecordingVoice ? _buildVoiceRecorder() : _buildInputArea(),
+          ],
         ),
       ),
     );
@@ -471,7 +469,7 @@ class _ChatPageState extends State<ChatPage> {
   Widget _buildAppBar(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Colors.black.withValues(alpha: 0.2),
+      color: const Color(0xFFE62563),
       child: Row(
         children: [
           IconButton(
@@ -480,7 +478,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 36, // radius 18 * 2
+            width: 36,
             height: 36,
             child: Stack(
               clipBehavior: Clip.none,
@@ -488,11 +486,10 @@ class _ChatPageState extends State<ChatPage> {
               children: [
                 CircleAvatar(
                   backgroundImage: widget.peerAvatar.isNotEmpty ? CachedNetworkImageProvider(widget.peerAvatar) : null,
-                  backgroundColor: Colors.grey.shade800,
+                  backgroundColor: Colors.white24,
                   radius: 18,
-                  child: widget.peerAvatar.isEmpty ? const Icon(Icons.person) : null,
+                  child: widget.peerAvatar.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
                 ),
-                // Overlay the Frame (36 * 1.3 = 46.8)
                 Positioned(
                   width: 46.8,
                   height: 46.8,
@@ -504,7 +501,7 @@ class _ChatPageState extends State<ChatPage> {
           const SizedBox(width: 12),
           Text(
             widget.peerName,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -516,8 +513,6 @@ class _ChatPageState extends State<ChatPage> {
     final time = DateFormat('h:mm a').format(DateTime.fromMillisecondsSinceEpoch(msg.timestamp));
     final bool showAvatar = isLastInGroup;
 
-    // Check if the message is a media type (Emoji, Image, or Video)
-    // These types will not have the standard chat bubble background/padding.
     final bool isMediaMessage =
         msg.type == MessageType.emoji || msg.type == MessageType.image || msg.type == MessageType.video;
 
@@ -530,7 +525,7 @@ class _ChatPageState extends State<ChatPage> {
           if (!isMe) ...[
             if (showAvatar)
               SizedBox(
-                width: 28, // radius 14 * 2
+                width: 28,
                 height: 28,
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -538,15 +533,14 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     CircleAvatar(
                       radius: 14,
-                      backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                      backgroundColor: Colors.grey.shade300,
                       backgroundImage: widget.peerAvatar.isNotEmpty
                           ? CachedNetworkImageProvider(widget.peerAvatar)
                           : null,
                       child: widget.peerAvatar.isEmpty
-                          ? const Icon(Icons.person, size: 14, color: Colors.white54)
+                          ? const Icon(Icons.person, size: 14, color: Colors.white)
                           : null,
                     ),
-                    // Overlay the Frame (28 * 1.3 = 36.4)
                     Positioned(
                       width: 36.4,
                       height: 36.4,
@@ -562,35 +556,44 @@ class _ChatPageState extends State<ChatPage> {
           Flexible(
             child: Container(
               constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-              // Conditional Decoration: If it's media, remove the bubble background.
               decoration: isMediaMessage
                   ? null
                   : BoxDecoration(
-                      color: isMe ? AppColors.pink600 : Colors.white.withValues(alpha: 0.1),
+                      color: isMe ? const Color(0xFF0084FF) : const Color(0xFFE4E6EB),
                       borderRadius: _getBorderRadius(isMe, isFirstInGroup, isLastInGroup),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
-              // Conditional Padding: If it's media, remove the bubble padding.
               padding: isMediaMessage ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Column(
                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  // Message content based on type
                   _buildMessageContent(msg, isMe),
 
-                  // Add a little spacing between media and timestamp if it's media
                   if (isMediaMessage) const SizedBox(height: 4),
 
-                  // Timestamp row
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(time, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10)),
+                      Text(
+                        time,
+                        style: TextStyle(
+                          color: isMe ? Colors.white.withValues(alpha: 0.75) : const Color(0xFF65676B),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       if (isMe) ...[
                         const SizedBox(width: 4),
                         Icon(
                           Icons.done_all,
                           size: 14,
-                          color: msg.isRead ? Colors.blueAccent : Colors.white.withValues(alpha: 0.6),
+                          color: msg.isRead ? Colors.lightBlueAccent : Colors.white70,
                         ),
                       ],
                     ],
@@ -603,7 +606,7 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(width: 8),
             if (showAvatar)
               SizedBox(
-                width: 28, // radius 14 * 2
+                width: 28,
                 height: 28,
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -611,15 +614,14 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     CircleAvatar(
                       radius: 14,
-                      backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                      backgroundColor: Colors.grey.shade300,
                       backgroundImage: currentUserAvatar.isNotEmpty
                           ? CachedNetworkImageProvider(currentUserAvatar)
                           : null,
                       child: currentUserAvatar.isEmpty
-                          ? const Icon(Icons.person, size: 14, color: Colors.white54)
+                          ? const Icon(Icons.person, size: 14, color: Colors.white)
                           : null,
                     ),
-                    // Overlay the Frame (28 * 1.3 = 36.4)
                     Positioned(
                       width: 36.4,
                       height: 36.4,
@@ -636,7 +638,6 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  // --- UPDATED MESSAGE CONTENT SWITCH ---
   Widget _buildMessageContent(ChatMessage msg, bool isMe) {
     switch (msg.type) {
       case MessageType.image:
@@ -649,23 +650,28 @@ class _ChatPageState extends State<ChatPage> {
         return VoiceMessageBubble(audioUrl: msg.mediaUrl!, duration: msg.mediaDuration ?? 0, isMe: isMe);
 
       case MessageType.emoji:
-        // Asset path: assets/emojis/filename.webp
         return Padding(
           padding: const EdgeInsets.only(bottom: 4.0),
           child: Image.asset(
             'assets/emojis/${msg.mediaUrl}',
-            width: 100, // Reasonable size for stickers
+            width: 100,
             height: 100,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.broken_image, color: Colors.white54, size: 40);
+              return const Icon(Icons.broken_image, color: Colors.grey, size: 40);
             },
           ),
         );
 
       case MessageType.text:
-      default:
-        return Text(msg.text, style: const TextStyle(color: Colors.white, fontSize: 15));
+        return Text(
+          msg.text,
+          style: TextStyle(
+            color: isMe ? Colors.white : const Color(0xFF050505),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        );
     }
   }
 
@@ -689,71 +695,62 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  // --- UPDATED INPUT AREA WITH EMOJI BUTTON ---
   Widget _buildInputArea() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      color: Colors.black.withValues(alpha: 0.3), // Main background
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.08))),
+      ),
       child: Row(
         children: [
-          // 1. Attach Button
           IconButton(
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.only(right: 12),
-            icon: const Icon(Icons.attach_file, color: Colors.white70),
+            icon: const Icon(Icons.attach_file, color: Color(0xFF8E8E93)),
             onPressed: _showMediaOptions,
           ),
-
-          // 2. Emoji Button
           IconButton(
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.only(right: 12),
-            icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.white70),
+            icon: const Icon(Icons.emoji_emotions_outlined, color: Color(0xFF8E8E93)),
             onPressed: _showEmojiPicker,
           ),
-
-          // 3. Mic Button (Outside the capsule)
           IconButton(
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.only(right: 8),
-            icon: const Icon(Icons.mic, color: Colors.white70),
+            icon: const Icon(Icons.mic, color: Color(0xFF8E8E93)),
             onPressed: () {
               setState(() => _isRecordingVoice = true);
             },
           ),
-
-          // 4. Text Field (Inside Capsule)
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1), // Lighter background for capsule
-                borderRadius: BorderRadius.circular(24), // Rounded corners
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)), // Optional subtle border
+                color: const Color(0xFFEFEFF4),
+                borderRadius: BorderRadius.circular(24),
               ),
               child: TextField(
                 controller: _textController,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 15),
                 decoration: const InputDecoration(
                   hintText: "Type a message...",
-                  hintStyle: TextStyle(color: Colors.white54),
+                  hintStyle: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                   border: InputBorder.none,
                   isDense: true,
-                  // Reduces default height
-                  contentPadding: EdgeInsets.symmetric(vertical: 10), // Vertically center text
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
                 ),
               ),
             ),
           ),
-
-          // 5. Send Button
           const SizedBox(width: 8),
           GestureDetector(
             onTap: _handleSend,
             child: Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppColors.pinkLight, shape: BoxShape.circle),
-              child: const Icon(Icons.send, color: Colors.white, size: 20),
+              decoration: const BoxDecoration(color: Color(0xFFE62563), shape: BoxShape.circle),
+              child: const Icon(Icons.send, color: Colors.white, size: 18),
             ),
           ),
         ],

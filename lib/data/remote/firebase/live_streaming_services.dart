@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import '../../../ui/live_streaming/bottomsheets/invite_pk_bottomsheet.dart';
+import 'profile_services.dart';
+import 'global_gift_banner_service.dart';
 
 /// Optimized Service class for managing live streaming rooms using flattened Firebase RTDB
 class LiveStreamService {
@@ -57,8 +59,9 @@ class LiveStreamService {
     final roomId = roomRef.key!;
 
     final userDoc = await _usersCollection.doc(user.uid).get();
-    if (!userDoc.exists)
+    if (!userDoc.exists) {
       throw Exception("User profile not found. Cannot create room.");
+    }
 
     final userData = userDoc.data() as Map<String, dynamic>;
     final String hostName = userData['displayName'] ?? 'Anonymous';
@@ -66,6 +69,70 @@ class LiveStreamService {
     final String displayId = userData['displayId'] ?? '';
 
     final String hostCountry = userData['country'] ?? 'Unknown';
+
+    // Check if host has Royal, King, Queen, Crown package and active Room Screen / Skin
+    int packagePriority = 0;
+    String? packageBadgeUrl;
+    String? roomBackgroundUrl;
+
+    if (userData.containsKey('activeAddOns')) {
+      final addOns = userData['activeAddOns'] as Map<String, dynamic>? ?? {};
+      final now = DateTime.now();
+      for (var entry in addOns.entries) {
+        final key = entry.key.toLowerCase().trim();
+        final itemData = entry.value as Map<String, dynamic>?;
+        if (itemData != null) {
+          final expiry = itemData['expiresAt'] as Timestamp?;
+          final isNotExpired = expiry == null || expiry.toDate().isAfter(now);
+          if (isNotExpired) {
+            final itemName = (itemData['name'] ?? itemData['title'] ?? '').toString().toLowerCase();
+            final itemUrl = (itemData['imageUrl'] ?? itemData['imageURL'] ?? '').toString().toLowerCase();
+            final fullStr = '$key $itemName $itemUrl';
+
+            // Package Priority check
+            if (fullStr.contains('package') ||
+                fullStr.contains('royal') ||
+                fullStr.contains('king') ||
+                fullStr.contains('queen') ||
+                fullStr.contains('crown')) {
+              int p = 1;
+              if (fullStr.contains('royal')) {
+                p = 4;
+              } else if (fullStr.contains('king')) {
+                p = 3;
+              } else if (fullStr.contains('queen')) {
+                p = 2;
+              } else if (fullStr.contains('crown')) {
+                p = 1;
+              }
+
+              final String? url = (itemData['imageUrl'] ?? itemData['imageURL'])?.toString();
+              if (p > packagePriority) {
+                packagePriority = p;
+                packageBadgeUrl = (url != null && url.isNotEmpty) ? url : packageBadgeUrl;
+              } else {
+                packageBadgeUrl ??= url;
+              }
+            }
+
+            // Room Screen / Skin check
+            if (key.contains('screen') || key.contains('skin')) {
+              final url = itemData['imageUrl'] as String?;
+              if (url != null && url.isNotEmpty) {
+                roomBackgroundUrl = url;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (roomBackgroundUrl == null || roomBackgroundUrl.isEmpty) {
+      final prefSkin = userData['preferredRoomSkin'] as String?;
+      if (prefSkin != null && prefSkin.isNotEmpty) {
+        roomBackgroundUrl = prefSkin;
+      }
+    }
 
     // 1. Static Room Data
     await roomRef.set({
@@ -81,6 +148,11 @@ class LiveStreamService {
       'password': null,
       'notice': '',
       'lastActive': ServerValue.timestamp,
+      'hasPackage': packagePriority > 0,
+      'packagePriority': packagePriority,
+      'packageBadgeUrl': packageBadgeUrl,
+      'backgroundUrl': roomBackgroundUrl,
+      'backgroundUpdatedAt': ServerValue.timestamp,
     });
 
     // 2. Flattened Participant Data
@@ -99,6 +171,10 @@ class LiveStreamService {
     });
 
     await _setupPresence(roomId, user.uid, isHost: true);
+    
+    // Set host offline on socket disconnect instead of deleting the entire room immediately
+    await participantRef.child('isOnline').onDisconnect().set(false);
+    
     _setupParticipantCountSync(roomId);
 
     return roomId;
@@ -217,6 +293,22 @@ class LiveStreamService {
     }
   }
 
+  static Future<void> setRoomMusic(String roomId, String? videoId) async {
+    try {
+      if (videoId == null) {
+        await _roomsRef.child(roomId).child('currentMusicVideoId').remove();
+      } else {
+        await _roomsRef.child(roomId).update({'currentMusicVideoId': videoId});
+      }
+    } catch (e) {
+      debugPrint('Error setting room music: $e');
+    }
+  }
+
+  static Stream<DatabaseEvent> getRoomMusicStream(String roomId) {
+    return _roomsRef.child('$roomId/currentMusicVideoId').onValue;
+  }
+
   // ============================================================================
   // PARTICIPANT MANAGEMENT
   // ============================================================================
@@ -251,6 +343,15 @@ class LiveStreamService {
       userPicture =
           userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
       final gender = userData['gender'];
+      final bool isModerator = ProfileService.checkIsModerator(userData);
+
+      if (isModerator) {
+        // Moderator Stealth / Ghost Mode:
+        // Do NOT register as participant in RTDB!
+        // Ensure no lingering participant entry exists.
+        await participantRef.remove();
+        return;
+      }
 
       final participantSnapshot = await participantRef.get();
       if (!participantSnapshot.exists) {
@@ -265,6 +366,7 @@ class LiveStreamService {
           'isMuted': false,
           'isCameraOn': false,
           'isOnSeat': false,
+          'isModerator': false,
         });
       }
 
@@ -274,9 +376,19 @@ class LiveStreamService {
 
   static Future<void> leaveRoom(String roomId) async {
     final user = _auth.currentUser!;
-    final participantRef = _participantsRef.child('$roomId/${user.uid}');
 
     try {
+      final roomSnapshot = await _roomsRef.child(roomId).get();
+      if (roomSnapshot.exists) {
+        final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
+        if (roomData['hostId'] == user.uid) {
+          // If the host is leaving, delete the entire room
+          await deleteRoom(roomId);
+          return;
+        }
+      }
+
+      final participantRef = _participantsRef.child('$roomId/${user.uid}');
       await participantRef.onDisconnect().cancel();
       await participantRef.remove();
       await _requestsRef.child('$roomId/join_requests/${user.uid}').remove();
@@ -301,7 +413,9 @@ class LiveStreamService {
           }
           final participants = event.snapshot.value;
           if (participants is Map) {
-            final actualCount = participants.length;
+            final actualCount = participants.values
+                .where((p) => p is Map && p['isModerator'] != true && p['isStealth'] != true)
+                .length;
             final countSnapshot = await _roomsRef
                 .child('$roomId/participantCount')
                 .get();
@@ -433,6 +547,14 @@ class LiveStreamService {
     });
   }
 
+  static Future<void> removeUserFromSeat(String roomId, String targetUserId) async {
+    await _participantsRef.child('$roomId/$targetUserId').update({
+      'isOnSeat': false,
+      'isMuted': false,
+      'isCameraOn': false,
+    });
+  }
+
   static Future<void> toggleMuteState(String roomId, bool newMuteState) async {
     final user = _auth.currentUser!;
     await _participantsRef.child('$roomId/${user.uid}').update({
@@ -461,6 +583,8 @@ class LiveStreamService {
   }
 
   static Future<void> kickParticipant(String roomId, String userId) async {
+    final isMod = await ProfileService.isUserModerator(userId);
+    if (isMod) return;
     await _participantsRef.child('$roomId/$userId').remove();
     await _requestsRef.child('$roomId/join_requests/$userId').remove();
   }
@@ -470,6 +594,8 @@ class LiveStreamService {
     String userId, {
     Duration? duration,
   }) async {
+    final isMod = await ProfileService.isUserModerator(userId);
+    if (isMod) return;
     await kickParticipant(roomId, userId);
     final expiry = duration != null
         ? DateTime.now().add(duration).millisecondsSinceEpoch
@@ -553,19 +679,46 @@ class LiveStreamService {
           .length;
     }
 
-    if (seatedCount >= 4) throw Exception("The call seats are full.");
+    if (seatedCount >= 8) throw Exception("The call seats are full.");
 
     final participantRef = _participantsRef.child('$roomId/$userId');
     await participantRef.update({
       'isOnSeat': true,
       'isMuted': false,
-      'isCameraOn': true,
+      'isCameraOn': false,
     });
     await requestRef.remove();
   }
 
   static Future<void> rejectJoinRequest(String roomId, String requestId) async {
     await _requestsRef.child('$roomId/join_requests/$requestId').remove();
+  }
+
+  /// Directly joins the call seat without requiring host approval (for King / Royal package VIPs).
+  static Future<void> joinCallImmediately(String roomId) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("User not logged in.");
+
+    int seatedCount = 0;
+    final participantsSnapshot = await _participantsRef.child(roomId).get();
+    if (participantsSnapshot.exists && participantsSnapshot.value is Map) {
+      final participants = participantsSnapshot.value as Map<dynamic, dynamic>;
+      seatedCount = participants.values
+          .where((p) => p is Map && p['isOnSeat'] == true)
+          .length;
+    }
+
+    if (seatedCount >= 8) throw Exception("The call seats are full.");
+
+    final participantRef = _participantsRef.child('$roomId/${user.uid}');
+    await participantRef.update({
+      'isOnSeat': true,
+      'isMuted': false,
+      'isCameraOn': false,
+    });
+
+    // Remove any pending join request if exists
+    await _requestsRef.child('$roomId/join_requests/${user.uid}').remove();
   }
 
   // ============================================================================
@@ -582,8 +735,9 @@ class LiveStreamService {
         .child('$roomId/${user.uid}')
         .get();
 
-    if (!participantSnapshot.exists)
+    if (!participantSnapshot.exists) {
       throw Exception("You must join the room first.");
+    }
 
     final userDoc = await _usersCollection.doc(user.uid).get();
     String userName =
@@ -619,12 +773,15 @@ class LiveStreamService {
         .child('$roomId/${user.uid}')
         .get();
 
-    if (!participantSnapshot.exists)
+    if (!participantSnapshot.exists) {
       throw Exception('You must join the room first.');
+    }
 
     final participantData = participantSnapshot.value as Map<dynamic, dynamic>;
-    String userName = participantData['userName'] ?? 'User';
-    String? userPicture = participantData['userPicture'];
+    String userName = (participantData['userName'] != null && participantData['userName'].toString().isNotEmpty)
+        ? participantData['userName'].toString()
+        : (user.displayName != null && user.displayName!.isNotEmpty ? user.displayName! : 'User');
+    String? userPicture = participantData['userPicture'] ?? user.photoURL;
 
     // OVERWRITE instead of push
     await _eventsRef.child('$roomId/latest_gift').set({
@@ -642,6 +799,19 @@ class LiveStreamService {
       'person': person,
       'timestamp': ServerValue.timestamp,
     });
+
+    // Broadcast global gift banner to show everywhere across the app
+    GlobalGiftBannerService.broadcastGift(
+      senderId: user.uid,
+      senderName: userName,
+      senderPicture: userPicture,
+      receiverName: receiverName ?? 'Host',
+      receiverId: receiverId,
+      giftValue: giftValue,
+      giftImageUrl: giftImageUrl,
+      roomId: roomId,
+      roomType: 'liveStream',
+    );
   }
 
   static Stream<DatabaseEvent> getGiftStream(String roomId) =>
@@ -713,8 +883,9 @@ class LiveStreamService {
           (receiverRoomSnapshot.value as Map)['pkState']
               as Map<dynamic, dynamic>? ??
           {'isPK': false};
-      if (pkState['isPK'] == true)
+      if (pkState['isPK'] == true) {
         throw Exception("User is already in a PK battle.");
+      }
     }
 
     final inviteRef = _requestsRef.child(
@@ -819,14 +990,16 @@ class LiveStreamService {
   ) async {
     final user = _auth.currentUser!;
     final senderRoomSnapshot = await _roomsRef.child(senderRoomId).get();
-    if (!senderRoomSnapshot.exists)
+    if (!senderRoomSnapshot.exists) {
       throw Exception('Your room does not exist.');
+    }
 
     final senderRoomData = senderRoomSnapshot.value as Map<dynamic, dynamic>;
     final pkState =
         senderRoomData['pkState'] as Map<dynamic, dynamic>? ?? {'isPK': false};
-    if (pkState['isPK'] == true)
+    if (pkState['isPK'] == true) {
       throw Exception('You are already in a PK battle.');
+    }
 
     final inviteRef = _globalRandomPKRef.push();
     await inviteRef.set({
@@ -889,22 +1062,25 @@ class LiveStreamService {
     final user = _auth.currentUser!;
     final senderRoomSnapshot = await _roomsRef.child(invite.senderRoomId).get();
 
-    if (!senderRoomSnapshot.exists)
+    if (!senderRoomSnapshot.exists) {
       throw Exception('Sender room no longer exists.');
+    }
     final senderPkState =
         (senderRoomSnapshot.value as Map)['pkState']
             as Map<dynamic, dynamic>? ??
         {'isPK': false};
-    if (senderPkState['isPK'] == true)
+    if (senderPkState['isPK'] == true) {
       throw Exception('PK already started with someone else.');
+    }
 
     final myRoomSnapshot = await _roomsRef.child(roomId).get();
     if (myRoomSnapshot.exists) {
       final myPkState =
           (myRoomSnapshot.value as Map)['pkState'] as Map<dynamic, dynamic>? ??
           {'isPK': false};
-      if (myPkState['isPK'] == true)
+      if (myPkState['isPK'] == true) {
         throw Exception('You are already in a PK battle.');
+      }
     }
 
     await _globalRandomPKRef.child(invite.id).remove();
@@ -934,6 +1110,23 @@ class LiveStreamService {
       'opponentHostPicture': receiverPicture,
       'pkEndTime': pkEndTime.millisecondsSinceEpoch,
       'role': 'sender',
+    });
+  }
+
+  static Future<void> updateRoomBackground(
+    String roomId,
+    String backgroundUrl,
+  ) async {
+    await _roomsRef.child(roomId).update({
+      'backgroundUrl': backgroundUrl,
+      'backgroundUpdatedAt': ServerValue.timestamp,
+    });
+  }
+
+  static Future<void> toggleRoomLock(String roomId, bool isLocked) async {
+    await _roomsRef.child(roomId).update({
+      'isLocked': isLocked,
+      if (!isLocked) 'password': null,
     });
   }
 }

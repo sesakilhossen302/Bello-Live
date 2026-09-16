@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 // This must be a top-level function outside of any class
 @pragma('vm:entry-point')
@@ -70,5 +73,56 @@ class NotificationService {
 
   static Future<String?> getFCMToken() async {
     return await _messaging.getToken();
+  }
+
+  static Future<void> sendTopicNotification({
+    required String topic,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final configDoc = await FirebaseFirestore.instance
+          .collection('system_metadata')
+          .doc('fcm_config')
+          .get();
+
+      if (!configDoc.exists) {
+        debugPrint("FCM config not found in Firestore. Please add system_metadata/fcm_config with 'serverKey'.");
+        return;
+      }
+
+      final serverKey = configDoc.data()?['serverKey'] as String?;
+      if (serverKey == null || serverKey.isEmpty) {
+        debugPrint("FCM Server Key is empty in Firestore.");
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'key=$serverKey',
+        },
+        body: jsonEncode({
+          'to': '/topics/$topic',
+          'notification': {
+            'title': title,
+            'body': body,
+            'sound': 'default',
+          },
+          'data': data ?? {},
+          'priority': 'high',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint("Notification sent successfully to topic: $topic");
+      } else {
+        debugPrint("Failed to send topic notification: ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("Error sending topic notification: $e");
+    }
   }
 }

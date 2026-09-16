@@ -253,6 +253,23 @@ class InboxService {
     }
   }
 
+  // Send Room Invite
+  static Future<void> sendRoomInvite({
+    required List<String> receiverIds,
+    required String roomId,
+    required String roomHostName,
+  }) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final String link = "https://flowlive-dafb4.web.app/room/$roomId?type=audio";
+    final String text = "Join my room on Friends Live! \n$link";
+
+    for (String peerId in receiverIds) {
+      await sendMessage(peerId, text);
+    }
+  }
+
   // Helper to update inboxes
   static Future<void> _updateInboxes(
     String currentUserId,

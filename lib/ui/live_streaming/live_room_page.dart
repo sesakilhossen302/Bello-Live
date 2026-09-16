@@ -1,22 +1,23 @@
-import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:zego_uikit/zego_uikit.dart';
-import 'package:zego_express_engine/zego_express_engine.dart';
+import 'package:flutter_svga/flutter_svga.dart';
+import 'package:picture_live/core/services/livekit_service.dart';
 import 'package:collection/collection.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/cubits/app_cubit.dart';
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
-import '../../core/utils/view_count.dart';
-import '../../core/widgets/GiftImageWidget.dart';
+import '../../core/widgets/gift_image_widget.dart'; // For MyImageWidget
+import '../../core/widgets/GiftImageWidget.dart'; // For GiftImageWidget
+import 'widgets/floating_youtube_player.dart';
 import '../../core/widgets/auto_scroll_text.dart';
-import '../../data/remote/firebase/app_services.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
@@ -24,7 +25,6 @@ import '../profile/profile_page.dart';
 import '../streaming/audio_room_page.dart';
 import 'bottomsheets/invite_pk_bottomsheet.dart';
 import 'bottomsheets/profile_info_bottomsheet.dart';
-import 'bottomsheets/emoji_bottomsheet.dart';
 import 'bottomsheets/live_tools_bottomsheet.dart';
 import 'bottomsheets/participants_bottomsheet.dart';
 import 'bottomsheets/requests_bottomsheet.dart';
@@ -32,6 +32,7 @@ import 'bottomsheets/requests_bottomsheet.dart';
 import '../../ui/streaming/bottomsheets/play_music_bottomsheet.dart';
 import 'bottomsheets/video_gifts_bottomsheet.dart';
 import '../../ui/streaming/bottomsheets/fans_ranking_bottomsheet.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 // --- MODELS ---
 class LiveStreamParticipant {
@@ -43,6 +44,7 @@ class LiveStreamParticipant {
   final bool isOnSeat;
   final bool isLocked;
   final String? gender;
+  final bool isModerator;
 
   LiveStreamParticipant({
     required this.userId,
@@ -53,6 +55,7 @@ class LiveStreamParticipant {
     required this.isOnSeat,
     this.isLocked = false,
     this.gender,
+    this.isModerator = false,
   });
 
   factory LiveStreamParticipant.fromRTDB(
@@ -68,6 +71,7 @@ class LiveStreamParticipant {
       isOnSeat: data['isOnSeat'] ?? false,
       isLocked: data['isLocked'] ?? false,
       gender: data['gender'],
+      isModerator: data['isModerator'] == true || data['isStealth'] == true,
     );
   }
 }
@@ -149,6 +153,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   final ScrollController _chatScrollController = ScrollController();
   final FocusNode _chatFocusNode = FocusNode();
   bool _isChatExpanded = false;
+  bool _isCommentsHidden = false;
 
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -167,6 +172,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   // Cache to store user levels to avoid redundant Firestore reads while scrolling
   final Map<String, int> _userLevelCache = {};
+  final Map<String, String> _userPictureCache = {};
 
   int _lastProcessedGiftTime = 0;
 
@@ -174,20 +180,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   late Map<String, dynamic> roomData;
   List<LiveStreamParticipant> _participants = [];
   final List<ChatMessage> _messages = [];
+  final List<FloatingEmoji> _floatingEmojis = [];
   List<JoinRequest> _joinRequests = [];
   List<PKInvite> _pendingInvites = [];
   int _participantCount = 0;
   bool _isInitialized = false;
   bool _isDiamondLocked = false;
   late bool _isJoined;
+  bool? _localMuteOverride;
   bool _roomDoesNotExist = false;
   String _currentUserName = "Me";
   final Set<String> _dialogsShownForInviteIds = {};
   String _roomNotice = "";
-  final ZegoVoiceChangerPreset _currentVoicePreset =
-      ZegoVoiceChangerPreset.None;
-  final bool _isSpeakerOn = true;
   bool _isRoomEnded = false;
+  bool _isCurrentModerator = false;
 
   // --- Join Animation Variables ---
   final Duration welcomeTime = const Duration(milliseconds: 3500);
@@ -225,6 +231,48 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   Timer? durationTimer;
   final ValueNotifier<Duration> _currentDuration = ValueNotifier(Duration.zero);
 
+  // --- Package Badge Cache ---
+  final Map<String, String?> _packageBadgeCache = {};
+  final Map<String, Future<String?>> _packageBadgeFetchFutures = {};
+
+  Future<String?> _fetchPackageBadgeUrl(String userId) async {
+    if (_packageBadgeCache.containsKey(userId)) return _packageBadgeCache[userId];
+    if (_packageBadgeFetchFutures.containsKey(userId)) {
+      return await _packageBadgeFetchFutures[userId];
+    }
+    final Future<String?> future = () async {
+      try {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          final data = userDoc.data();
+          if (data != null && data.containsKey('activeAddOns')) {
+            final addOns = data['activeAddOns'] as Map<String, dynamic>;
+            final now = DateTime.now();
+            for (var entry in addOns.entries) {
+              if (entry.key.toLowerCase().contains('package')) {
+                final itemData = entry.value as Map<String, dynamic>?;
+                if (itemData != null) {
+                   final expiry = itemData['expiresAt'] as Timestamp?;
+                   if (expiry == null || expiry.toDate().isAfter(now)) {
+                      final url = itemData['imageUrl'] as String?;
+                      _packageBadgeCache[userId] = url;
+                      return url;
+                   }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+      _packageBadgeCache[userId] = null;
+      return null;
+    }();
+    _packageBadgeFetchFutures[userId] = future;
+    final result = await future;
+    _packageBadgeFetchFutures.remove(userId);
+    return result;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -261,6 +309,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _chatFocusNode.addListener(_updateChatExpansion);
     _chatController.addListener(_updateChatExpansion);
 
+    WakelockPlus.enable();
     _initialize();
 
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -319,7 +368,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
           String opponentHostId = _pkState['opponentHostId'] ?? '';
           if (opponentHostId.isNotEmpty) {
-            ZegoUIKit().stopPlayAnotherRoomAudioVideo(opponentHostId);
+            LiveKitService.instance.disconnectOpponentPKRoom();
           }
         }
         LiveStreamService.deleteRoom(widget.roomID);
@@ -328,14 +377,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           LiveStreamService.leaveRoom(widget.roomID);
         }
       }
-      ZegoUIKit().leaveRoom();
-      ZegoUIKit().logout();
-      Future.delayed(const Duration(milliseconds: 500), () {
-        try {
-          ZegoUIKit().uninit();
-        } catch (_) {}
-      });
+      LiveKitService.instance.disconnect();
     }
+    WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
@@ -364,7 +408,32 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
 
       roomData = Map<String, dynamic>.from(roomSnapshot.value as Map);
-      _musicPlayerManager.initialize();
+
+      final currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        _isCurrentModerator = await ProfileService.isUserModerator(currentUser.uid);
+      }
+
+      final bool isLocked = roomData['isLocked'] ?? false;
+      if (isLocked && !widget.isHost && !_isCurrentModerator) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Room is lock',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          context.pop();
+        }
+        return;
+      }
+
+      _musicPlayerManager.initialize(widget.roomID);
       await _finishInitialization();
     } catch (e) {
       debugPrint('Error initializing live stream: $e');
@@ -395,14 +464,6 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Future<void> _finishInitialization() async {
-    await ZegoUIKit().init(
-      appID: await AppServices.getZegoAppId(),
-      appSign: await AppServices.getZegoAppSign(),
-      scenario: ZegoScenario.Default,
-    );
-
-    ZegoUIKit().updateVideoViewMode(true);
-
     final currentUser = _auth.currentUser!;
     try {
       final userDoc = await ProfileService.getUserProfile(currentUser.uid);
@@ -423,23 +484,67 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       });
     }
 
-    ZegoUIKit().login(currentUser.uid, _currentUserName);
-    await ZegoUIKit().joinRoom(widget.roomID);
-
-    ZegoUIKit().turnMicrophoneOn(widget.isHost);
-    ZegoUIKit().turnCameraOn(widget.isHost);
-    ZegoUIKit().setAudioOutputToSpeaker(true);
+    await LiveKitService.instance.connectRoom(
+      roomName: widget.roomID,
+      userId: currentUser.uid,
+      userName: _currentUserName,
+      role: widget.isHost ? 'HOST' : 'PARTICIPANT',
+      isVideo: true,
+      isHost: widget.isHost,
+    );
 
     if (widget.isHost) {
       await LiveStreamService.toggleCameraState(widget.roomID, true);
     } else {
-      if (!widget.isHost) {
-        await LiveStreamService.joinRoom(widget.roomID);
+      await LiveStreamService.joinRoom(widget.roomID);
+      if (!_isCurrentModerator) {
         _sendJoinMessage();
       }
     }
 
     _setupListeners();
+
+    if (widget.isHost) {
+      try {
+        final currentBg = roomData['backgroundUrl'] as String?;
+        if (currentBg == null || currentBg.isEmpty) {
+          final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+          if (userDoc.exists) {
+            final uData = userDoc.data() as Map<String, dynamic>;
+            String? activeBg;
+            if (uData.containsKey('activeAddOns')) {
+              final addOns = uData['activeAddOns'] as Map<String, dynamic>? ?? {};
+              final now = DateTime.now();
+              for (var entry in addOns.entries) {
+                final cat = entry.key.toLowerCase().trim();
+                if (cat.contains('screen') || cat.contains('skin')) {
+                  final itemData = entry.value as Map<String, dynamic>?;
+                  if (itemData != null) {
+                    final expiry = itemData['expiresAt'] as Timestamp?;
+                    if (expiry == null || expiry.toDate().isAfter(now)) {
+                      final url = itemData['imageUrl'] as String?;
+                      if (url != null && url.isNotEmpty) {
+                        activeBg = url;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            if (activeBg == null || activeBg.isEmpty) {
+              activeBg = uData['preferredRoomSkin'] as String?;
+            }
+            if (activeBg != null && activeBg.isNotEmpty) {
+              await LiveStreamService.updateRoomBackground(widget.roomID, activeBg);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Error syncing room screen on live room init: $e");
+      }
+    }
+
     setState(() => _isInitialized = true);
   }
 
@@ -475,18 +580,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       LiveStreamService.demoteAllParticipantsToViewers(widget.roomID, hostId);
     }
 
-    if (widget.isHost && newPKState['role'] == 'sender') {
-      String opponentRoomId = newPKState['opponentRoomId'] ?? '';
-      String opponentHostId = newPKState['opponentHostId'] ?? '';
-      if (opponentRoomId.isNotEmpty && opponentHostId.isNotEmpty) {
-        debugPrint(
-          "Sender is starting to play opponent's stream: $opponentHostId",
-        );
-        ZegoUIKit().startPlayAnotherRoomAudioVideo(
-          opponentRoomId,
-          opponentHostId,
-        );
-      }
+    // Everyone (hosts and viewers) must pull the opponent's stream to see them
+    String opponentRoomId = newPKState['opponentRoomId'] ?? '';
+    String opponentHostId = newPKState['opponentHostId'] ?? '';
+    if (opponentRoomId.isNotEmpty && opponentHostId.isNotEmpty) {
+      debugPrint(
+        "Starting to play opponent's stream: $opponentHostId from room $opponentRoomId",
+      );
+      LiveKitService.instance.connectOpponentPKRoom(
+        opponentRoomId: opponentRoomId,
+        opponentHostId: opponentHostId,
+      );
     }
 
     final dynamic pkEndTimeValue = newPKState['pkEndTime'];
@@ -721,12 +825,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           }
         } else if (!isNowInPK && _isPKMode) {
           debugPrint("PK Mode ENDING");
-          if (widget.isHost) {
-            String opponentHostId = _pkState['opponentHostId'] ?? '';
-            if (opponentHostId.isNotEmpty) {
-              ZegoUIKit().stopPlayAnotherRoomAudioVideo(opponentHostId);
-            }
-          }
+          
+          LiveKitService.instance.disconnectOpponentPKRoom();
+          
           _opponentParticipantsSubscription?.cancel();
           _pkTimer?.cancel();
 
@@ -738,30 +839,36 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           });
         }
       } else {
-        if (mounted && !widget.isHost) {
+        if (mounted) {
           _handleRoomEnded();
-        } else if (mounted && widget.isHost) {
-          context.pop();
         }
       }
     });
 
-    _messageSubscription = ZegoUIKit().getInRoomMessageStream().listen((
-      message,
-    ) {
+    _messageSubscription = LiveKitService.instance.chatMessagesStream.listen((message) {
       if (mounted) {
         setState(() {
           _messages.insert(
             0,
             ChatMessage(
-              username: message.user.name,
+              userId: message.userId,
+              username: message.userName,
               message: message.message,
-              timestamp: DateTime.now(),
-              userId: message.user.id,
+              timestamp: message.timestamp,
             ),
           );
-          _scrollToNewestMessage();
         });
+        _scrollToNewestMessage();
+      }
+    });
+
+    LiveKitService.instance.dataMessagesStream.listen((data) {
+      if (!mounted) return;
+      if (data['type'] == 'emoji') {
+        final emoji = data['emoji'] as String? ?? '';
+        if (emoji.isNotEmpty) {
+          _showFloatingEmoji(emoji, senderName: data['userName'] as String?);
+        }
       }
     });
 
@@ -793,7 +900,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 .where(
                   (p) =>
                       !oldParticipantIds.contains(p.userId) &&
-                      p.userId != hostId,
+                      p.userId != hostId &&
+                      !p.isModerator,
                 )
                 .toList();
 
@@ -818,7 +926,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
           );
 
-          if (myParticipant.userId.isEmpty && !widget.isHost) {
+          // Only treat as kicked if the user was PREVIOUSLY confirmed in _participants
+          final bool wasAlreadyInRoom = _participants.any((p) => p.userId == currentUser.uid);
+
+          if (wasAlreadyInRoom && myParticipant.userId.isEmpty && !widget.isHost && !_isCurrentModerator) {
             // We were kicked!
             if (mounted) {
               _handleKicked();
@@ -826,14 +937,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             return;
           }
 
-          // Handle remote mute/unmute
+          // Handle remote mute/unmute and camera off when demoted or seat changes
           if (myParticipant.userId.isNotEmpty && _participants.isNotEmpty) {
             final oldMe = _participants.firstWhere(
               (p) => p.userId == currentUser.uid,
               orElse: () => myParticipant,
             );
             if (myParticipant.isMuted != oldMe.isMuted) {
-              ZegoUIKit().turnMicrophoneOn(!myParticipant.isMuted);
+              LiveKitService.instance.setMicrophoneEnabled(!myParticipant.isMuted);
+            }
+            if (!myParticipant.isCameraOn && oldMe.isCameraOn) {
+              LiveKitService.instance.setCameraEnabled(false);
             }
           }
 
@@ -841,21 +955,27 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
           if (isNowJoined && !_isJoined) {
             debugPrint("Join request approved! Starting local audio stream.");
-            ZegoUIKit().turnMicrophoneOn(true);
+            LiveKitService.instance.setMicrophoneEnabled(true);
+          } else if (!isNowJoined && _isJoined) {
+            debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
+            LiveKitService.instance.setMicrophoneEnabled(false);
+            LiveKitService.instance.setCameraEnabled(false);
           }
 
           if (mounted) {
             setState(() {
               _participants = newParticipants;
               _isJoined = isNowJoined;
+              _localMuteOverride = null;
             });
           }
         });
 
     _emojiSubscription = LiveStreamService.getEmojiStream(widget.roomID).listen(
       (event) {
-        if (!mounted || !event.snapshot.exists || event.snapshot.value == null)
+        if (!mounted || !event.snapshot.exists || event.snapshot.value == null) {
           return;
+        }
 
         if (event.snapshot.value is! Map) return;
         final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
@@ -874,8 +994,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     );
 
     LiveStreamService.getGiftStream(widget.roomID).listen((event) {
-      if (!mounted || !event.snapshot.exists || event.snapshot.value == null)
+      if (!mounted || !event.snapshot.exists || event.snapshot.value == null) {
         return;
+      }
 
       if (event.snapshot.value is! Map) return;
       final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
@@ -1037,50 +1158,29 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    ZegoUIKit().leaveRoom();
-    ZegoUIKit().logout();
+    LiveKitService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
       _isInitialized = false;
     });
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2d1b2b),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Live Ended',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'The host has ended the live stream.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (mounted) context.pop();
-            },
-            child: const Text(
-              'OK',
-              style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('The room has been closed by admin.'),
+        backgroundColor: Colors.redAccent,
+        duration: Duration(seconds: 4),
       ),
     );
+
+    context.go(Routes.home.path);
   }
 
   void _handleKicked() {
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    ZegoUIKit().leaveRoom();
-    ZegoUIKit().logout();
+    LiveKitService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
@@ -1216,9 +1316,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         widget.roomID,
                         invite,
                       );
-                      ZegoUIKit().startPlayAnotherRoomAudioVideo(
-                        invite.senderRoomId,
-                        invite.senderHostId,
+                      LiveKitService.instance.connectOpponentPKRoom(
+                        opponentRoomId: invite.senderRoomId,
+                        opponentHostId: invite.senderHostId,
                       );
                     } catch (e) {
                       if (mounted) {
@@ -1290,9 +1390,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               Navigator.of(context).pop();
 
               LiveStreamService.acceptPKInvite(widget.roomID, invite);
-              ZegoUIKit().startPlayAnotherRoomAudioVideo(
-                invite.senderRoomId,
-                invite.senderHostId,
+              LiveKitService.instance.connectOpponentPKRoom(
+                opponentRoomId: invite.senderRoomId,
+                opponentHostId: invite.senderHostId,
               );
             },
             child: const Text('Accept', style: TextStyle(color: Colors.white)),
@@ -1356,10 +1456,26 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     return true;
   }
 
-  void _scrollToNewestMessage() {
+  void _scrollToNewestMessage({bool animated = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_chatScrollController.hasClients) {
-        _chatScrollController.jumpTo(0.0);
+        try {
+          if (animated &&
+              _chatScrollController.position.hasPixels &&
+              _chatScrollController.offset > 0.0) {
+            _chatScrollController.animateTo(
+              0.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutQuad,
+            );
+          } else {
+            _chatScrollController.jumpTo(0.0);
+          }
+        } catch (_) {
+          if (_chatScrollController.hasClients) {
+            _chatScrollController.jumpTo(0.0);
+          }
+        }
       }
     });
   }
@@ -1476,6 +1592,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     Navigator.of(context).pop(true);
                   },
                 ),
+                if (_isCurrentModerator) ...[
+                  const SizedBox(height: 24),
+                  _buildExitDialogOption(
+                    icon: Icons.cancel_presentation_rounded,
+                    color: Colors.red.shade900,
+                    label: 'Close Live',
+                    onTap: () {
+                      Navigator.of(context).pop(false);
+                      _showModeratorCloseDialog();
+                    },
+                  ),
+                ],
                 const SizedBox(height: 24),
                 _buildExitDialogOption(
                   icon: Icons.close,
@@ -1532,6 +1660,62 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         ],
       ),
     );
+  }
+
+  Future<void> _showModeratorCloseDialog() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text('Close Live Stream', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          'As a moderator, are you sure you want to force close this live stream? The broadcast will be terminated for all participants and viewers.',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Close Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await LiveStreamService.deleteRoom(widget.roomID);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Live stream closed by moderator.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          context.go(Routes.home.path);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error closing live: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -1639,10 +1823,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                                   ],
                                 ),
                               ),
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  color: Colors.pink,
-                                ),
+                              child: Stack(
+                                children: [
+                                  if (roomData['backgroundUrl'] != null &&
+                                      (roomData['backgroundUrl'] as String).isNotEmpty)
+                                    Positioned.fill(
+                                      child: CachedNetworkImage(
+                                        imageUrl: roomData['backgroundUrl'] as String,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => const SizedBox.shrink(),
+                                        errorWidget: (context, url, error) => const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Colors.pink,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                     ),
@@ -1659,6 +1857,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   Center(child: _buildJoinAnimationOverlay()),
                   _buildFullScreenGift(),
                   _buildGiftOverlay(),
+
+                  if (_isInitialized && !_isChatExpanded) _buildEmojiColumnOverlay(),
+                  if (_isInitialized) _buildFloatingEmojis(),
+                  if (_isInitialized) FloatingYoutubePlayer(roomId: widget.roomID, isHost: widget.isHost),
                 ],
               ),
             ),
@@ -1682,6 +1884,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 child: _buildChatSection(),
               ),
               _buildJoinCallOverlay(),
+              if (_isCommentsHidden) _buildShowCommentsButton(),
             ],
           ),
         ),
@@ -1703,6 +1906,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 child: _buildChatSection(),
               ),
               _buildJoinCallOverlay(),
+              if (_isCommentsHidden) _buildShowCommentsButton(),
             ],
           ),
         ),
@@ -1720,9 +1924,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     // ADD THIS: Check if the current user is a guest (not the host)
     final bool isGuest = !widget.isHost && hostId != currentUserId;
 
-    // Filter out the host to get the list of guests
+    // Filter out the host and moderators to get the list of visible guests
     final guestParticipants = _participants
-        .where((p) => p.userId != hostId)
+        .where((p) => p.userId != hostId && !p.isModerator)
         .toList();
 
     return Padding(
@@ -1845,8 +2049,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                             StreamBuilder<bool>(
                               stream: ProfileService.isFollowing(hostId),
                               builder: (context, snapshot) {
-                                if (!snapshot.hasData)
+                                if (!snapshot.hasData) {
                                   return const SizedBox.shrink();
+                                }
                                 final bool isFollowing = snapshot.data ?? false;
                                 if (isFollowing) return const SizedBox.shrink();
 
@@ -1919,10 +2124,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               onTap: () {
                 showLiveStreamParticipantsBottomSheet(
                   context,
-                  participants: _participants,
+                  participants: _participants.where((p) => !p.isModerator && p.userId != hostId).toList(),
                   currentUserId: _auth.currentUser!.uid,
-                  hostId: roomData['hostId'],
+                  hostId: hostId,
                   roomId: widget.roomID,
+                  isCurrentUserModerator: _isCurrentModerator,
                 );
               },
               child: Container(
@@ -1944,7 +2150,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _participantCount.toString(),
+                      (guestParticipants.isNotEmpty
+                              ? guestParticipants.length
+                              : (_participantCount > 1 ? _participantCount - 1 : 0))
+                          .toString(),
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.white,
@@ -1956,6 +2165,21 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
             const SizedBox(width: 6),
+
+            if (_isCurrentModerator) ...[
+              IconButton(
+                icon: const Icon(
+                  Icons.cancel_presentation_rounded,
+                  size: 24,
+                  color: Colors.redAccent,
+                ),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+                onPressed: _showModeratorCloseDialog,
+                tooltip: 'Close Live (Moderator)',
+              ),
+              const SizedBox(width: 4),
+            ],
 
             // Exit Button - FIXED AT RIGHT
             IconButton(
@@ -2070,9 +2294,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   children: [
                     _buildStatChip(
                       Icons.diamond_outlined,
-                      formatViewCount(dailyDiamonds),
+                      '$dailyDiamonds',
                       Colors.cyan.shade300,
                     ),
+                    if (dailyDiamonds >= 100000) ...[
+                      const SizedBox(width: 4),
+                      const Icon(Icons.star, color: Colors.amber, size: 14),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${dailyDiamonds ~/ 100000}',
+                        style: const TextStyle(
+                          color: Colors.amber,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -2098,6 +2335,49 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
           ),
+          if (widget.isHost) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () async {
+                final bool isCurrentlyLocked = roomData['isLocked'] == true;
+                final bool newLockState = !isCurrentlyLocked;
+
+                try {
+                  await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
+                  if (mounted) {
+                    setState(() {
+                      roomData['isLocked'] = newLockState;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(newLockState ? 'Room is locked!' : 'Room is unlocked!'),
+                        backgroundColor: newLockState ? Colors.redAccent : Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: Builder(
+                builder: (context) {
+                  final bool isRoomLocked = roomData['isLocked'] == true;
+
+                  return _buildStatChip(
+                    isRoomLocked ? Icons.lock : Icons.lock_open,
+                    isRoomLocked ? 'Locked' : 'Lock',
+                    isRoomLocked ? Colors.redAccent : Colors.greenAccent,
+                  );
+                },
+              ),
+            ),
+          ],
           const Spacer(),
         ],
       ),
@@ -2276,206 +2556,266 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     );
   }
 
-  Widget _buildHostVideo(LiveStreamParticipant host) {
-    if (host.isCameraOn) {
-      final zegoUser = ZegoUIKit().getUser(host.userId);
-      return ClipRect(child: ZegoAudioVideoView(user: zegoUser));
-    }
-    return ClipRect(
-      child: SizedBox.expand(
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.5),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundImage:
-                    host.userPicture != null && host.userPicture!.isNotEmpty
-                    ? NetworkImage(host.userPicture!)
-                    : null,
-                child: (host.userPicture == null || host.userPicture!.isEmpty)
-                    ? (host.gender != null
-                          ? Icon(
-                              host.gender?.toLowerCase() == 'male'
-                                  ? Icons.male
-                                  : Icons.female,
-                              color: host.gender?.toLowerCase() == 'male'
-                                  ? Colors.blue.shade300
-                                  : Colors.pink.shade300,
-                              size: 40,
-                            )
-                          : const Icon(
-                              Icons.person,
-                              size: 40,
-                              color: Colors.white,
-                            ))
-                    : null,
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const Icon(Icons.videocam_off, color: Colors.white, size: 30),
-            ],
+  Widget _buildParticipantVideo(LiveStreamParticipant participant, {bool isFullScreen = false}) {
+    Widget videoWidget = Stack(
+      children: [
+        if (participant.isCameraOn)
+          Positioned.fill(
+            child: _SafeParticipantVideoWidget(participant: participant),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuestAvatar(LiveStreamParticipant guest) {
-    const double avatarSize = 54;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: avatarSize,
-                height: avatarSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child:
-                      (guest.userPicture != null &&
-                          guest.userPicture!.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: guest.userPicture!,
+        if (!participant.isCameraOn)
+          Positioned.fill(
+            child: Container(
+              color: Colors.grey.shade900,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (participant.userPicture != null && participant.userPicture!.isNotEmpty)
+                    Positioned.fill(
+                      child: ImageFiltered(
+                        imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+                        child: CachedNetworkImage(
+                          imageUrl: participant.userPicture!,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: Colors.grey.shade900,
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: Colors.grey.shade900,
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ),
-                        )
-                      : Container(
-                          color: Colors.grey.shade900,
-                          child: Center(
-                            child: (guest.gender != null)
-                                ? Icon(
-                                    guest.gender?.toLowerCase() == 'male'
-                                        ? Icons.male
-                                        : Icons.female,
-                                    color: guest.gender?.toLowerCase() == 'male'
-                                        ? Colors.blue.shade300
-                                        : Colors.pink.shade300,
-                                    size: 30,
-                                  )
-                                : Text(
-                                    guest.userName.isNotEmpty
-                                        ? guest.userName[0].toUpperCase()
-                                        : "?",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
+                          placeholder: (context, url) => const SizedBox.shrink(),
+                          errorWidget: (context, url, error) => const SizedBox.shrink(),
                         ),
-                ),
-              ),
-              // Video Overlay if camera is on
-              if (guest.isCameraOn)
-                Builder(
-                  builder: (context) {
-                    final zegoUser = ZegoUIKit().getUser(guest.userId);
-                    if (zegoUser == null) return const SizedBox.shrink();
-                    return SizedBox(
-                      width: avatarSize,
-                      height: avatarSize,
-                      child: ClipOval(
-                        child: ZegoAudioVideoView(user: zegoUser),
                       ),
-                    );
-                  },
-                ),
-              // Muted Indicator
-              if (guest.isMuted)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.mic_off,
-                      color: Colors.white,
-                      size: 10,
+                  if (participant.userPicture != null && participant.userPicture!.isNotEmpty)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.4),
+                      ),
                     ),
+                  CircleAvatar(
+                    radius: isFullScreen ? 50 : 30,
+                    backgroundImage: participant.userPicture != null &&
+                            participant.userPicture!.isNotEmpty
+                        ? NetworkImage(participant.userPicture!)
+                        : null,
+                    child: (participant.userPicture == null ||
+                            participant.userPicture!.isEmpty)
+                        ? (participant.gender != null
+                            ? Icon(
+                                participant.gender?.toLowerCase() == 'male'
+                                    ? Icons.male
+                                    : Icons.female,
+                                color: participant.gender?.toLowerCase() == 'male'
+                                    ? Colors.blue.shade300
+                                    : Colors.pink.shade300,
+                                size: isFullScreen ? 50 : 30,
+                              )
+                            : Icon(
+                                Icons.person,
+                                size: isFullScreen ? 50 : 30,
+                                color: Colors.white,
+                              ))
+                        : null,
                   ),
-                ),
-              // Active Frame
-              Positioned(
-                width: avatarSize * 1.3,
-                height: avatarSize * 1.3,
-                child: IgnorePointer(
-                  child: ActiveFrameWidget(
-                    userId: guest.userId,
-                    size: avatarSize * 1.3,
-                  ),
-                ),
+
+
+                ],
               ),
-              // Emoji Overlay
-              _buildEmojiOnAvatar(guest.userId, avatarSize),
-            ],
+            ),
           ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: 65,
+        // User Name Label
+        Positioned(
+          left: 4,
+          bottom: 4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(4),
+            ),
             child: Text(
-              guest.userName,
-              textAlign: TextAlign.center,
+              participant.userName,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
-                fontWeight: FontWeight.w500,
-                shadows: [
-                  Shadow(
-                    color: Colors.black54,
-                    blurRadius: 2,
-                    offset: Offset(0, 1),
-                  ),
-                ],
+                fontWeight: FontWeight.bold,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        ],
+        ),
+        // Muted Indicator
+        if (participant.isMuted)
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.mic_off,
+                color: Colors.white,
+                size: 12,
+              ),
+            ),
+          ),
+        // Talking indicator (when camera is off)
+        if (!participant.isCameraOn)
+          StreamBuilder<List<String>>(
+            stream: LiveKitService.instance.activeSpeakersStream,
+            builder: (context, snapshot) {
+              final isSpeaking = !participant.isMuted && (snapshot.data ?? []).contains(participant.userId);
+              if (!isSpeaking) return const SizedBox.shrink();
+              return Positioned.fill(
+                child: Center(
+                  child: Transform.scale(
+                    scale: 1.35,
+                    child: SVGAEasyPlayer(
+                      assetsName: "assets/svga/talking.svga",
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        // Emoji Overlay
+        if (_shouldShowEmoji(participant.userId))
+          Positioned.fill(
+            child: Center(
+              child: SizedBox(
+                width: 60,
+                height: 60,
+                child: GiftImageWidget(
+                  imageUrl: _currentEmojiEvent!.emojiUrl,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        // Kick Button for Host or Moderator
+        if ((widget.isHost || _isCurrentModerator) && participant.userId != _auth.currentUser?.uid)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: () async {
+                final bool? confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: const Color(0xFF2d1b2b),
+                    title: const Text('Remove from Seat?', style: TextStyle(color: Colors.white)),
+                    content: Text('Are you sure you want to remove ${participant.userName} from this seat?', style: const TextStyle(color: Colors.white70)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: () => Navigator.pop(ctx, true), 
+                        child: const Text('Remove', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (confirm == true) {
+                  try {
+                    await LiveStreamService.removeUserFromSeat(widget.roomID, participant.userId);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${participant.userName} removed from seat.'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch(e) {
+                    if (mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                    }
+                  }
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5), width: 1.5),
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+          
+        // Package Badge in top-left
+        Positioned(
+          top: 4,
+          left: 4,
+          child: FutureBuilder<String?>(
+            future: _fetchPackageBadgeUrl(participant.userId),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
+                return Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: MyImageWidget(
+                      imageUrl: snapshot.data!,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ],
+    );
+
+    if (isFullScreen) {
+      return ClipRect(child: videoWidget);
+    }
+
+    return Container(
+      margin: EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        border: isFullScreen ? null : Border.all(color: Colors.white.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: GestureDetector(
+        onTap: () {
+          final participantMap = _participants.firstWhere(
+            (p) => p.userId == _auth.currentUser!.uid,
+            orElse: () => LiveStreamParticipant(
+              userId: '',
+              userName: '',
+              isMuted: false,
+              isCameraOn: false,
+              isOnSeat: false,
+            ),
+          );
+          showProfileInfoBottomSheet(
+            context,
+            userId: participant.userId,
+            hostId: roomData['hostId'] ?? '',
+            roomId: widget.roomID,
+            isSeated: true,
+            isCurrentUserAdmin: participantMap.isModerator,
+            isCurrentUserModerator: _isCurrentModerator,
+          );
+        },
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: videoWidget,
+        ),
       ),
     );
   }
@@ -2491,48 +2831,158 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         guests.add(p);
       }
     }
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: host != null
-              ? Stack(
-                  children: [
-                    _buildHostVideo(host),
-                    if (_shouldShowEmoji(host.userId))
-                      Center(
-                        child: Container(
-                          width: 150,
-                          height: 150,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                          ),
-                          child: GiftImageWidget(
-                            imageUrl: _currentEmojiEvent!.emojiUrl,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                  ],
-                )
-              : Container(
-                  color: Colors.black,
-                  child: const Center(
-                    child: Text(
-                      'Waiting for host...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-        ),
-        Positioned(
-          top: 180,
-          right: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: guests.take(3).map((guest) => _buildGuestAvatar(guest)).toList(),
+
+    if (host == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Text(
+            'Waiting for host...',
+            style: TextStyle(color: Colors.white),
           ),
         ),
-      ],
+      );
+    }
+
+    final allParticipants = [host, ...guests.take(8)]; // Max 9
+    final count = allParticipants.length;
+
+    if (count == 1) {
+      return _buildParticipantVideo(host, isFullScreen: true);
+    }
+
+    Widget gridLayout = const SizedBox.shrink();
+
+    if (count == 2) {
+      gridLayout = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 1, child: _buildParticipantVideo(allParticipants[0])),
+          Expanded(flex: 1, child: _buildParticipantVideo(allParticipants[1])),
+        ],
+      );
+    } else if (count == 3) {
+      gridLayout = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 1, child: _buildParticipantVideo(allParticipants[0])),
+                Expanded(flex: 1, child: _buildParticipantVideo(allParticipants[1])),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 1, child: _buildParticipantVideo(allParticipants[2])),
+                const Expanded(flex: 1, child: SizedBox.shrink()),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else if (count >= 4) {
+      Widget hostWidget = _buildParticipantVideo(allParticipants[0]);
+      Widget rightCol1 = _buildParticipantVideo(allParticipants[1]);
+      Widget rightCol2 = _buildParticipantVideo(allParticipants[2]);
+      
+      Widget bottomRow1_1 = _buildParticipantVideo(allParticipants[3]);
+      Widget bottomRow1_2 = count >= 5 ? _buildParticipantVideo(allParticipants[4]) : const SizedBox.shrink();
+      Widget bottomRow1_3 = count >= 6 ? _buildParticipantVideo(allParticipants[5]) : const SizedBox.shrink();
+
+      Widget bottomRow2_1 = count >= 7 ? _buildParticipantVideo(allParticipants[6]) : const SizedBox.shrink();
+      Widget bottomRow2_2 = count >= 8 ? _buildParticipantVideo(allParticipants[7]) : const SizedBox.shrink();
+      Widget bottomRow2_3 = count >= 9 ? _buildParticipantVideo(allParticipants[8]) : const SizedBox.shrink();
+
+      bool hasFourthRow = count > 6;
+
+      gridLayout = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: hostWidget,
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 1, child: rightCol1),
+                      Expanded(flex: 1, child: rightCol2),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 1, child: bottomRow1_1),
+                Expanded(flex: 1, child: bottomRow1_2),
+                Expanded(flex: 1, child: bottomRow1_3),
+              ],
+            ),
+          ),
+          if (hasFourthRow)
+            Expanded(
+              flex: 1,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 1, child: bottomRow2_1),
+                  Expanded(flex: 1, child: bottomRow2_2),
+                  Expanded(flex: 1, child: bottomRow2_3),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
+
+    if (count == 2) {
+      return Padding(
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + 80,
+          left: 8,
+          right: 8,
+        ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.40,
+            child: gridLayout,
+          ),
+        ),
+      );
+    }
+
+    // Give some padding at top and bottom to avoid UI overlap for 3+ users
+    return Padding(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 60,
+      ),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: AspectRatio(
+          aspectRatio: count > 6 ? (3 / 4) : 1.0,
+          child: gridLayout,
+        ),
+      ),
     );
   }
 
@@ -2543,12 +2993,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         Expanded(
           child: _buildTeamHost(
             participants: _participants,
+            hostId: roomData['hostId'] ?? '',
             hostName: roomData['hostName'] ?? 'Host A',
           ),
         ),
         Expanded(
           child: _buildTeamHost(
             participants: _opponentParticipants,
+            hostId: _pkState['opponentHostId'] ?? '',
             hostName: _pkState['opponentHostName'] ?? 'Host B',
           ),
         ),
@@ -2558,45 +3010,36 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildTeamHost({
     required List<LiveStreamParticipant> participants,
+    required String hostId,
     required String hostName,
   }) {
-    if (participants.isEmpty) {
+    LiveStreamParticipant? host;
+    for (final p in participants) {
+      if (p.userId == hostId) {
+        host = p;
+        break;
+      }
+    }
+
+    if (host == null) {
       return Container(
         color: Colors.black,
         child: Center(
           child: Text(
             'Waiting for $hostName...',
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: Colors.white, fontSize: 12),
           ),
         ),
       );
     }
 
-    final host = participants.first;
     return _buildHostVideoForPK(host);
   }
 
   // FIXED: Host video for PK with BoxFit.cover for no black bars
   Widget _buildHostVideoForPK(LiveStreamParticipant host) {
     if (host.isCameraOn) {
-      final zegoUser = ZegoUIKit().getUser(host.userId);
-      return SizedBox.expand(
-        child: ClipRect(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: ValueListenableBuilder<Size>(
-              valueListenable: ZegoUIKit().getVideoSizeNotifier(host.userId),
-              builder: (context, videoSize, _) {
-                return SizedBox(
-                  width: videoSize.width,
-                  height: videoSize.height,
-                  child: ZegoAudioVideoView(user: zegoUser),
-                );
-              },
-            ),
-          ),
-        ),
-      );
+      return _SafeParticipantVideoWidget(participant: host);
     }
     return Container(
       color: Colors.black,
@@ -2827,6 +3270,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   // Optimized method to get the level asset safely
   Widget _buildLevelBadge(String userId) {
+    if (!_userLevelCache.containsKey(userId)) {
+      // Fetch level silently and cache it to avoid spamming Firestore reads on scroll
+      ProfileService.getUserProfile(userId)
+          .then((doc) {
+            if (doc.exists && mounted) {
+              final data = doc.data() as Map<String, dynamic>;
+              final int totalSent = data['totalSent'] ?? 0;
+              setState(() {
+                _userLevelCache[userId] = getSentLevel(totalSent);
+                if (data['photoUrl'] != null) {
+                  _userPictureCache[userId] = data['photoUrl'];
+                }
+              });
+            }
+          })
+          .catchError((_) {});
+    }
+
     if (_userLevelCache.containsKey(userId)) {
       final level = _userLevelCache[userId]!;
       return Padding(
@@ -2836,23 +3297,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           height: 18,
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) =>
-              const SizedBox(width: 36, height: 18),
+              const SizedBox.shrink(),
         ),
       );
     } else {
-      // Fetch level silently and cache it to avoid spamming Firestore reads on scroll
-      ProfileService.getUserProfile(userId)
-          .then((doc) {
-            if (doc.exists && mounted) {
-              final data = doc.data() as Map<String, dynamic>;
-              final int totalSent = data['totalSent'] ?? 0;
-              setState(() {
-                _userLevelCache[userId] = getSentLevel(totalSent);
-              });
-            }
-          })
-          .catchError((_) {});
-
       // Fallback placeholder while it's fetching
       return Padding(
         padding: const EdgeInsets.only(right: 6),
@@ -2861,23 +3309,91 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           height: 18,
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) =>
-              const SizedBox(width: 36, height: 18),
+              const SizedBox.shrink(),
         ),
       );
     }
   }
 
+  Widget _buildShowCommentsButton() {
+    return Positioned(
+      left: 14,
+      bottom: 8,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _isCommentsHidden = false;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF091433).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E88E5), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(CupertinoIcons.chat_bubble_2_fill, color: Colors.white, size: 14),
+              SizedBox(width: 5),
+              Text(
+                'Show comments',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatSection() {
-    return Container(
-      width: MediaQuery.of(context).size.width,
-      height: MediaQuery.of(context).size.height * 0.25,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        reverse: true,
-        controller: _chatScrollController,
-        padding: const EdgeInsets.all(12),
-        itemCount: _messages.length + 1,
-        itemBuilder: (context, index) {
+    return AnimatedSlide(
+      offset: _isCommentsHidden ? const Offset(-1.2, 0.0) : Offset.zero,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        opacity: _isCommentsHidden ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        child: IgnorePointer(
+          ignoring: _isCommentsHidden,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: (details) {
+              final velocity = details.primaryVelocity ?? 0;
+              if (velocity < -120) {
+                // Swiped right-to-left -> hide comments
+                setState(() {
+                  _isCommentsHidden = true;
+                });
+              } else if (velocity > 120) {
+                // Swiped left-to-right -> show comments
+                setState(() {
+                  _isCommentsHidden = false;
+                });
+              }
+            },
+            child: Container(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height * 0.25,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView.builder(
+                reverse: true,
+                controller: _chatScrollController,
+                padding: const EdgeInsets.all(12),
+                itemCount: _messages.length + 1,
+                itemBuilder: (context, index) {
           if (index == _messages.length) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -2938,13 +3454,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "${m.username}:",
-                    style: TextStyle(
-                      color: Colors.pink.shade300,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildChatAvatar(m.userId, m.username),
+                      _buildLevelBadge(m.userId),
+                      Text(
+                        "${m.username}:",
+                        style: TextStyle(
+                          color: Colors.pink.shade300,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
                   const Text(
                     "Just joined the room!",
@@ -3003,6 +3526,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     crossAxisAlignment: CrossAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      _buildChatAvatar(m.userId, m.username),
                       _buildLevelBadge(m.userId),
                       Text(
                         "${m.username}: ",
@@ -3027,6 +3551,41 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           );
         },
       ),
+    ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatAvatar(String userId, String username) {
+    final pictureUrl = _userPictureCache[userId];
+    return Container(
+      width: 24,
+      height: 24,
+      margin: const EdgeInsets.only(right: 6),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: 0.3),
+      ),
+      child: ClipOval(
+        child: pictureUrl != null && pictureUrl.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: pictureUrl,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => _defaultChatAvatar(username),
+              )
+            : _defaultChatAvatar(username),
+      ),
+    );
+  }
+
+  Widget _defaultChatAvatar(String name) {
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name.characters.first.toUpperCase() : "?",
+        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -3041,7 +3600,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         currentUserParticipant = null;
       }
     }
-    final bool isCurrentlyMuted = currentUserParticipant?.isMuted ?? true;
+    final bool isCurrentlyMuted =
+        _localMuteOverride ?? (currentUserParticipant?.isMuted ?? true);
+    final bool isCurrentlyCameraOn = currentUserParticipant?.isCameraOn ?? false;
     final int totalRequests = _joinRequests.length;
 
     const double buttonSize = 34.0;
@@ -3061,35 +3622,66 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              height: buttonSize,
+              height: 38.0,
+              padding: const EdgeInsets.only(left: 4, right: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
+                color: const Color(0xFF091433),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1.0,
+                  color: const Color(0xFF1E88E5),
+                  width: 1.5,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1E88E5).withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    spreadRadius: 0.5,
+                  ),
+                ],
               ),
-              child: Center(
-                child: TextField(
-                  controller: _chatController,
-                  focusNode: _chatFocusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Say something...',
-                    hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 13,
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _chatController,
+                      focusNode: _chatFocusNode,
+                      style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: 'Message...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.65),
+                          fontSize: 13,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                      ),
+                      onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  onSubmitted: (_) => _sendMessage(),
-                ),
+                  GestureDetector(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      margin: const EdgeInsets.only(right: 2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.send_rounded,
+                          color: Color(0xFF091433),
+                          size: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -3166,38 +3758,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
             if (_isJoined) ...[
+
               Padding(
                 padding: const EdgeInsets.only(right: paddingRight),
                 child: GestureDetector(
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    showVideoLiveEmojiBottomSheet(context, widget.roomID);
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.smiley,
-                      color: Colors.white,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     final newMuteState = !isCurrentlyMuted;
-                    LiveStreamService.toggleMuteState(
-                      widget.roomID,
-                      newMuteState,
-                    );
-                    ZegoUIKit().turnMicrophoneOn(!newMuteState);
+                    setState(() {
+                      _localMuteOverride = newMuteState;
+                    });
+                    try {
+                      await LiveKitService.instance.setMicrophoneEnabled(!newMuteState);
+                      await LiveStreamService.toggleMuteState(
+                        widget.roomID,
+                        newMuteState,
+                      );
+                    } catch (e) {
+                      debugPrint('Error toggling mute state: $e');
+                    }
                   },
                   child: Container(
                     width: buttonSize,
@@ -3216,6 +3794,103 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.only(right: paddingRight),
+                child: GestureDetector(
+                  onTap: () async {
+                    final newCameraState = !isCurrentlyCameraOn;
+                    if (newCameraState) {
+                      final status = await Permission.camera.request();
+                      if (!status.isGranted) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Camera permission is required to turn on video.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                    }
+                    LiveKitService.instance.setCameraEnabled(newCameraState);
+                    if (!newCameraState) {
+                      _isFrontCamera = true;
+                    }
+                    LiveStreamService.toggleCameraState(
+                      widget.roomID,
+                      newCameraState,
+                    );
+                  },
+                  child: Container(
+                    width: buttonSize,
+                    height: buttonSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.2),
+                    ),
+                    child: Icon(
+                      isCurrentlyCameraOn
+                          ? Icons.videocam
+                          : Icons.videocam_off,
+                      color: isCurrentlyCameraOn ? Colors.white : Colors.pink,
+                      size: iconSize,
+                    ),
+                  ),
+                ),
+              ),
+              if (isCurrentlyCameraOn)
+                Padding(
+                  padding: const EdgeInsets.only(right: paddingRight),
+                  child: GestureDetector(
+                    onTap: () async {
+                      if (_isSwitchingCamera) return;
+                      setState(() {
+                        _isSwitchingCamera = true;
+                      });
+                      try {
+                        final isFront = await LiveKitService.instance.flipCamera();
+                        if (mounted) {
+                          setState(() {
+                            _isFrontCamera = isFront;
+                          });
+                        }
+                      } catch (e) {
+                        debugPrint("Error flipping camera: $e");
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            _isSwitchingCamera = false;
+                          });
+                        }
+                      }
+                    },
+                    child: Container(
+                      width: buttonSize,
+                      height: buttonSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.2),
+                      ),
+                      child: _isSwitchingCamera
+                          ? const Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              Icons.flip_camera_ios,
+                              color: _isFrontCamera ? Colors.white : Colors.amberAccent,
+                              size: iconSize,
+                            ),
+                    ),
+                  ),
+                ),
             ],
             if (widget.isHost) ...[
               Padding(
@@ -3259,7 +3934,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 child: GestureDetector(
                   onTap: () {
                     final hostId = roomData['hostId'] ?? '';
-                    final currentGuestCount = _participants.where((p) => p.userId != hostId && p.isOnSeat).length;
+                    final currentGuestCount = _participants
+                        .where((p) => p.userId != hostId && p.isOnSeat)
+                        .length;
                     showLiveStreamJoinRequestsBottomSheet(
                       context: context,
                       joinRequests: _joinRequests,
@@ -3336,7 +4013,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     }
                     FocusManager.instance.primaryFocus?.unfocus();
                     try {
-                      ZegoUIKit().turnMicrophoneOn(false);
+                      LiveKitService.instance.setMicrophoneEnabled(false);
+                      LiveKitService.instance.setCameraEnabled(false);
                       await LiveStreamService.leaveSeat(widget.roomID);
                     } catch (e) {
                       debugPrint("Error leaving call: $e");
@@ -3359,18 +4037,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
           ],
           if (_isChatExpanded)
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                width: buttonSize,
-                height: buttonSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [Colors.pink.shade400, Colors.pink.shade600],
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: GestureDetector(
+                onTap: () {
+                  _chatFocusNode.unfocus();
+                  _chatController.clear();
+                },
+                child: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.3),
                   ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 18),
                 ),
-                child: const Icon(Icons.send, color: Colors.white, size: 16),
               ),
             ),
         ],
@@ -3383,8 +4065,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (messageText.isEmpty) return;
 
     try {
-      await ZegoUIKit().sendInRoomMessage(messageText);
+      await LiveKitService.instance.sendChatMessage(messageText);
       setState(() {
+        _isCommentsHidden = false;
         _messages.insert(
           0,
           ChatMessage(
@@ -3403,13 +4086,120 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     }
   }
 
+  bool _isFrontCamera = true;
+  bool _isSwitchingCamera = false;
+
+  Widget _buildEmojiColumnOverlay() {
+    final bool hasJoinCallButton = !widget.isHost && !_isJoined && !_isPKMode;
+    final double bottomOffset = (hasJoinCallButton ? 104.0 : 62.0) + MediaQuery.of(context).padding.bottom;
+
+    return Positioned(
+      right: 14,
+      bottom: bottomOffset,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildEmojiButton('❤️'),
+          const SizedBox(height: 10),
+          _buildEmojiButton('👍'),
+          const SizedBox(height: 10),
+          _buildEmojiButton('😂'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmojiButton(String emoji) {
+    return GestureDetector(
+      onTap: () => _sendEmojiMessage(emoji),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: const Color(0xFF2C384E).withValues(alpha: 0.85),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            emoji,
+            style: const TextStyle(fontSize: 18),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _sendEmojiMessage(String emoji) async {
+    try {
+      await LiveKitService.instance.sendEmoji(emoji);
+      _showFloatingEmoji(emoji, senderName: _currentUserName);
+    } catch (e) {
+      debugPrint('Error sending emoji message: $e');
+    }
+  }
+
+  void _showFloatingEmoji(String emoji, {String? senderName}) {
+    if (!mounted) return;
+    final key = UniqueKey();
+    setState(() {
+      _floatingEmojis.add(FloatingEmoji(
+        emoji: emoji,
+        key: key,
+        leftOffset: 10.0 + (DateTime.now().millisecondsSinceEpoch % 30),
+        senderName: senderName,
+      ));
+    });
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _floatingEmojis.removeWhere((e) => e.key == key);
+        });
+      }
+    });
+  }
+
+  Widget _buildFloatingEmojis() {
+    final bool hasJoinCallButton = !widget.isHost && !_isJoined && !_isPKMode;
+    final double bottomOffset = (hasJoinCallButton ? 104.0 : 62.0) + MediaQuery.of(context).padding.bottom;
+
+    return Positioned(
+      right: 58,
+      bottom: bottomOffset,
+      width: 100,
+      height: 300,
+      child: IgnorePointer(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: _floatingEmojis.map((e) => _FloatingEmojiWidget(
+            key: e.key,
+            emoji: e.emoji,
+            leftOffset: e.leftOffset,
+            senderName: e.senderName,
+          )).toList(),
+        ),
+      ),
+    );
+  }
+
   void _sendJoinMessage() async {
     const messageText = "Just joined the room!";
     try {
-      await ZegoUIKit().sendInRoomMessage(messageText);
+      await LiveKitService.instance.sendChatMessage(messageText);
       if (mounted) {
         setState(() {
-          _messages.add(
+          _messages.insert(
+            0,
             ChatMessage(
               userId: _auth.currentUser!.uid,
               username: _currentUserName,
@@ -3418,22 +4208,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
           );
         });
-        _scrollToBottom();
+        _scrollToNewestMessage();
       }
     } catch (e) {
       debugPrint('Error sending join message: $e');
     }
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_chatScrollController.hasClients) {
-        _chatScrollController.jumpTo(
-          _chatScrollController.position.maxScrollExtent,
-        );
-      }
-    });
-  }
 
   Widget _buildParticipantAvatars(List<LiveStreamParticipant> participants) {
     if (participants.isEmpty) {
@@ -3443,7 +4224,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     const double avatarSize = 20.0;
     const double overlap = 15.0;
 
-    final participantsToShow = participants.take(5).toList();
+    final participantsToShow = participants.where((p) => !p.isModerator).take(5).toList();
     final double stackWidth =
         avatarSize + (participantsToShow.length - 1) * overlap;
 
@@ -3546,6 +4327,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             return;
           }
           try {
+            final bool hasVip = await ProfileService.hasKingOrRoyalPackage(currentUserId);
+            if (hasVip) {
+              await LiveStreamService.joinCallImmediately(widget.roomID);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('VIP privilege: Joined call directly!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+              return;
+            }
+
             await LiveStreamService.requestToJoin(widget.roomID);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -3557,9 +4352,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             }
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: ${e.toString()}')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
             }
           }
         },
@@ -3603,3 +4398,138 @@ class _ConvertedParticipant {
     this.userPicture,
   });
 }
+
+class FloatingEmoji {
+  final String emoji;
+  final Key key;
+  final double leftOffset;
+  final String? senderName;
+
+  FloatingEmoji({required this.emoji, required this.key, required this.leftOffset, this.senderName});
+}
+
+class _FloatingEmojiWidget extends StatefulWidget {
+  final String emoji;
+  final double leftOffset;
+  final String? senderName;
+
+  const _FloatingEmojiWidget({
+    super.key,
+    required this.emoji,
+    required this.leftOffset,
+    this.senderName,
+  });
+
+  @override
+  State<_FloatingEmojiWidget> createState() => _FloatingEmojiWidgetState();
+}
+
+class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _positionAnimation;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+    
+    _positionAnimation = Tween<double>(begin: 0, end: -250).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    
+    _opacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 0,
+      left: widget.leftOffset,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(0, _positionAnimation.value),
+            child: Opacity(
+              opacity: _opacityAnimation.value,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.emoji,
+                    style: const TextStyle(fontSize: 28),
+                  ),
+                  if (widget.senderName != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        widget.senderName!,
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SafeParticipantVideoWidget extends StatefulWidget {
+  final LiveStreamParticipant participant;
+  const _SafeParticipantVideoWidget({super.key, required this.participant});
+
+  @override
+  State<_SafeParticipantVideoWidget> createState() => _SafeParticipantVideoWidgetState();
+}
+
+class _SafeParticipantVideoWidgetState extends State<_SafeParticipantVideoWidget> {
+  StreamSubscription? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = LiveKitService.instance.remoteParticipantsChangedStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.participant.userId.isEmpty) {
+      return Container(color: Colors.black);
+    }
+
+    return LiveKitService.instance.buildVideoView(
+      widget.participant.userId,
+      fit: BoxFit.cover,
+    );
+  }
+}
+

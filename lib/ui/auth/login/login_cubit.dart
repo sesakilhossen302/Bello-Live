@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_udid/flutter_udid.dart';
 import '../../../data/local/secure_storage/secure_storage.dart';
 import '../../../data/remote/firebase/profile_services.dart';
 import 'login_state.dart';
@@ -17,10 +18,9 @@ class LoginCubit extends Cubit<LoginState> {
 
   Future<void> _initializeGoogleSignIn() async {
     try {
-      // NOTE: serverClientId should be the "Web Client ID" from your Google Cloud Console.
-      // If you are only using Firebase Auth on Android, you can often leave this empty or use the one from google-services.json.
+      // serverClientId from google-services.json (Web client ID)
       await _googleSignIn.initialize(
-        serverClientId: "893744414245-jsjpkiqcfokq0atjpj0kla555t1duj9q.apps.googleusercontent.com",
+        serverClientId: "237642997621-g04tngvmvchl56na01i5dn3c9g41r2s0.apps.googleusercontent.com",
       );
       _isGoogleSignInInitialized = true;
     } catch (e) {
@@ -34,13 +34,49 @@ class LoginCubit extends Cubit<LoginState> {
     }
   }
 
+  Future<bool> _isDeviceBannedAndStore(String uid) async {
+    try {
+      String deviceId = await FlutterUdid.udid;
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('banned_devices')
+          .where('deviceId', isEqualTo: deviceId)
+          .limit(1)
+          .get();
+      if (querySnapshot.docs.isNotEmpty) {
+        return true;
+      }
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'deviceId': deviceId,
+      });
+      return false;
+    } catch (e) {
+      debugPrint("Error checking device ban: $e");
+      return false;
+    }
+  }
+
+  Future<bool> _isEmailBanned(String? email) async {
+    if (email == null || email.isEmpty) return false;
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('banned_emails')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+      return querySnapshot.docs.isNotEmpty;
+    } catch (e) {
+      debugPrint("Error checking email ban: $e");
+      return false;
+    }
+  }
+
   Future<void> loginWithGoogle() async {
     emit(state.copyWith(status: LoginStatus.loading, method: LoginMethod.google));
     try {
       await _ensureGoogleSignInInitialized();
 
       // Authenticate with Google
-      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate(
+      final googleUser = await _googleSignIn.authenticate(
         scopeHint: ['email', 'profile'],
       );
 
@@ -77,6 +113,29 @@ class LoginCubit extends Cubit<LoginState> {
       final updatedUserDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
       final updatedUserData = updatedUserDoc.data();
 
+      if (updatedUserData?['isBlocked'] == true) {
+        await FirebaseAuth.instance.signOut();
+        await _googleSignIn.signOut();
+        emit(state.copyWith(status: LoginStatus.failure, error: 'Your account has been blocked by the admin.'));
+        return;
+      }
+
+      bool isBanned = await _isDeviceBannedAndStore(userCredential.user!.uid);
+      if (isBanned) {
+        await FirebaseAuth.instance.signOut();
+        await _googleSignIn.signOut();
+        emit(state.copyWith(status: LoginStatus.failure, error: 'This device is banned.'));
+        return;
+      }
+
+      bool isEmailBanned = await _isEmailBanned(userCredential.user!.email);
+      if (isEmailBanned) {
+        await FirebaseAuth.instance.signOut();
+        await _googleSignIn.signOut();
+        emit(state.copyWith(status: LoginStatus.failure, error: 'This email is banned.'));
+        return;
+      }
+
       final User user = User(
         id: userCredential.user!.uid,
         displayId: updatedUserData?['displayId'] ?? "",
@@ -87,9 +146,12 @@ class LoginCubit extends Cubit<LoginState> {
 
       secureStorage.setUser(user);
       emit(state.copyWith(status: LoginStatus.success, user: user));
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth Error during Google Sign-In: ${e.code} - ${e.message}');
+      emit(state.copyWith(status: LoginStatus.failure, error: e.message ?? 'Google sign-in failed. Please try again.'));
     } catch (e) {
-      debugPrint(e.toString());
-      emit(state.copyWith(status: LoginStatus.failure, error: 'Google sign-in failed. Please try again.'));
+      debugPrint('Google Sign-In Error: $e');
+      emit(state.copyWith(status: LoginStatus.failure, error: 'Google sign-in failed: ${e.toString()}'));
     }
   }
 
@@ -159,6 +221,27 @@ class LoginCubit extends Cubit<LoginState> {
       
       if (userDoc.exists && userDoc.data() != null) {
         userData = userDoc.data()!;
+        
+        if (userData['isBlocked'] == true) {
+          await FirebaseAuth.instance.signOut();
+          emit(state.copyWith(status: LoginStatus.failure, error: 'Your account has been blocked by the admin.'));
+          return;
+        }
+
+        bool isBanned = await _isDeviceBannedAndStore(uid);
+        if (isBanned) {
+          await FirebaseAuth.instance.signOut();
+          emit(state.copyWith(status: LoginStatus.failure, error: 'This device is banned.'));
+          return;
+        }
+
+        bool isEmailBanned = await _isEmailBanned(userCredential.user!.email);
+        if (isEmailBanned) {
+          await FirebaseAuth.instance.signOut();
+          emit(state.copyWith(status: LoginStatus.failure, error: 'This email is banned.'));
+          return;
+        }
+
         // Update last login
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           'lastLogin': FieldValue.serverTimestamp(),

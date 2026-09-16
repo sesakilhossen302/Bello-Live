@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import '../../data/remote/firebase/level_service.dart';
 
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -570,39 +571,10 @@ class LevelUpMethod {
 
 // ========== HELPER FUNCTIONS & CONSTANTS ==========
 
-// The exact thresholds for levels 1 through 100
-const List<int> levelThresholds = [
-  50000, 150000, 300000, 500000, 1000000, 2000000, 4000000, 6000000, 10000000, 15000000, // Indices 0-9
-  20000000, 25000000, 35000000, 50000000, 80000000, 110000000, 140000000, 170000000, 205000000, 240000000, // Indices 10-19
-  275000000, 310000000, 345000000, 385000000, 425000000, 465000000, 505000000, 545000000, 595000000, 645000000, // Indices 20-29
-  695000000, 745000000, 795000000, 855000000, 915000000, 975000000, 1030000000, 1090000000, 1160000000, 1230000000, // Indices 30-39
-  1300000000, 1370000000, 1440000000, 1520000000, 1600000000, 1680000000, 1760000000, 1840000000, 1930000000, 2020000000, // Indices 40-49
-  2110000000, 2200000000, 2290000000, 2390000000, 2490000000, 2590000000, 2690000000, 2790000000, 2940000000, 3090000000, // Indices 50-59
-  3240000000, 3390000000, 3540000000, 3740000000, 3940000000, 4140000000, 4340000000, 4540000000, 4790000000, 5040000000, // Indices 60-69
-  5290000000, 5540000000, 5790000000, 6090000000, 6390000000, 6690000000, 6990000000, 7290000000, 7690000000, 8090000000, // Indices 70-79
-  8490000000, 8890000000, 9290000000, 9790000000, 10290000000, 10790000000, 11290000000, 11790000000, 12390000000, 12990000000, // Indices 80-89
-  13590000000, 14190000000, 14790000000, 15490000000, 16190000000, 16890000000, 17590000000, 18290000000, 19290000000, 20290000000 // Indices 90-99
-];
-
 int _getRequiredXP(int level) {
-  // Level 0 requires 0 XP
-  if (level <= 0) return 0;
-
-  // Level 100+ requires the max threshold XP
-  if (level > 100) return levelThresholds[99];
-
-  // To reach Level N, you need the XP value at index N-1
-  return levelThresholds[level - 1];
+  return LevelService.getRequiredXP(level);
 }
 
 int getSentLevel(int totalSent) {
-  if (totalSent < 0) return 0;
-
-  for (int i = 0; i < levelThresholds.length; i++) {
-    if (totalSent < levelThresholds[i]) {
-      return i;
-    }
-  }
-
-  return 100;
+  return LevelService.getSentLevel(totalSent);
 }

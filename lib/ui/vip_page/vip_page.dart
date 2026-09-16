@@ -1,7 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui';
-
 import 'package:flutter_svg/flutter_svg.dart';
 
 class VIPPage extends StatefulWidget {
@@ -12,87 +10,77 @@ class VIPPage extends StatefulWidget {
 }
 
 class _VIPPageState extends State<VIPPage> {
-  // VIP pricing data
   final Map<Category, VIPTier> vipTiers = {
     Category.bronze: VIPTier(
       name: 'Bronze VIP',
       beans: 5000,
-      color: Colors.orange.shade400,
+      color: const Color(0xFFCD7F32),
       icon: Icons.workspace_premium,
     ),
     Category.silver: VIPTier(
       name: 'Silver VIP',
       beans: 15000,
-      color: Colors.grey.shade300,
+      color: const Color(0xFF78909C),
       icon: Icons.diamond_outlined,
     ),
-    Category.gold: VIPTier(name: 'Gold VIP', beans: 35000, color: Colors.amber.shade400, icon: Icons.diamond_outlined),
+    Category.gold: VIPTier(
+      name: 'Gold VIP',
+      beans: 35000,
+      color: const Color(0xFFFFB300),
+      icon: Icons.diamond_rounded,
+    ),
   };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF000000), Color(0xFF1a0a0a), Color(0xFF2d1b2b), Color(0xFF4a2c4a), Color(0xFFff6b9d)],
-            stops: [0.0, 0.3, 0.6, 0.8, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      _buildVIPTiersSection(),
-                      const SizedBox(height: 30),
-                      _buildPermissionsTable(),
-                      const SizedBox(height: 30),
-                      _buildUpgradeButtons(),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+      backgroundColor: const Color(0xFF091433),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _buildVIPTiersSection(),
+                    const SizedBox(height: 20),
+                    _buildPermissionsTable(),
+                    const SizedBox(height: 24),
+                    _buildUpgradeButtons(),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 0, right: 20, top: 0, bottom: 20),
+    return Container(
+      color: const Color(0xFFE62563),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(CupertinoIcons.back, size: 28, color: Colors.pink),
+            icon: const Icon(CupertinoIcons.back, size: 26, color: Colors.white),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          Row(
-            children: [
-              Icon(Icons.diamond_outlined, color: Colors.amber.shade400, size: 28),
-              const SizedBox(width: 8),
-              Text(
-                'VIP Membership',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  shadows: [Shadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 2))],
-                ),
-              ),
-            ],
+          const SizedBox(width: 4),
+          const Icon(Icons.diamond_rounded, color: Colors.amber, size: 24),
+          const SizedBox(width: 8),
+          const Text(
+            'VIP Membership',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-          const Spacer(),
         ],
       ),
     );
@@ -100,64 +88,70 @@ class _VIPPageState extends State<VIPPage> {
 
   Widget _buildVIPTiersSection() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-        boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8))],
-      ),
-      child: ClipRRect(
-        // borderRadius: BorderRadius.circular(25),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: _buildTierCard(vipTiers[Category.bronze]!)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _buildTierCard(vipTiers[Category.silver]!)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _buildTierCard(vipTiers[Category.gold]!)),
-                ],
-              ),
-            ],
+        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF0F1E42),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
-        ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildTierCard(vipTiers[Category.bronze]!)),
+          const SizedBox(width: 10),
+          Expanded(child: _buildTierCard(vipTiers[Category.silver]!)),
+          const SizedBox(width: 10),
+          Expanded(child: _buildTierCard(vipTiers[Category.gold]!)),
+        ],
       ),
     );
   }
 
   Widget _buildTierCard(VIPTier tier) {
     return Container(
-      height: 150,
-      padding: const EdgeInsets.all(16),
+      height: 140,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.black.withValues(alpha: 0.4),
-        border: Border.all(color: tier.color.withValues(alpha: 0.4), width: 1),
-        boxShadow: [BoxShadow(color: tier.color.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 6))],
+        borderRadius: BorderRadius.circular(16),
+        color: tier.color.withValues(alpha: 0.08),
+        border: Border.all(color: tier.color.withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: tier.color.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(tier.icon, color: tier.color, size: 30),
+          Icon(tier.icon, color: tier.color, size: 34),
           const SizedBox(height: 8),
           Text(
             tier.name,
-            style: TextStyle(color: tier.color, fontSize: 14, fontWeight: FontWeight.bold),
+            style: TextStyle(color: tier.color, fontSize: 13, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SvgPicture.asset('assets/icons/beans.svg', colorFilter: const ColorFilter.mode(Colors.amber, BlendMode.srcIn), width: 16),
+              const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
               const SizedBox(width: 4),
               Text(
-                _formatNumber(tier.beans),
-                style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w600),
+                '${_formatNumber(tier.beans)} Coins',
+                style: TextStyle(
+                  color: Colors.amber.shade900,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -170,43 +164,47 @@ class _VIPPageState extends State<VIPPage> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-        boxShadow: [BoxShadow(color: Colors.pink.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8))],
+        color: const Color(0xFF0F1E42),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-                  color: Colors.black.withValues(alpha: 0.2),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        'VIP Privileges',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+        child: Column(
+          children: [
+            // Table Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              color: const Color(0xFF162B5B),
+              child: Row(
+                children: [
+                  const Expanded(
+                    flex: 3,
+                    child: Text(
+                      'VIP Privileges',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Expanded(child: _buildHeaderCell('Bronze', vipTiers[Category.bronze]!.color)),
-                    Expanded(child: _buildHeaderCell('Silver', vipTiers[Category.silver]!.color)),
-                    Expanded(child: _buildHeaderCell('Gold', vipTiers[Category.gold]!.color)),
-                  ],
-                ),
+                  ),
+                  Expanded(child: _buildHeaderCell('Bronze', vipTiers[Category.bronze]!.color)),
+                  Expanded(child: _buildHeaderCell('Silver', vipTiers[Category.silver]!.color)),
+                  Expanded(child: _buildHeaderCell('Gold', vipTiers[Category.gold]!.color)),
+                ],
               ),
+            ),
 
-              // Permissions List
-              ...permissions.map((permission) => _buildPermissionRow(permission)),
-            ],
-          ),
+            // Permissions List
+            ...permissions.map((permission) => _buildPermissionRow(permission)),
+          ],
         ),
       ),
     );
@@ -219,15 +217,15 @@ class _VIPPageState extends State<VIPPage> {
           title == 'Bronze'
               ? Icons.workspace_premium
               : title == 'Silver'
-              ? Icons.diamond_outlined
-              : Icons.diamond,
+                  ? Icons.diamond_outlined
+                  : Icons.diamond_rounded,
           color: color,
-          size: 20,
+          size: 18,
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           title,
-          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
       ],
@@ -236,9 +234,9 @@ class _VIPPageState extends State<VIPPage> {
 
   Widget _buildPermissionRow(Permission permission) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.8)),
       ),
       child: Row(
         children: [
@@ -246,17 +244,30 @@ class _VIPPageState extends State<VIPPage> {
             flex: 3,
             child: Text(
               permission.name,
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           Expanded(
-            child: _buildAccessIndicator(permission.access[Category.bronze] ?? false, vipTiers[Category.bronze]!.color),
+            child: _buildAccessIndicator(
+              permission.access[Category.bronze] ?? false,
+              vipTiers[Category.bronze]!.color,
+            ),
           ),
           Expanded(
-            child: _buildAccessIndicator(permission.access[Category.silver] ?? false, vipTiers[Category.silver]!.color),
+            child: _buildAccessIndicator(
+              permission.access[Category.silver] ?? false,
+              vipTiers[Category.silver]!.color,
+            ),
           ),
           Expanded(
-            child: _buildAccessIndicator(permission.access[Category.gold] ?? false, vipTiers[Category.gold]!.color),
+            child: _buildAccessIndicator(
+              permission.access[Category.gold] ?? false,
+              vipTiers[Category.gold]!.color,
+            ),
           ),
         ],
       ),
@@ -267,19 +278,17 @@ class _VIPPageState extends State<VIPPage> {
     return Container(
       alignment: Alignment.center,
       child: Container(
-        width: 30,
-        height: 30,
+        width: 26,
+        height: 26,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: hasAccess ? tierColor.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2),
-          border: Border.all(color: hasAccess ? tierColor : Colors.grey.withValues(alpha: 0.4), width: 2),
-          boxShadow: hasAccess
-              ? [BoxShadow(color: tierColor.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))]
-              : null,
+          color: hasAccess ? tierColor : Colors.grey.withValues(alpha: 0.15),
         ),
-        child: hasAccess
-            ? Icon(Icons.check, color: tierColor, size: 16)
-            : Icon(Icons.close, color: Colors.grey.withValues(alpha: 0.6), size: 16),
+        child: Icon(
+          hasAccess ? Icons.check : Icons.close,
+          color: hasAccess ? Colors.white : Colors.grey,
+          size: 15,
+        ),
       ),
     );
   }
@@ -287,57 +296,65 @@ class _VIPPageState extends State<VIPPage> {
   Widget _buildUpgradeButtons() {
     return Column(
       children: [
-        Text(
+        const Text(
           'Choose Your VIP Plan',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Colors.white,
-            shadows: [Shadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         ...vipTiers.values
-            .map((tier) => Padding(padding: const EdgeInsets.only(bottom: 12), child: _buildUpgradeButton(tier)))
-            ,
+            .map((tier) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildUpgradeButton(tier),
+                )),
       ],
     );
   }
 
   Widget _buildUpgradeButton(VIPTier tier) {
     return GestureDetector(
-      onTap: () {
-        _showUpgradeDialog(tier);
-      },
+      onTap: () => _showUpgradeDialog(tier),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(25),
-          gradient: LinearGradient(colors: [tier.color.withValues(alpha: 0.8), tier.color]),
-          boxShadow: [BoxShadow(color: tier.color.withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 6))],
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(colors: [tier.color, tier.color.withValues(alpha: 0.85)]),
+          boxShadow: [
+            BoxShadow(
+              color: tier.color.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(tier.icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Text(
               'Upgrade to ${tier.name}',
               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.black.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.black.withValues(alpha: 0.2),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SvgPicture.asset('assets/icons/beans.svg', colorFilter: const ColorFilter.mode(Colors.amber, BlendMode.srcIn), width: 12),
+                  const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     _formatNumber(tier.beans),
-                    style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -353,87 +370,73 @@ class _VIPPageState extends State<VIPPage> {
       context: context,
       barrierDismissible: true,
       builder: (BuildContext context) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: AlertDialog(
-            backgroundColor: Colors.transparent,
-            contentPadding: EdgeInsets.zero,
-            content: Container(
-              padding: const EdgeInsets.all(25),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(25),
-                color: Colors.black.withValues(alpha: 0.8),
-                border: Border.all(color: tier.color.withValues(alpha: 0.4), width: 1),
-                boxShadow: [BoxShadow(color: tier.color.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 10))],
+        return AlertDialog(
+          backgroundColor: const Color(0xFF162B5B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(tier.icon, color: tier.color, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                'Upgrade to ${tier.name}?',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(tier.icon, color: tier.color, size: 50),
-                  const SizedBox(height: 20),
+                  const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                  const SizedBox(width: 6),
                   Text(
-                    'Upgrade to ${tier.name}?',
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 15),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SvgPicture.asset('assets/icons/beans.svg', colorFilter: const ColorFilter.mode(Colors.amber, BlendMode.srcIn), width: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_formatNumber(tier.beans)} Beans Required',
-                        style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              border: Border.all(color: Colors.grey.withValues(alpha: 0.5), width: 1),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _handleUpgrade(tier);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: LinearGradient(colors: [tier.color.withValues(alpha: 0.8), tier.color]),
-                            ),
-                            child: const Text(
-                              'Upgrade',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    '${_formatNumber(tier.beans)} Coins Required',
+                    style: TextStyle(
+                      color: Colors.amber.shade900,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFEFF4),
+                        foregroundColor: const Color(0xFF1C1C1E),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _handleUpgrade(tier);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: tier.color,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                      ),
+                      child: const Text('Upgrade', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },
@@ -441,12 +444,10 @@ class _VIPPageState extends State<VIPPage> {
   }
 
   void _handleUpgrade(VIPTier tier) {
-    debugPrint('Upgrading to ${tier.name} for ${tier.beans} beans');
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Successfully upgraded to ${tier.name}!'),
-        backgroundColor: tier.color,
+        backgroundColor: const Color(0xFFE62563),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -463,7 +464,6 @@ class _VIPPageState extends State<VIPPage> {
   }
 }
 
-// Data Models
 enum Category { bronze, silver, gold }
 
 class Permission {
@@ -471,26 +471,6 @@ class Permission {
   final Map<Category, bool> access;
 
   Permission({required this.name, required this.access});
-
-  factory Permission.fromJson(Map<String, dynamic> json) {
-    return Permission(
-      name: json['name'],
-      access: {
-        Category.bronze: json['bronze'] ?? false,
-        Category.silver: json['silver'] ?? false,
-        Category.gold: json['gold'] ?? false,
-      },
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      "name": name,
-      "bronze": access[Category.bronze] ?? false,
-      "silver": access[Category.silver] ?? false,
-      "gold": access[Category.gold] ?? false,
-    };
-  }
 }
 
 class VIPTier {
@@ -499,7 +479,12 @@ class VIPTier {
   final Color color;
   final IconData icon;
 
-  VIPTier({required this.name, required this.beans, required this.color, required this.icon});
+  VIPTier({
+    required this.name,
+    required this.beans,
+    required this.color,
+    required this.icon,
+  });
 }
 
 final permissions = [

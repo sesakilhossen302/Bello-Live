@@ -1,16 +1,19 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:zego_uikit/zego_uikit.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../../../data/remote/firebase/live_streaming_services.dart';
+import '../../../theme/app_theme.dart';
 
 class MusicTrack {
   final String id;
   final String name;
   final String filePath;
+  final String? thumbnailUrl;
 
-  MusicTrack({required this.id, required this.name, required this.filePath});
+  MusicTrack({required this.id, required this.name, required this.filePath, this.thumbnailUrl});
 }
 
 class MusicPlayerManager extends ChangeNotifier {
@@ -23,6 +26,8 @@ class MusicPlayerManager extends ChangeNotifier {
 
   Timer? _progressTimer;
   bool _isInitialized = false;
+
+  String? _roomId;
 
   // Getters
   List<MusicTrack> get playlist => _playlist;
@@ -37,32 +42,15 @@ class MusicPlayerManager extends ChangeNotifier {
 
   int get totalDuration => _totalDuration;
 
-  void initialize() {
+  void initialize(String roomId) {
+    _roomId = roomId;
     if (_isInitialized) return;
     _isInitialized = true;
-
-    // Listen to play state changes
-    ZegoUIKit().getMediaPlayStateNotifier().addListener(_onPlayStateChanged);
-
-    // Listen to progress updates with a timer
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (_isPlaying) {
-        _currentProgress = ZegoUIKit().getMediaCurrentProgress();
-        _totalDuration = ZegoUIKit().getMediaTotalDuration();
-        notifyListeners();
-      }
-    });
   }
 
-  void _onPlayStateChanged() {
-    final state = ZegoUIKit().getMediaPlayStateNotifier().value;
-    _isPlaying = state == ZegoUIKitMediaPlayState.playing;
+  void seekTo(int position) {
+    _currentProgress = position;
     notifyListeners();
-
-    // Auto play next when current track ends
-    if (state == ZegoUIKitMediaPlayState.playEnded) {
-      playNext();
-    }
   }
 
   Future<void> addMusicFromDevice() async {
@@ -82,7 +70,7 @@ class MusicPlayerManager extends ChangeNotifier {
 
         for (var file in result.files) {
           if (file.path != null) {
-            // Copy file to a persistent location to ensure Zego can access it
+            // Copy file to a persistent location to ensure audio player can access it
             final fileName = file.name;
             final targetFile = File('${musicDir.path}/$fileName');
             await File(file.path!).copy(targetFile.path);
@@ -103,38 +91,48 @@ class MusicPlayerManager extends ChangeNotifier {
     }
   }
 
+  Future<List<Video>> searchYoutubeVideos(String query) async {
+    final yt = YoutubeExplode();
+    try {
+      final searchResults = await yt.search.search(query);
+      return searchResults.toList();
+    } catch (e) {
+      debugPrint('Error searching YouTube: $e');
+      return [];
+    } finally {
+      yt.close();
+    }
+  }
+
+  Future<void> addSpecificMusicFromYoutube(Video video, {bool playNow = false}) async {
+    final track = MusicTrack(
+      id: video.id.value,
+      name: video.title,
+      filePath: video.id.value, // We store the videoId in filePath for YouTube
+      thumbnailUrl: video.thumbnails.lowResUrl,
+    );
+    
+    _playlist.add(track);
+    notifyListeners();
+
+    if (playNow) {
+      await playTrack(_playlist.length - 1);
+    }
+  }
+
   Future<void> playTrack(int index) async {
     try {
       final track = _playlist[index];
-      final file = File(track.filePath);
-      
-      if (!await file.exists()) {
-        throw Exception('Music file not found at ${track.filePath}');
+
+      // Update Firebase
+      if (_roomId != null) {
+        await LiveStreamService.setRoomMusic(_roomId!, track.filePath);
       }
 
-      // Stop current music if playing
-      if (_isPlaying) {
-        await ZegoUIKit().stopMedia();
-      }
-
-      // Play new track
-      final playResult = await ZegoUIKit().playMedia(
-        filePathOrURL: track.filePath,
-        enableRepeat: false,
-        autoStart: true,
-      );
-
-      if (playResult.errorCode == 0) { // Zego success code is 0
-        // Set volume to sync with remote (so everyone can hear)
-        await ZegoUIKit().setMediaVolume(60, isSyncToRemote: true);
-
-        _currentTrack = track;
-        _currentTrackIndex = index;
-        _isPlaying = true;
-        notifyListeners();
-      } else {
-        throw Exception('Zego Media Error ${playResult.errorCode}: ${playResult.message}');
-      }
+      _currentTrack = track;
+      _currentTrackIndex = index;
+      _isPlaying = true;
+      notifyListeners();
     } catch (e) {
       debugPrint('Error playing track: $e');
       rethrow;
@@ -143,11 +141,17 @@ class MusicPlayerManager extends ChangeNotifier {
 
   Future<void> pauseResume() async {
     try {
-      if (_isPlaying) {
-        await ZegoUIKit().pauseMedia();
-      } else {
-        await ZegoUIKit().resumeMedia();
+      if (_roomId == null || _currentTrack == null) return;
+
+      _isPlaying = !_isPlaying;
+
+      String trackId = _currentTrack!.filePath; // e.g. 'AUDIO_123' or '123'
+      if (!_isPlaying) {
+        trackId = 'PAUSE_$trackId';
       }
+
+      await LiveStreamService.setRoomMusic(_roomId!, trackId);
+      notifyListeners();
     } catch (e) {
       debugPrint('Error pause/resume: $e');
     }
@@ -155,7 +159,9 @@ class MusicPlayerManager extends ChangeNotifier {
 
   Future<void> stopMusic() async {
     try {
-      await ZegoUIKit().stopMedia();
+      if (_roomId != null) {
+        await LiveStreamService.setRoomMusic(_roomId!, null);
+      }
 
       _isPlaying = false;
       _currentTrack = null;
@@ -205,7 +211,6 @@ class MusicPlayerManager extends ChangeNotifier {
   @override
   void dispose() {
     _progressTimer?.cancel();
-    ZegoUIKit().getMediaPlayStateNotifier().removeListener(_onPlayStateChanged);
     super.dispose();
   }
 }
@@ -221,44 +226,72 @@ class PlayMusicBottomSheet extends StatefulWidget {
 }
 
 class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Video> _searchResults = [];
+  bool _isSearching = false;
+
+  List<Video> _recommendedSongs = [];
+  bool _isLoadingRecommendations = true;
+
   @override
   void initState() {
     super.initState();
-    // Listen to music manager changes
     widget.musicManager.addListener(_onMusicStateChanged);
+    _fetchRecommendedSongs();
+  }
+
+  Future<void> _fetchRecommendedSongs() async {
+    final queries = [
+      'bangla hindi hit songs mix',
+      'new bangla hindi mashup',
+      'trending bangla hindi music',
+      'bangla hindi party songs'
+    ];
+    queries.shuffle();
+    final query = queries.first;
+    
+    final results = await widget.musicManager.searchYoutubeVideos(query);
+    if (mounted) {
+      setState(() {
+        _recommendedSongs = results.take(10).toList();
+        _isLoadingRecommendations = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     widget.musicManager.removeListener(_onMusicStateChanged);
+    _searchController.dispose();
     super.dispose();
   }
 
   void _onMusicStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _performSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    
+    final results = await widget.musicManager.searchYoutubeVideos(query);
+    
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
     }
   }
 
-  Future<void> _addMusicFromDevice() async {
-    if (!widget.isHost) return;
-
-    try {
-      await widget.musicManager.addMusicFromDevice();
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Music added to playlist'), backgroundColor: Colors.green));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding music: $e')));
-      }
-    }
-  }
-
-  Future<void> _playTrack(int index) async {
+  Future<void> _addOrPlayYoutubeVideo(Video video, bool playNow, {bool audioOnly = false}) async {
     if (!widget.isHost) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Only the host can control music playback'), backgroundColor: Colors.orange),
@@ -266,26 +299,65 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
       return;
     }
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(playNow ? 'Loading and playing...' : 'Adding to playlist...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
     try {
-      await widget.musicManager.playTrack(index);
+      // Modify the video ID slightly to indicate audio-only in our manager
+      final trackId = audioOnly ? 'AUDIO_${video.id.value}' : video.id.value;
+      
+      final track = MusicTrack(
+        id: trackId,
+        name: video.title,
+        filePath: trackId, // We store the trackId in filePath
+        thumbnailUrl: video.thumbnails.lowResUrl,
+      );
+      
+      widget.musicManager.playlist.add(track);
+      widget.musicManager.notifyListeners();
+
+      if (playNow) {
+        await widget.musicManager.playTrack(widget.musicManager.playlist.length - 1);
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(playNow ? 'Playing ${video.title}' : 'Added ${video.title}'), backgroundColor: Colors.green),
+        );
+        if (playNow) {
+          Navigator.pop(context);
+        }
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error playing track: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
       }
+    }
+  }
+
+  // Playlist actions
+  Future<void> _playTrack(int index) async {
+    if (!widget.isHost) return;
+    try {
+      await widget.musicManager.playTrack(index);
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      debugPrint('Error playing track: $e');
     }
   }
 
   Future<void> _removeTrack(int index) async {
     if (!widget.isHost) return;
-
     try {
       await widget.musicManager.removeTrack(index);
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Track removed from playlist'), backgroundColor: Colors.green));
-      }
     } catch (e) {
       debugPrint('Error removing track: $e');
     }
@@ -301,33 +373,48 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final musicManager = widget.musicManager;
-
     return SafeArea(
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.6,
+        height: MediaQuery.of(context).size.height * 0.85, // taller for searching
         decoration: const BoxDecoration(
-          color: Color(0xFF2d1b2b),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          gradient: AppGradients.backgroundGradient,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Handle for drag
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
                 children: [
-                  const Text(
-                    'Playlist',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Colors.cyanAccent, Colors.purpleAccent],
+                    ).createShader(bounds),
+                    child: const Text(
+                      'Live Music Center',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                   const Spacer(),
-                  if (widget.isHost)
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, color: Colors.pink, size: 28),
-                      onPressed: _addMusicFromDevice,
-                      tooltip: 'Add Music',
-                    ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white70),
                     onPressed: () => Navigator.pop(context),
@@ -335,43 +422,171 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
                 ],
               ),
             ),
-            const Divider(color: Colors.white24, height: 1, thickness: 1),
+            
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  onSubmitted: (_) => _performSearch(),
+                  decoration: InputDecoration(
+                    hintText: 'Search YouTube...',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                    prefixIcon: const Icon(Icons.search, color: Colors.cyanAccent),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.search, color: Colors.pinkAccent), // Changed to search icon
+                      onPressed: _performSearch,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  ),
+                ),
+              ),
+            ),
 
-            // Playlist
-            Expanded(child: musicManager.playlist.isEmpty ? _buildEmptyState() : _buildPlaylist(musicManager)),
+            if (_searchResults.isEmpty && _searchController.text.trim().isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                child: Text(
+                  widget.musicManager.playlist.isEmpty ? 'Recommended Music' : 'Current Playlist',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: widget.musicManager.playlist.isEmpty
+                    ? _buildRecommendedSongsList()
+                    : _buildPlaylist(widget.musicManager),
+              ),
+            ] else ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                child: Text(
+                  'Select a track to start the party',
+                  style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: _isSearching
+                    ? const Center(child: CircularProgressIndicator(color: Colors.pinkAccent))
+                    : _buildSearchResults(),
+              ),
+            ],
 
-            // Music Player Controls
-            if (musicManager.currentTrack != null) _buildMusicPlayer(musicManager),
+            // Player controls at the bottom if something is playing
+            if (widget.musicManager.currentTrack != null)
+              _buildMusicPlayer(widget.musicManager),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.music_note_outlined, size: 80, color: Colors.white.withValues(alpha: 0.3)),
-          const SizedBox(height: 16),
-          Text('No music in playlist', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 18)),
-          if (widget.isHost) ...[
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _addMusicFromDevice,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Music'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.pink,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+  Widget _buildSearchResults() {
+    return _buildVideoList(_searchResults);
+  }
+
+  Widget _buildRecommendedSongsList() {
+    if (_isLoadingRecommendations) {
+      return const Center(child: CircularProgressIndicator(color: Colors.pinkAccent));
+    }
+    if (_recommendedSongs.isEmpty) {
+      return Center(
+        child: Text(
+          'Could not load recommendations',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+    return _buildVideoList(_recommendedSongs);
+  }
+
+  Widget _buildVideoList(List<Video> videos) {
+    if (videos.isEmpty) {
+      return Center(
+        child: Text(
+          'No results found',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: videos.length,
+      itemBuilder: (context, index) {
+        final video = videos[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  video.thumbnails.lowResUrl,
+                  width: 80,
+                  height: 45,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 80,
+                    height: 45,
+                    color: Colors.black26,
+                    child: const Icon(Icons.music_note, color: Colors.white54),
+                  ),
+                ),
               ),
-            ),
-          ],
-        ],
-      ),
+              const SizedBox(width: 12),
+              // Title and Channel
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      video.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      video.author,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              // Actions
+              if (widget.isHost) ...[
+                IconButton(
+                  icon: const Icon(Icons.music_note, color: Colors.purpleAccent),
+                  onPressed: () => _addOrPlayYoutubeVideo(video, true, audioOnly: true), // play now audio only
+                  tooltip: 'Play Audio Only',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.play_circle_fill, color: Colors.cyanAccent),
+                  onPressed: () => _addOrPlayYoutubeVideo(video, true, audioOnly: false), // play now with video
+                  tooltip: 'Play Video',
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -386,28 +601,36 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: isCurrentTrack ? Colors.pink.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.2),
+            color: isCurrentTrack ? Colors.pink.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: isCurrentTrack ? Border.all(color: Colors.pink, width: 2) : null,
+            border: isCurrentTrack ? Border.all(color: Colors.pink.withValues(alpha: 0.5)) : null,
           ),
           child: ListTile(
-            leading: Container(
-              width: 45,
-              height: 45,
-              decoration: BoxDecoration(
-                color: isCurrentTrack ? Colors.pink : Colors.grey.shade800,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isCurrentTrack && musicManager.isPlaying ? Icons.music_note : Icons.music_note_outlined,
-                color: Colors.white,
-              ),
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: track.thumbnailUrl != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(
+                      track.thumbnailUrl!,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Icon(
+                        isCurrentTrack ? Icons.multitrack_audio : Icons.music_note,
+                        color: isCurrentTrack ? Colors.pink : Colors.white70,
+                      ),
+                    ),
+                  )
+                : Icon(
+                    isCurrentTrack ? Icons.multitrack_audio : Icons.music_note,
+                    color: isCurrentTrack ? Colors.pink : Colors.white70,
+                  ),
             title: Text(
               track.name,
               style: TextStyle(
                 color: isCurrentTrack ? Colors.pink : Colors.white,
                 fontWeight: isCurrentTrack ? FontWeight.bold : FontWeight.normal,
+                fontSize: 14,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -416,32 +639,33 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (!isCurrentTrack || !musicManager.isPlaying)
+                      if (!isCurrentTrack)
                         IconButton(
-                          icon: const Icon(Icons.play_arrow, color: Colors.white),
+                          icon: const Icon(Icons.play_arrow, color: Colors.white70),
                           onPressed: () => _playTrack(index),
                         ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                         onPressed: () => _removeTrack(index),
                       ),
                     ],
                   )
                 : null,
-            onTap: widget.isHost ? () => _playTrack(index) : null,
+            onTap: widget.isHost && !isCurrentTrack ? () => _playTrack(index) : null,
           ),
         );
       },
     );
   }
 
+
+
   Widget _buildMusicPlayer(MusicPlayerManager musicManager) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.4),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(top: BorderSide(color: Colors.pink.withValues(alpha: 0.3), width: 1)),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -452,16 +676,16 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.pink.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.music_note, color: Colors.pink, size: 24),
+                child: const Icon(Icons.music_note, color: Colors.pinkAccent, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Now Playing', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const Text('Now Playing', style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                     Text(
-                      musicManager.currentTrack?.name ?? '',
+                      musicManager.currentTrack?.name ?? 'Unknown',
                       style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -471,85 +695,77 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Progress Bar
-          Column(
-            children: [
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                ),
-                child: Slider(
-                  value: musicManager.totalDuration > 0
-                      ? musicManager.currentProgress.toDouble().clamp(0.0, musicManager.totalDuration.toDouble())
-                      : 0,
-                  max: musicManager.totalDuration > 0 ? musicManager.totalDuration.toDouble() : 1.0,
-                  activeColor: Colors.pink,
-                  inactiveColor: Colors.white24,
-                  onChanged: widget.isHost
-                      ? (value) async {
-                          await ZegoUIKit().seekTo(value.toInt());
-                        }
-                      : null,
-                ),
+          
+          if (widget.isHost) ...[
+            const SizedBox(height: 16),
+            // Progress Bar
+            SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: Colors.pinkAccent,
+                inactiveTrackColor: Colors.white24,
+                thumbColor: Colors.pinkAccent,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _formatDuration(musicManager.currentProgress),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                    Text(
-                      _formatDuration(musicManager.totalDuration),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
+              child: Slider(
+                value: musicManager.currentProgress.toDouble(),
+                max: musicManager.totalDuration > 0 ? musicManager.totalDuration.toDouble() : 1.0,
+                onChanged: (value) {
+                  musicManager.seekTo(value.toInt());
+                },
               ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          // Controls
-          if (widget.isHost)
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(musicManager.currentProgress),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  Text(
+                    _formatDuration(musicManager.totalDuration),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Controls
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
                   icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
-                  onPressed: () => widget.musicManager.playPrevious(),
+                  onPressed: musicManager.playlist.isNotEmpty ? musicManager.playPrevious : null,
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 16),
                 Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [Colors.pink.shade400, Colors.pink.shade600]),
+                    color: Colors.pinkAccent,
                   ),
                   child: IconButton(
-                    icon: Icon(musicManager.isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 32),
-                    onPressed: () => widget.musicManager.pauseResume(),
+                    icon: Icon(
+                      musicManager.isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      musicManager.pauseResume();
+                    },
                   ),
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 16),
                 IconButton(
                   icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
-                  onPressed: () => widget.musicManager.playNext(),
-                ),
-                const SizedBox(width: 20),
-                IconButton(
-                  icon: const Icon(Icons.stop, color: Colors.white, size: 28),
-                  onPressed: () => widget.musicManager.stopMusic(),
+                  onPressed: musicManager.playlist.isNotEmpty ? musicManager.playNext : null,
                 ),
               ],
-            )
-          else
+            ),
+          ] else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text('Only host can control playback', style: TextStyle(color: Colors.white70, fontSize: 12)),

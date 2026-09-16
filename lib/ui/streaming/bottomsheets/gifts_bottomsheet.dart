@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_svg/svg.dart';
 
 import '../../../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../../../data/remote/firebase/assets_services.dart';
 import '../../../../data/remote/firebase/profile_services.dart';
 import '../../../core/widgets/GiftImageWidget.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/remote/firebase/room_services.dart';
 import '../audio_room_page.dart';
 
@@ -56,6 +57,8 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
   final Map<String, List<GiftModel>> _cachedGiftsByCategory = {};
 
   late TabController _tabController;
+  StreamSubscription<bool>? _lockSubscription;
+  bool _isAccountLocked = false;
 
   @override
   void initState() {
@@ -63,6 +66,14 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
     _initializeParticipants();
     _loadBalance();
     _loadCategories();
+    _checkLockStatus();
+    _lockSubscription = ProfileService.getCurrentUserLockStream().listen((locked) {
+      if (mounted) {
+        setState(() {
+          _isAccountLocked = locked;
+        });
+      }
+    });
   }
 
   @override
@@ -74,6 +85,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
 
   @override
   void dispose() {
+    _lockSubscription?.cancel();
     if (mounted && _cachedCategories != null) {
       _tabController.dispose();
     }
@@ -83,12 +95,13 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
   void _initializeParticipants() {
     // Preserve manual selections/deselections
     final Map<String, bool> previousSelections = {
-      for (var p in _participantSelectors) p.userId: p.isSelected
+      for (var p in _participantSelectors) p.userId: p.isSelected,
     };
 
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final List<RoomParticipant> castedParticipants = [];
     for (var p in widget.participants) {
-      if (p is RoomParticipant) {
+      if (p is RoomParticipant && p.userId != currentUserId) {
         castedParticipants.add(p);
       }
     }
@@ -97,11 +110,11 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
       final bool isHost = p.userId == widget.hostId;
       final bool isCoHost = p.isCoHost;
       final bool isSeated = p.seatNo >= 0;
-      
+
       // Keep previous selection state if present, otherwise default select host, cohost, or seated speakers
       final bool isSelected = previousSelections.containsKey(p.userId)
           ? previousSelections[p.userId]!
-          : (isHost || isCoHost || isSeated);
+          : isHost; // Only host is selected by default
 
       return ParticipantSelector(
         userId: p.userId,
@@ -126,6 +139,14 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
     if (!mounted) return;
     setState(() {
       _currentBalance = balance;
+    });
+  }
+
+  Future<void> _checkLockStatus() async {
+    final locked = await ProfileService.isCurrentUserLocked();
+    if (!mounted) return;
+    setState(() {
+      _isAccountLocked = locked;
     });
   }
 
@@ -176,12 +197,22 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
   }
 
   bool get _canSend {
+    if (_isAccountLocked) return false;
     if (_selectedGift == null) return false;
     if (_currentBalance < _totalCost) return false;
     return _participantSelectors.any((p) => p.isSelected);
   }
 
   Future<void> _sendGift() async {
+    if (_isAccountLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your account is locked. You cannot send gifts.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_canSend || _selectedGift == null) return;
 
     setState(() {
@@ -207,13 +238,14 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
       await ProfileService.sendGift(
         giftValue: _selectedGift!.value,
         recipientIds: selectedRecipientIds,
+        roomId: widget.roomId,
       );
 
       //   Send gift to VideoRoomService with receiver info
       await RoomService.sendGift(
         roomId: widget.roomId,
-        giftAnimationUrl: _selectedGift!.iconUrl,
-        giftImageUrl: _selectedGift!.imageUrl,
+        giftAnimationUrl: _selectedGift!.imageUrl,
+        giftImageUrl: _selectedGift!.iconUrl,
         giftValue: _selectedGift!.value,
         category: _selectedGift!.category,
         receiverId: receiverIds,
@@ -252,6 +284,32 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
         ),
         child: Column(
           children: [
+            if (_isAccountLocked)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.lock, color: Colors.redAccent, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your account is locked. You cannot send gifts.',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -444,9 +502,15 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
       stream: ProfileService.getCurrentUserBalanceStream(),
       initialData: _currentBalance,
       builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data != _currentBalance) {
+        final displayBalance = snapshot.data ?? _currentBalance;
+        
+        if (displayBalance != _currentBalance) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _currentBalance = snapshot.data!;
+            if (mounted) {
+              setState(() {
+                _currentBalance = displayBalance;
+              });
+            }
           });
         }
 
@@ -461,7 +525,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
               const Icon(Icons.diamond, color: Colors.cyanAccent, size: 16),
               const SizedBox(width: 4),
               Text(
-                _currentBalance.toString(),
+                displayBalance.toString(),
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -842,7 +906,7 @@ class _GiftGridViewState extends State<_GiftGridView>
                     ),
                     child: ClipOval(
                       child: GiftImageWidget(
-                        imageUrl: gift.imageUrl,
+                        imageUrl: gift.iconUrl,
                         fit: BoxFit.cover,
                         placeholder: Center(
                           child: CircularProgressIndicator(

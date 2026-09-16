@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'home_cubit.dart';
 import 'home_page.dart'; 
 import 'widgets/carousal_banner.dart';
 import 'widgets/card_widget.dart';
 import '../../core/localization/app_localizations.dart';
 
-Widget _buildFresherGrid(HomeCubit cubit) {
+Widget buildFresherGrid(HomeCubit cubit) {
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.freshersStream,
       builder: (context, snapshot) {
@@ -65,7 +64,7 @@ Widget _buildFresherGrid(HomeCubit cubit) {
     );
   }
 
-  Widget _buildPartyTab(HomeCubit cubit) {
+  Widget buildPartyTab(HomeCubit cubit) {
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.audioRoomsStream,
       builder: (context, snapshot) {

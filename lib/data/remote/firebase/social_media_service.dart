@@ -133,14 +133,7 @@ class SocialMediaService {
       if (tabType == 'new') {
         query = query.orderBy('createdAt', descending: true);
       } else if (tabType == 'hot') {
-        final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
-        query = query
-            .where(
-              'createdAt',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo),
-            )
-            .orderBy('createdAt', descending: true)
-            .orderBy('reactionCount', descending: true);
+        query = query.orderBy('createdAt', descending: true);
       } else if (tabType == 'my_feed') {
         query = query
             .where('authorId', isEqualTo: currentUserId)
@@ -154,11 +147,13 @@ class SocialMediaService {
         List<String> followingIds = followingSnapshot.docs
             .map((e) => e.id)
             .toList();
-        if (followingIds.isEmpty)
+        if (followingIds.isEmpty) {
           return {'posts': <Post>[], 'lastDocument': null};
+        }
 
-        if (followingIds.length > 30)
+        if (followingIds.length > 30) {
           followingIds = followingIds.sublist(0, 30);
+        }
         query = query
             .where('authorId', whereIn: followingIds)
             .orderBy('createdAt', descending: true);
@@ -233,7 +228,10 @@ class SocialMediaService {
           }
           post.originalPost = origPost;
         }
+      }
 
+      // Fetch likes in parallel to vastly improve load speed
+      await Future.wait(posts.map((post) async {
         final likeDoc = await _db
             .collection('posts')
             .doc(post.id)
@@ -241,7 +239,7 @@ class SocialMediaService {
             .doc(currentUserId)
             .get();
         post.isLikedByMe = likeDoc.exists;
-      }
+      }));
 
       return {'posts': posts, 'lastDocument': snapshot.docs.last};
     } catch (e) {

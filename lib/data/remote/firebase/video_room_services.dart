@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'profile_services.dart';
 
 /// Service class for managing video rooms using Firebase RTDB and Firestore
 class VideoRoomService {
@@ -107,6 +108,10 @@ class VideoRoomService {
 
     if (userDoc.exists) {
       final userData = userDoc.data() as Map<String, dynamic>;
+      if (ProfileService.checkIsModerator(userData)) {
+        await participantRef.remove();
+        return;
+      }
       userName = userData['displayName'] ?? userName;
       displayId = userData['displayId'] ?? '';
       userPicture = userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;

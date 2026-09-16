@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -22,7 +21,6 @@ class VoiceRecorderWidget extends StatefulWidget {
 
 class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
   final _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
   int _recordDuration = 0;
   Timer? _timer;
   String? _audioPath;
@@ -59,7 +57,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
         );
 
         setState(() {
-          _isRecording = true;
           _audioPath = path;
         });
 

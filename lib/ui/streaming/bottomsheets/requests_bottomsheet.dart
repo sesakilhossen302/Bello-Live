@@ -129,112 +129,167 @@ class _RequestsBottomSheetState extends State<RequestsBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasCoHostRequests = _coHostRequests.isNotEmpty;
-    final bool hasSpeakerRequests = _speakerRequests.isNotEmpty;
-    final bool hasAnyRequests = hasCoHostRequests || hasSpeakerRequests;
+    return StreamBuilder(
+      stream: RoomService.getSpeakerRequestsStream(widget.roomID),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data!.snapshot.exists) {
+          final requestsMap = Map<dynamic, dynamic>.from(
+            snapshot.data!.snapshot.value as Map,
+          );
+          _speakerRequests = requestsMap.entries
+              .map((entry) => SpeakerRequest.fromRTDB(entry.key, entry.value))
+              .toList();
+        } else {
+          _speakerRequests = [];
+        }
 
-    return ListView(
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16.0),
-          child: Text(
-            'Room Settings',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const Divider(color: Colors.white24, height: 1),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: SwitchListTile(
-            title: const Text('Allow Seat Change', style: TextStyle(color: Colors.white)),
-            subtitle: Text(
-              'Allow speakers to move between empty seats.',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+        final bool hasCoHostRequests = _coHostRequests.isNotEmpty;
+        final bool hasSpeakerRequests = _speakerRequests.isNotEmpty;
+        final bool hasAnyRequests = hasCoHostRequests || hasSpeakerRequests;
+
+        return ListView(
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                'Room Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
-            value: _isMoveAllowed,
-            onChanged: (bool newValue) async {
-              setState(() {
-                _isMoveAllowed = newValue;
-              });
-              try {
-                await RoomService.toggleMoveAllowed(widget.roomID, newValue);
-              } catch (e) {
-                if (mounted) {
+            const Divider(color: Colors.white24, height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: SwitchListTile(
+                title: const Text(
+                  'Allow Seat Change',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Allow speakers to move between empty seats.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                value: _isMoveAllowed,
+                onChanged: (bool newValue) async {
                   setState(() {
-                    _isMoveAllowed = !newValue;
+                    _isMoveAllowed = newValue;
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating setting: $e')));
-                }
-              }
-            },
-            activeThumbColor: Colors.pink,
-          ),
-        ),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: SwitchListTile(
-            title: const Text('Lock seats', style: TextStyle(color: Colors.white)),
-            subtitle: Text(
-              'If off, guests can take empty seats directly.',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                  try {
+                    await RoomService.toggleMoveAllowed(
+                      widget.roomID,
+                      newValue,
+                    );
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() {
+                        _isMoveAllowed = !newValue;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error updating setting: $e')),
+                      );
+                    }
+                  }
+                },
+                activeThumbColor: Colors.pink,
+              ),
             ),
-            value: _isSeatApprovalRequired,
-            onChanged: (bool newValue) async {
-              setState(() {
-                _isSeatApprovalRequired = newValue;
-              });
-              try {
-                await RoomService.toggleSeatApprovalRequired(widget.roomID, newValue);
-              } catch (e) {
-                if (mounted) {
+
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: SwitchListTile(
+                title: const Text(
+                  'Lock seats',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'If off, guests can take empty seats directly.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                value: _isSeatApprovalRequired,
+                onChanged: (bool newValue) async {
                   setState(() {
-                    _isSeatApprovalRequired = !newValue;
+                    _isSeatApprovalRequired = newValue;
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating setting: $e')));
-                }
-              }
-            },
-            activeThumbColor: Colors.pink,
-          ),
-        ),
-
-        if (hasCoHostRequests) ...[
-          const Divider(color: Colors.white24, height: 1),
-          _buildSectionHeader("Co-Host Requests (${_coHostRequests.length})"),
-          ..._coHostRequests.map(
-            (request) => _buildRequestTile(
-              request: request,
-              subtitle: 'Wants to be a co-host',
-              onApprove: () => RoomService.approveCoHostRequest(widget.roomID, request.requestId, request.userId),
-              onStateChange: () => _coHostRequests.remove(request),
+                  try {
+                    await RoomService.toggleSeatApprovalRequired(
+                      widget.roomID,
+                      newValue,
+                    );
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() {
+                        _isSeatApprovalRequired = !newValue;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error updating setting: $e')),
+                      );
+                    }
+                  }
+                },
+                activeThumbColor: Colors.pink,
+              ),
             ),
-          ),
-          if (hasSpeakerRequests) const Divider(color: Colors.white24, height: 1),
-        ],
 
-        if (hasSpeakerRequests) ...[
-          if (!hasCoHostRequests) const Divider(color: Colors.white24, height: 1),
-          _buildSectionHeader("Speaker Requests (${_speakerRequests.length})"),
-          ..._speakerRequests.map(
-            (request) => _buildRequestTile(
-              request: request,
-              subtitle: 'Wants to join a chair',
-              onApprove: () => RoomService.approveSpeakerRequest(widget.roomID, request.requestId, request.userId),
-              onStateChange: () => _speakerRequests.remove(request),
-            ),
-          ),
-        ],
+            if (hasCoHostRequests) ...[
+              const Divider(color: Colors.white24, height: 1),
+              _buildSectionHeader(
+                "Co-Host Requests (${_coHostRequests.length})",
+              ),
+              ..._coHostRequests.map(
+                (request) => _buildRequestTile(
+                  request: request,
+                  subtitle: 'Wants to be a co-host',
+                  onApprove:
+                      () => RoomService.approveCoHostRequest(
+                        widget.roomID,
+                        request.requestId,
+                        request.userId,
+                      ),
+                  onStateChange: () => _coHostRequests.remove(request),
+                ),
+              ),
+              if (hasSpeakerRequests)
+                const Divider(color: Colors.white24, height: 1),
+            ],
 
-        if (!hasAnyRequests)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40.0),
-            child: Center(
-              child: Text("No pending requests", style: TextStyle(color: Colors.white70, fontSize: 16)),
-            ),
-          ),
-      ],
+            if (hasSpeakerRequests) ...[
+              if (!hasCoHostRequests)
+                const Divider(color: Colors.white24, height: 1),
+              _buildSectionHeader(
+                "Speaker Requests (${_speakerRequests.length})",
+              ),
+              ..._speakerRequests.map(
+                (request) => _buildRequestTile(
+                  request: request,
+                  subtitle: 'Wants to join a chair',
+                  onApprove:
+                      () => RoomService.approveSpeakerRequest(
+                        widget.roomID,
+                        request.requestId,
+                        request.userId,
+                      ),
+                  onStateChange: () => _speakerRequests.remove(request),
+                ),
+              ),
+            ],
+
+            if (!hasAnyRequests)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40.0),
+                child: Center(
+                  child: Text(
+                    "No pending requests",
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

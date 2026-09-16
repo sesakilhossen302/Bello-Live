@@ -3,6 +3,8 @@ import 'package:picture_live/ui/apply/apply_agency.dart';
 import 'package:picture_live/ui/apply/apply_hosting.dart';
 import 'package:picture_live/ui/auth/registration/register_page.dart';
 import 'package:picture_live/ui/earnings/earnings_page.dart';
+import 'package:picture_live/ui/earnings/withdraw_page.dart';
+import 'package:picture_live/ui/profile/live_history_page.dart';
 import 'package:picture_live/ui/inbox/chat_page.dart';
 import 'package:picture_live/ui/inbox/inbox_page.dart';
 import 'package:picture_live/ui/status/my_feed_page.dart';
@@ -19,14 +21,11 @@ import 'package:picture_live/ui/auth/login/login_page.dart';
 import 'package:picture_live/ui/auth/verify_otp/verify_otp_page.dart';
 
 // Make sure this import path matches where you put the overlay in the new app
-import '../core/widgets/big_winner_overlay.dart';
+
 import '../data/local/secure_storage/secure_storage.dart';
 import '../ui/streaming/live_now_page.dart';
 import '../ui/feedback/feedback_page.dart';
-import '../ui/games/greedy_game.dart';
-import '../ui/games/spinner_game.dart';
-import '../ui/games/teen_patti/teen_patti_game.dart';
-import '../ui/games/animalGame/game_screen.dart';
+
 import '../ui/home/home_page.dart';
 import '../ui/host_page/host_page.dart';
 import '../ui/live_streaming/live_room_page.dart';
@@ -40,11 +39,21 @@ import '../ui/ranks/ranks_page.dart';
 import '../ui/search/search_page.dart';
 import '../ui/store-bag/mybag_page.dart';
 import '../ui/store-bag/store_page.dart';
+import '../ui/store-bag/package_store_page.dart';
 import '../ui/vip_page/vip_page.dart';
 import '../ui/settings/password_settings_page.dart';
 import '../ui/settings/settings_page.dart';
 import '../ui/settings/language_selection_page.dart';
 import '../ui/settings/about_us_page.dart';
+import '../ui/apply/apply_coin_seller.dart';
+import '../ui/apply/coin_seller_portal.dart';
+import '../ui/apply/coin_seller_history.dart';
+import '../ui/apply/agency_portal_page.dart';
+import '../ui/agency/host_management_page.dart';
+import '../ui/profile/reseller_hub/reseller_hub_page.dart';
+import '../ui/recharge/recharge_diamonds_page.dart';
+import '../ui/recharge/reseller_list_page.dart';
+import '../ui/notice/notification_notice_page.dart';
 
 class MyRouter {
   static final GlobalKey<NavigatorState> rootNavigatorKey =
@@ -89,13 +98,8 @@ class MyRouter {
               return child;
             }
 
-            // If it's a private page, wrap it in a Stack with the Overlay
-            return Stack(
-              children: [
-                child, // The actual page content
-                const BigWinnerOverlay(), // The floating winner notification
-              ],
-            );
+            // If it's a private page, return directly
+            return child;
           },
           routes: [
             ShellRoute(
@@ -156,18 +160,7 @@ class MyRouter {
                     ),
                   ),
                 ),
-                GoRoute(
-                  path: Routes.hostPage.path,
-                  pageBuilder: (context, state) => CustomTransitionPage<void>(
-                    key: state.pageKey,
-                    child: HostPage(),
-                    transitionsBuilder: customPopTransition,
-                    transitionDuration: const Duration(milliseconds: 300),
-                    reverseTransitionDuration: const Duration(
-                      milliseconds: 100,
-                    ),
-                  ),
-                ),
+
                 GoRoute(
                   path: Routes.inbox.path,
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
@@ -184,7 +177,19 @@ class MyRouter {
                   path: Routes.history.path,
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
                     key: state.pageKey,
-                    child: const Scaffold(body: Center(child: Text("history"))),
+                    child: const LiveHistoryPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.earnings.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: const EarningsPage(),
                     transitionsBuilder: customPopTransition,
                     transitionDuration: const Duration(milliseconds: 200),
                     reverseTransitionDuration: const Duration(
@@ -277,6 +282,54 @@ class MyRouter {
                   ),
                 ),
                 GoRoute(
+                  path: Routes.applyCoinSeller.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: ApplyCoinSellerPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.coinSellerPortal.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: CoinSellerPortalPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.coinSellerHistory.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: CoinSellerHistoryPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: Routes.agencyPortal.path,
+                  pageBuilder: (context, state) => CustomTransitionPage<void>(
+                    key: state.pageKey,
+                    child: AgencyPortalPage(),
+                    transitionsBuilder: customPopTransition,
+                    transitionDuration: const Duration(milliseconds: 200),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 100,
+                    ),
+                  ),
+                ),
+                GoRoute(
                   path: Routes.liveNow.path,
                   pageBuilder: (context, state) => CustomTransitionPage<void>(
                     key: state.pageKey,
@@ -301,6 +354,18 @@ class MyRouter {
                   ),
                 ),
               ],
+            ),
+            GoRoute(
+              path: Routes.hostPage.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: HostPage(),
+                transitionsBuilder: customPopTransition,
+                transitionDuration: const Duration(milliseconds: 300),
+                reverseTransitionDuration: const Duration(
+                  milliseconds: 100,
+                ),
+              ),
             ),
             GoRoute(
               path: '/room/:roomId',
@@ -413,46 +478,7 @@ class MyRouter {
                 );
               },
             ),
-            GoRoute(
-              path: Routes.greedy.path,
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: GreedyGamePage(),
-                transitionsBuilder: customSlideTransition,
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 200),
-              ),
-            ),
-            GoRoute(
-              path: Routes.spinner.path,
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: FruitsKingPage(),
-                transitionsBuilder: customSlideTransition,
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 200),
-              ),
-            ),
-            GoRoute(
-              path: Routes.teenPatti.path,
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const GameScreen(),
-                transitionsBuilder: customSlideTransition,
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 200),
-              ),
-            ),
-            GoRoute(
-              path: Routes.animalGame.path,
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const AnimalGameScreen(),
-                transitionsBuilder: customSlideTransition,
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 200),
-              ),
-            ),
+
             GoRoute(
               path: Routes.topUp.path,
               pageBuilder: (context, state) => CustomTransitionPage<void>(
@@ -468,6 +494,66 @@ class MyRouter {
               pageBuilder: (context, state) => CustomTransitionPage<void>(
                 key: state.pageKey,
                 child: EarningsPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.withdrawPage.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const WithdrawPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.hostManagement.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const HostManagementPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.resellerHub.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const ResellerHubPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.rechargeDiamonds.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const RechargeDiamondsPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.resellerList.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const ResellerListPage(),
+                transitionsBuilder: customSlideTransition,
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 200),
+              ),
+            ),
+            GoRoute(
+              path: Routes.notificationNotice.path,
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const NotificationNoticePage(),
                 transitionsBuilder: customSlideTransition,
                 transitionDuration: const Duration(milliseconds: 250),
                 reverseTransitionDuration: const Duration(milliseconds: 200),
@@ -512,6 +598,19 @@ class MyRouter {
                 transitionDuration: const Duration(milliseconds: 250),
                 reverseTransitionDuration: const Duration(milliseconds: 200),
               ),
+            ),
+            GoRoute(
+              path: Routes.packageStore.path,
+              pageBuilder: (context, state) {
+                final category = state.extra as String? ?? 'Package';
+                return CustomTransitionPage<void>(
+                  key: state.pageKey,
+                  child: PackageStorePage(category: category),
+                  transitionsBuilder: customSlideTransition,
+                  transitionDuration: const Duration(milliseconds: 250),
+                  reverseTransitionDuration: const Duration(milliseconds: 200),
+                );
+              },
             ),
             GoRoute(
               path: Routes.myBag.path,

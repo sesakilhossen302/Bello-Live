@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_svg/svg.dart';
 
 import '../../../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../../../data/remote/firebase/assets_services.dart';
 import '../../../../data/remote/firebase/profile_services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/widgets/GiftImageWidget.dart';
 import '../../../data/remote/firebase/live_streaming_services.dart';
 
@@ -38,6 +39,8 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
   final Map<String, List<GiftModel>> _cachedGiftsByCategory = {};
 
   late TabController _tabController;
+  StreamSubscription<bool>? _lockSubscription;
+  bool _isAccountLocked = false;
 
   @override
   void initState() {
@@ -45,10 +48,19 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
     _initializeParticipants();
     _loadBalance();
     _loadCategories();
+    _checkLockStatus();
+    _lockSubscription = ProfileService.getCurrentUserLockStream().listen((locked) {
+      if (mounted) {
+        setState(() {
+          _isAccountLocked = locked;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _lockSubscription?.cancel();
     if (mounted && _cachedCategories != null) {
       _tabController.dispose();
     }
@@ -56,7 +68,10 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
   }
 
   void _initializeParticipants() {
-    _participantSelectors = widget.participants.map((p) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    _participantSelectors = widget.participants
+        .where((p) => p.userId != currentUserId)
+        .map<ParticipantSelector>((p) {
       return ParticipantSelector(
         userId: p.userId,
         userName: p.userName,
@@ -80,10 +95,12 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
     });
   }
 
-  Future<void> _loadBalanceUpdate() async {
-    // Small helper to refresh balance without a full reload
-    final balance = await ProfileService.getCurrentUserBalance();
-    if (mounted) setState(() => _currentBalance = balance);
+  Future<void> _checkLockStatus() async {
+    final locked = await ProfileService.isCurrentUserLocked();
+    if (!mounted) return;
+    setState(() {
+      _isAccountLocked = locked;
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -123,12 +140,22 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
   }
 
   bool get _canSend {
+    if (_isAccountLocked) return false;
     if (_selectedGift == null) return false;
     if (_currentBalance < _totalCost) return false;
     return _participantSelectors.any((p) => p.isSelected);
   }
 
   Future<void> _sendGift() async {
+    if (_isAccountLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your account is locked. You cannot send gifts.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_canSend || _selectedGift == null) return;
 
     setState(() {
@@ -146,8 +173,8 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
 
       await LiveStreamService.sendGift(
         roomId: widget.roomId,
-        giftAnimationUrl: _selectedGift!.iconUrl,
-        giftImageUrl: _selectedGift!.imageUrl,
+        giftAnimationUrl: _selectedGift!.imageUrl,
+        giftImageUrl: _selectedGift!.iconUrl,
         giftValue: _selectedGift!.value,
         category: _selectedGift!.category,
         receiverId: receiverIds,
@@ -180,6 +207,32 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> with SingleTickerProv
         ),
         child: Column(
           children: [
+            if (_isAccountLocked)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.lock, color: Colors.redAccent, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your account is locked. You cannot send gifts.',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -505,7 +558,7 @@ class _GiftGridViewState extends State<_GiftGridView> with AutomaticKeepAliveCli
                     ),
                     child: ClipOval(
                       child: GiftImageWidget(
-                        imageUrl: gift.imageUrl,
+                        imageUrl: gift.iconUrl,
                         fit: BoxFit.cover,
                         placeholder: Center(
                           child: CircularProgressIndicator(color: Colors.pink.withValues(alpha: 0.5), strokeWidth: 1.5),

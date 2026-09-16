@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:rxdart/rxdart.dart';
 import '../../../data/remote/firebase/profile_services.dart';
 import '../../../data/remote/firebase/room_services.dart';
 
@@ -65,8 +67,65 @@ class RoomSkinSideSheet extends StatelessWidget {
   }
 
   Widget _buildSkinGrid() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('room_skin').snapshots(),
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return Center(
+        child: Text('Please login to view skins', style: TextStyle(color: Colors.white70)),
+      );
+    }
+
+    final bagStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('bag')
+        .snapshots();
+
+    final storeStream = FirebaseFirestore.instance
+        .collection('store')
+        .where('category', isEqualTo: 'RoomSkin')
+        .snapshots();
+
+    return StreamBuilder<List<RoomSkin>>(
+      stream: Rx.combineLatest2<QuerySnapshot, QuerySnapshot, List<RoomSkin>>(
+        bagStream,
+        storeStream,
+        (bagSnapshot, storeSnapshot) {
+          final now = DateTime.now();
+          final Map<String, RoomSkin> uniqueSkins = {};
+
+          // 1. Process free skins from the store first
+          for (var doc in storeSnapshot.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final isActive = data['isActive'] ?? false;
+            final price = data['price'] ?? 0;
+            final tier = (data['tier'] ?? '').toString().toLowerCase();
+
+            if (isActive && (price == 0 || tier == 'free')) {
+              final skin = RoomSkin.fromFirestore(doc.id, data);
+              if (skin.url.isNotEmpty) {
+                uniqueSkins[skin.url] = skin;
+              }
+            }
+          }
+
+          // 2. Process user's bag (so user-owned skins can overwrite or add to the list)
+          for (var doc in bagSnapshot.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final category = (data['category'] ?? '').toString().toLowerCase();
+            if (!category.contains('skin') && !category.contains('room')) continue;
+
+            final expiresAt = data['expiresAt'] as Timestamp?;
+            if (expiresAt != null && expiresAt.toDate().isBefore(now)) continue;
+
+            final skin = RoomSkin.fromFirestore(doc.id, data);
+            if (skin.url.isNotEmpty) {
+              uniqueSkins[skin.url] = skin;
+            }
+          }
+
+          return uniqueSkins.values.toList();
+        },
+      ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.pink));
@@ -78,7 +137,9 @@ class RoomSkinSideSheet extends StatelessWidget {
           );
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        final skins = snapshot.data ?? [];
+
+        if (skins.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -90,10 +151,6 @@ class RoomSkinSideSheet extends StatelessWidget {
             ),
           );
         }
-
-        final skins = snapshot.data!.docs
-            .map((doc) => RoomSkin.fromFirestore(doc.id, doc.data() as Map<String, dynamic>))
-            .toList();
 
         return GridView.builder(
           padding: const EdgeInsets.all(16.0),
@@ -126,8 +183,17 @@ class RoomSkinSideSheet extends StatelessWidget {
           // Update room background
           await RoomService.updateRoomBackground(roomId, skin.url);
 
-          // NEW: Save to user profile
+          // Save to user profile and activeAddOns
           await ProfileService.savePreferredRoomSkin(skin.url);
+          final currentUid = FirebaseAuth.instance.currentUser?.uid;
+          if (currentUid != null) {
+            await FirebaseFirestore.instance.collection('users').doc(currentUid).update({
+              'activeAddOns.Room Screen': {
+                'imageUrl': skin.url,
+                'expiresAt': null,
+              },
+            });
+          }
 
           // Close loading dialog
           if (context.mounted) Navigator.pop(context);
@@ -212,7 +278,7 @@ class RoomSkin {
     return RoomSkin(
       id: id,
       name: data['name'] ?? '',
-      url: data['url'] ?? '',
+      url: data['url'] ?? data['imageURL'] ?? '',
       createdAt: data['createdAt'] != null ? (data['createdAt'] as Timestamp).toDate() : DateTime.now(),
     );
   }

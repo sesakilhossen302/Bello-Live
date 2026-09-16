@@ -1,5 +1,1 @@
-package com.mplive.app
-
-import io.flutter.embedding.android.FlutterActivity
-
-class MainActivity : FlutterActivity()
+// File deprecated and safely ignored.

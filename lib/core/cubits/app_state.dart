@@ -23,30 +23,43 @@ class AppState extends Equatable {
   final User? user;
   final Locale locale;
   final MinimizedRoomData? minimizedRoom;
+  final bool isUpdateRequired;
+  final String updateUrl;
 
   const AppState({
     this.user,
     this.locale = const Locale('en'),
     this.minimizedRoom,
+    this.isUpdateRequired = false,
+    this.updateUrl = '',
   });
 
   @override
-  List<Object?> get props => [user, locale, minimizedRoom];
+  List<Object?> get props => [user, locale, minimizedRoom, isUpdateRequired, updateUrl];
 
   AppState copyWith({
     User? user,
     Locale? locale,
     MinimizedRoomData? minimizedRoom,
     bool clearMinimizedRoom = false,
+    bool? isUpdateRequired,
+    String? updateUrl,
   }) {
     return AppState(
       user: user ?? this.user,
       locale: locale ?? this.locale,
       minimizedRoom: clearMinimizedRoom ? null : (minimizedRoom ?? this.minimizedRoom),
+      isUpdateRequired: isUpdateRequired ?? this.isUpdateRequired,
+      updateUrl: updateUrl ?? this.updateUrl,
     );
   }
 
   removeUser() {
-    return AppState(user: null, locale: locale);
+    return AppState(
+      user: null, 
+      locale: locale, 
+      isUpdateRequired: isUpdateRequired, 
+      updateUrl: updateUrl,
+    );
   }
 }

@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svga/flutter_svga.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/widgets/active_frame_widget.dart';
 import '../../../core/widgets/auto_scroll_text.dart';
 import '../../../data/remote/firebase/profile_services.dart';
 import '../../../data/remote/firebase/room_services.dart';
+import '../../../data/remote/firebase/live_streaming_services.dart';
 import '../../../navigation/routes.dart';
 import '../../profile/profile_page.dart';
 import 'follow_list_bottomsheet.dart';
@@ -14,12 +16,15 @@ import 'host_actions_bottomsheet.dart';
 import 'report_user_bottomsheet.dart';
 
 /// A bottom sheet that displays detailed info about a user.
-class ProfileInfoBottomSheet extends StatelessWidget {
+class ProfileInfoBottomSheet extends StatefulWidget {
   final String userId;
   final String? hostId;
   final String? roomId;
   final bool isSeated;
   final bool isCoHost;
+  final ScaffoldMessengerState? scaffoldMessenger;
+  final bool isCurrentUserAdmin;
+  final bool isCurrentUserModerator;
 
   const ProfileInfoBottomSheet({
     super.key,
@@ -28,19 +33,46 @@ class ProfileInfoBottomSheet extends StatelessWidget {
     this.roomId,
     this.isSeated = false,
     this.isCoHost = false,
+    this.scaffoldMessenger,
+    this.isCurrentUserAdmin = false,
+    this.isCurrentUserModerator = false,
   });
+
+  @override
+  State<ProfileInfoBottomSheet> createState() => _ProfileInfoBottomSheetState();
+}
+
+class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
+  late Future<Map<String, dynamic>> _tagsFuture;
+  bool _isModerator = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tagsFuture = ProfileService.getSystemTags();
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (widget.isCurrentUserModerator || widget.isCurrentUserAdmin) {
+      _isModerator = true;
+    } else if (currentUserId != null) {
+      ProfileService.isUserModerator(currentUserId).then((val) {
+        if (mounted && val) {
+          setState(() => _isModerator = true);
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     // --- UPDATED LOGIC (Null-safe) ---
-    final bool isHost = hostId != null && userId == hostId;
-    final bool isCurrentUser = userId == currentUserId;
-    final bool isCurrentUserTheHost = hostId != null && currentUserId == hostId;
+    final bool isHost = widget.hostId != null && widget.userId == widget.hostId;
+    final bool isCurrentUser = widget.userId == currentUserId;
+    final bool isCurrentUserTheHost = widget.hostId != null && currentUserId == widget.hostId;
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: ProfileService.getUserProfileStream(userId),
+      stream: ProfileService.getUserProfileStream(widget.userId),
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return const Center(child: CircularProgressIndicator(color: Colors.pink));
@@ -92,17 +124,17 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                         ),
                         // --- MODIFIED HEADER LOGIC ---
                         if (!isCurrentUser) ...[
-                          // I am the HOST viewing another user AND we are actually inside a room
-                          if (isCurrentUserTheHost && roomId != null)
+                          // I am the HOST OR ADMIN viewing another user AND we are actually inside a room
+                          if ((isCurrentUserTheHost || widget.isCurrentUserAdmin) && widget.roomId != null)
                             IconButton(
                               icon: const Icon(Icons.more_horiz, color: Colors.white, size: 30),
                               onPressed: () {
                                 Navigator.of(context).pop(); // Close this sheet
                                 showHostActionsBottomSheet(
                                   context,
-                                  targetUserId: userId,
+                                  targetUserId: widget.userId,
                                   targetUserName: userName,
-                                  roomId: roomId!, // Safe to force unwrap here
+                                  roomId: widget.roomId!, // Safe to force unwrap here
                                 );
                               },
                             )
@@ -111,7 +143,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                             TextButton(
                               onPressed: () {
                                 Navigator.of(context).pop(); // Close this sheet
-                                showReportUserBottomSheet(context, reportedUserId: userId, reportedUserName: userName);
+                                showReportUserBottomSheet(context, reportedUserId: widget.userId, reportedUserName: userName);
                               },
                               child: const Text(
                                 'Report',
@@ -143,7 +175,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                           Positioned(
                             width: 130,
                             height: 130,
-                            child: IgnorePointer(child: ActiveFrameWidget(userId: userId, size: 130)),
+                            child: IgnorePointer(child: ActiveFrameWidget(userId: widget.userId, size: 130)),
                           ),
                         ],
                       ),
@@ -156,40 +188,125 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Dynamic Level Image
-                        Image.asset(
-                          'assets/images/levels/rank_caifu_cf_$level.png',
-                          height: 24,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const SizedBox(),
-                        ),
-                        const SizedBox(width: 12),
-                        // User ID
-                        Row(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              'ID: ${data['displayId'] ?? 'N/A'}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                            // User ID - tap to copy
+                            _SvgaIdBadgeBS(
+                              displayId: data['displayId']?.toString() ?? 'N/A',
+                              context: context,
+                            ),
+                            const SizedBox(width: 12),
+                            // Balance/Coins count
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.cyan.shade600,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.cyan.withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 3),
+                                  )
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.diamond_outlined, color: Colors.white, size: 20),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${data['balance'] ?? 0}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  if ((data['balance'] ?? 0) >= 100000) ...[
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.star, color: Colors.amber, size: 16),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${(data['balance'] ?? 0) ~/ 100000}',
+                                      style: const TextStyle(color: Colors.amber, fontSize: 14, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(width: 12),
-                        // Diamonds count
-                        Row(
-                          children: [
-                            const Icon(Icons.diamond_outlined, color: Colors.cyan, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${data['diamonds'] ?? 0}',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(height: 12),
+                    // --- Badges using FutureBuilder ---
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: _tagsFuture,
+                      builder: (context, tagsSnapshot) {
+                        final systemTags = tagsSnapshot.data ?? {};
+                        final gender = data['gender'] ?? '';
+                        final country = data['country'] ?? '';
+                        final countryFlagEmoji = data['countryFlagEmoji'];
+                        final isReseller = data['isReseller'] == true || data['isreseler'] == true;
+                        final isHost = data['hostId'] != null || data['isHost'] == true;
+                        final cachedAgencyName = data['agencyName'] ?? data['agencyname'];
+                        final agencyId = data['agencyId'] ?? data['agencyCode'] ?? data['agencycode'];
+                        final List<dynamic> manualTags = data['manualTags'] ?? [];
+
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (gender.isNotEmpty && gender != 'N/A')
+                              if (gender == 'Male' || gender == 'Female')
+                                Image.asset(
+                                  'assets/icons/$gender.png',
+                                  height: 32,
+                                  fit: BoxFit.contain,
+                                )
+                              else
+                                _buildBadge(gender, Colors.blueAccent),
+                            if (country.isNotEmpty && country != 'N/A')
+                              if (countryFlagEmoji != null && countryFlagEmoji.isNotEmpty)
+                                Text(
+                                  countryFlagEmoji,
+                                  style: const TextStyle(fontSize: 28),
+                                )
+                              else
+                                _buildBadge(country, Colors.teal),
+                            FutureBuilder<String?>(
+                              future: ProfileService.getLevelImageUrl(level),
+                              builder: (context, levelImgSnapshot) {
+                                return _buildBadge('Level $level', Colors.pinkAccent, imageUrl: levelImgSnapshot.data);
+                              },
+                            ),
+                            if (cachedAgencyName != null && cachedAgencyName.toString().isNotEmpty)
+                              _buildBadge(cachedAgencyName.toString(), Colors.orange, imageUrl: systemTags['agency'] as String?)
+                            else if (agencyId != null && agencyId.toString().isNotEmpty)
+                              FutureBuilder<String?>(
+                                future: ProfileService.getAgencyName(agencyId.toString()),
+                                builder: (context, agencySnapshot) {
+                                  final name = agencySnapshot.data;
+                                  if (name != null && name.isNotEmpty) {
+                                    return _buildBadge(name, Colors.orange, imageUrl: systemTags['agency'] as String?);
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                            if (isReseller)
+                              _buildBadge('Coin Seller', Colors.amber.shade700, imageUrl: systemTags['coinseller'] as String?),
+                            if (isHost)
+                              _buildBadge('Host', Colors.deepPurpleAccent, imageUrl: systemTags['host'] as String?),
+                            for (final tag in manualTags)
+                              _buildBadge(tag.toString(), Colors.indigoAccent, imageUrl: systemTags[tag.toString()] as String?),
+                          ],
+                        );
+                      },
+                    ),
+                      
                     const SizedBox(height: 20),
                     // --- Stats Row ---
                     Row(
@@ -199,7 +316,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                         GestureDetector(
                           onTap: () {
                             Navigator.of(context).pop(); // Close this sheet
-                            showFollowListBottomSheet(context, userId: userId, listType: FollowListType.followers);
+                            showFollowListBottomSheet(context, userId: widget.userId, listType: FollowListType.followers);
                           },
                           child: Column(
                             children: [
@@ -222,7 +339,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                         GestureDetector(
                           onTap: () {
                             Navigator.of(context).pop(); // Close this sheet
-                            showFollowListBottomSheet(context, userId: userId, listType: FollowListType.following);
+                            showFollowListBottomSheet(context, userId: widget.userId, listType: FollowListType.following);
                           },
                           child: Column(
                             children: [
@@ -247,7 +364,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                             // Follow/Following Button
                             Expanded(
                               child: StreamBuilder<bool>(
-                                stream: ProfileService.isFollowing(userId),
+                                stream: ProfileService.isFollowing(widget.userId),
                                 builder: (context, snapshot) {
                                   if (!snapshot.hasData) {
                                     return ElevatedButton(onPressed: null, child: const Text('...'));
@@ -263,9 +380,9 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                                     onPressed: () async {
                                       try {
                                         if (isFollowing) {
-                                          await ProfileService.unfollowUser(userId);
+                                          await ProfileService.unfollowUser(widget.userId);
                                         } else {
-                                          await ProfileService.followUser(userId);
+                                          await ProfileService.followUser(widget.userId);
                                         }
                                       } catch (e) {
                                         debugPrint('Error following/unfollowing user: $e');
@@ -295,7 +412,7 @@ class ProfileInfoBottomSheet extends StatelessWidget {
 
                                   context.push(
                                     Routes.chat.path,
-                                    extra: {'peerId': userId, 'peerName': userName, 'peerAvatar': userPicture ?? ""},
+                                    extra: {'peerId': widget.userId, 'peerName': userName, 'peerAvatar': userPicture ?? ""},
                                   );
                                 },
                                 child: const Text('Message'),
@@ -306,14 +423,14 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                       ),
 
                     // --- Co-Host Actions (Host Only) ---
-                    if (!isCurrentUser && isCurrentUserTheHost && roomId != null && (isSeated || isCoHost))
+                    if (!isCurrentUser && isCurrentUserTheHost && widget.roomId != null && (widget.isSeated || widget.isCoHost))
                       Padding(
                         padding: const EdgeInsets.only(top: 12.0),
                         child: SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isCoHost ? Colors.red.shade700 : Colors.purple.shade700,
+                              backgroundColor: widget.isCoHost ? Colors.red.shade700 : Colors.purple.shade700,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -321,15 +438,15 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                             ),
                             onPressed: () async {
                               try {
-                                if (isCoHost) {
-                                  await RoomService.removeCoHost(roomId!, userId);
+                                if (widget.isCoHost) {
+                                  await RoomService.removeCoHost(widget.roomId!, widget.userId);
                                 } else {
-                                  await RoomService.promoteToCoHost(roomId!, userId);
+                                  await RoomService.promoteToCoHost(widget.roomId!, widget.userId);
                                 }
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('$userName is ${isCoHost ? 'no longer' : 'now'} a Co-Host!')),
+                                    SnackBar(content: Text('$userName is ${widget.isCoHost ? 'no longer' : 'now'} a Co-Host!')),
                                   );
                                 }
                               } catch (e) {
@@ -340,15 +457,62 @@ class ProfileInfoBottomSheet extends StatelessWidget {
                                 }
                               }
                             },
-                            icon: Icon(isCoHost ? Icons.star_outline_rounded : Icons.star_border_rounded),
+                            icon: Icon(widget.isCoHost ? Icons.star_outline_rounded : Icons.star_border_rounded),
                             label: Text(
-                              isCoHost ? 'Remove Co-Host' : 'Make Co-Host',
+                              widget.isCoHost ? 'Remove Co-Host' : 'Make Co-Host',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       ),
                     // Add bottom padding if the buttons are visible
+                    if (!isCurrentUser && (isCurrentUserTheHost || _isModerator) && widget.roomId != null && widget.isSeated)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade900,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 4,
+                            ),
+                            onPressed: () async {
+                              try {
+                                try {
+                                  await RoomService.removeUserFromSeat(widget.roomId!, widget.userId);
+                                } catch (_) {}
+                                try {
+                                  await LiveStreamService.removeUserFromSeat(widget.roomId!, widget.userId);
+                                } catch (_) {}
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('$userName has been removed from the seat.'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(
+                                    context,
+                                  ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.person_remove_rounded),
+                            label: const Text(
+                              'Kick from Seat',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      
                     if (!isCurrentUser) const SizedBox(height: 10),
                   ],
                 ),
@@ -359,9 +523,46 @@ class ProfileInfoBottomSheet extends StatelessWidget {
       },
     );
   }
+
+  Widget _buildBadge(String text, Color textColor, {String? imageUrl}) {
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return Image.network(
+        imageUrl,
+        height: MediaQuery.of(context).size.width * 0.095, // Responsive and larger
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => _buildTextBadge(text, textColor),
+      );
+    }
+    return _buildTextBadge(text, textColor);
+  }
+
+  Widget _buildTextBadge(String text, Color badgeColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: badgeColor.withValues(alpha: 0.4),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          shadows: [Shadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))],
+        ),
+      ),
+    );
+  }
 }
 
-/// Top-level function to show the profile info bottom sheet.
 void showProfileInfoBottomSheet(
   BuildContext context, {
   required String userId,
@@ -369,21 +570,30 @@ void showProfileInfoBottomSheet(
   String? roomId,
   bool isSeated = false,
   bool isCoHost = false,
+  bool isCurrentUserAdmin = false,
+  bool isCurrentUserModerator = false,
 }) {
   // Record the profile visit to Firestore
   _recordProfileVisit(userId);
+
+  // Capture the outer ScaffoldMessenger BEFORE the bottom sheet opens
+  // so SnackBars work correctly from inside the modal.
+  final messenger = ScaffoldMessenger.of(context);
 
   showModalBottomSheet(
     context: context,
     backgroundColor: const Color(0xFF2d1b2b),
     isScrollControlled: true,
-    builder: (context) {
+    builder: (_) {
       return ProfileInfoBottomSheet(
         userId: userId,
         hostId: hostId,
         roomId: roomId,
         isSeated: isSeated,
         isCoHost: isCoHost,
+        scaffoldMessenger: messenger,
+        isCurrentUserAdmin: isCurrentUserAdmin,
+        isCurrentUserModerator: isCurrentUserModerator,
       );
     },
   );
@@ -405,5 +615,124 @@ Future<void> _recordProfileVisit(String visitedUserId) async {
     await visitorsRef.set({'visitorId': currentUser.uid, 'visitedAt': FieldValue.serverTimestamp()});
   } catch (e) {
     debugPrint('Error recording profile visit: $e');
+  }
+}
+
+// ========== SVGA ID BADGE FOR BOTTOM SHEET ==========
+
+class _SvgaIdBadgeBS extends StatefulWidget {
+  final String displayId;
+  final BuildContext context;
+
+  const _SvgaIdBadgeBS({required this.displayId, required this.context});
+
+  @override
+  State<_SvgaIdBadgeBS> createState() => _SvgaIdBadgeBSState();
+}
+
+class _SvgaIdBadgeBSState extends State<_SvgaIdBadgeBS> with SingleTickerProviderStateMixin {
+  SVGAAnimationController? _controller;
+  MovieEntity? _videoItem;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = SVGAAnimationController(vsync: this);
+    _loadSvga();
+  }
+
+  Future<void> _loadSvga() async {
+    try {
+      final videoItem = await SVGAParser.shared.decodeFromAssets('assets/svga/idbg.svga');
+      if (mounted) {
+        videoItem.audios.clear();
+        setState(() => _videoItem = videoItem);
+        _controller?.videoItem = videoItem;
+        _controller?.repeat();
+      }
+    } catch (e) {
+      debugPrint('Error loading idbg.svga: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: widget.displayId));
+        final overlay = Overlay.of(context);
+        late OverlayEntry overlayEntry;
+        overlayEntry = OverlayEntry(
+          builder: (ctx) => Positioned(
+            top: MediaQuery.of(ctx).size.height * 0.5,
+            left: MediaQuery.of(ctx).size.width * 0.2,
+            width: MediaQuery.of(ctx).size.width * 0.6,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white24, width: 1),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.greenAccent, size: 18),
+                    SizedBox(width: 8),
+                    Text('ID copied!', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        overlay.insert(overlayEntry);
+        Future.delayed(const Duration(seconds: 2), () {
+          if (overlayEntry.mounted) overlayEntry.remove();
+        });
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 170,
+            height: 46,
+            child: Stack(
+              children: [
+                if (_controller != null && _videoItem != null)
+                  Positioned.fill(
+                    child: SVGAImage(_controller!, fit: BoxFit.fill),
+                  ),
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 28, right: 6),
+                    child: Text(
+                      'ID: ${widget.displayId}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 5),
+          const Icon(Icons.copy_rounded, color: Colors.white70, size: 14),
+        ],
+      ),
+    );
   }
 }

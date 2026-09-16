@@ -337,167 +337,167 @@ class _PostCardState extends State<PostCard> {
     final isMyPost = currentUserId == widget.post.authorId;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: AppColors.white.withValues(alpha: 0.1),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        color: const Color(0xFF0F1E42),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.post.isShare)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.repeat, color: Colors.white54, size: 16),
-                        const SizedBox(width: 6),
-                        Text(AppLocalizations.of(context).sharedPostMsg, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-
-                // Header (Sharer OR Original Author if not a share)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.post.isShare)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundImage: widget.post.authorAvatar.isNotEmpty ? NetworkImage(widget.post.authorAvatar) : null,
-                      child: widget.post.authorAvatar.isEmpty ? const Icon(Icons.person) : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.post.authorName,
-                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            _getTimeAgo(widget.post.createdAt),
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isMyPost)
-                      SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_horiz, color: Colors.white70),
-                          padding: EdgeInsets.zero,
-                          color: Colors.grey.shade800,
-                          onSelected: (value) {
-                            if (value == 'edit') _showEditDialog();
-                            if (value == 'delete') _showDeleteDialog();
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(value: 'edit', child: Text(AppLocalizations.of(context).edit, style: const TextStyle(color: Colors.white))),
-                            PopupMenuItem(value: 'delete', child: Text(AppLocalizations.of(context).delete, style: const TextStyle(color: Colors.red))),
-                          ],
-                        ),
-                      ),
+                    const Icon(Icons.repeat, color: Colors.white60, size: 16),
+                    const SizedBox(width: 6),
+                    Text(AppLocalizations.of(context).sharedPostMsg, style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500)),
                   ],
                 ),
-                const SizedBox(height: 12),
+              ),
 
-                // Main Content (If they added text while sharing, or regular post text)
-                if (widget.post.content.isNotEmpty)
-                  Text(widget.post.content, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 15)),
-
-                // Regular Post Media
-                if (!widget.post.isShare)
-                  _buildMediaContent(widget.post.mediaUrl, widget.post.mediaType, widget.post.thumbnailUrl),
-
-                // --- UPDATED: EMBEDDED SHARED POST UI ---
-                if (widget.post.isShare)
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
-                    child: widget.post.originalPost == null
-                        ? Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(AppLocalizations.of(context).postDeletedMsg, style: const TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
-                    )
-                        : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundImage: widget.post.originalPost!.authorAvatar.isNotEmpty ? NetworkImage(widget.post.originalPost!.authorAvatar) : null,
-                              child: widget.post.originalPost!.authorAvatar.isEmpty ? const Icon(Icons.person, size: 12) : null,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.post.originalPost!.authorName,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _getTimeAgo(widget.post.originalPost!.createdAt),
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 10),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (widget.post.originalPost!.content.isNotEmpty)
-                          Text(widget.post.originalPost!.content, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-
-                        // Original Post Media
-                        _buildMediaContent(widget.post.originalPost!.mediaUrl, widget.post.originalPost!.mediaType, widget.post.originalPost!.thumbnailUrl),
+            // Header
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: widget.post.authorAvatar.isNotEmpty ? NetworkImage(widget.post.authorAvatar) : null,
+                  child: widget.post.authorAvatar.isEmpty ? const Icon(Icons.person) : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.post.authorName,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _getTimeAgo(widget.post.createdAt),
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isMyPost)
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_horiz, color: Colors.white60),
+                      padding: EdgeInsets.zero,
+                      color: const Color(0xFF132247),
+                      onSelected: (value) {
+                        if (value == 'edit') _showEditDialog();
+                        if (value == 'delete') _showDeleteDialog();
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(value: 'edit', child: Text(AppLocalizations.of(context).edit, style: const TextStyle(color: Colors.white))),
+                        PopupMenuItem(value: 'delete', child: Text(AppLocalizations.of(context).delete, style: const TextStyle(color: Colors.red))),
                       ],
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 12),
 
-                const SizedBox(height: 16),
+            // Main Content
+            if (widget.post.content.isNotEmpty)
+              Text(widget.post.content, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.3)),
 
-                // Footer Interactions
-                Row(
-                  children: [
-                    _buildInteractionButton(
-                      icon: _isLikedByMe ? Icons.favorite : Icons.favorite_border,
-                      color: _isLikedByMe ? AppColors.primary : Colors.white70,
-                      count: _reactionCount,
-                      onTap: _toggleLike,
-                    ),
-                    const SizedBox(width: 24),
-                    _buildInteractionButton(
-                      icon: Icons.chat_bubble_outline,
-                      color: Colors.white70,
-                      count: widget.post.commentCount,
-                      onTap: () {
-                        CommentBottomSheet.show(context, widget.post.id);
-                      },
-                    ),
-                    const SizedBox(width: 24),
-                    _buildInteractionButton(
-                      icon: Icons.share_outlined,
-                      color: Colors.white70,
-                      count: widget.post.shareCount,
-                      onTap: _showShareConfirmation, // Calls the new confirmation dialog
-                    ),
-                  ],
+            // Regular Post Media
+            if (!widget.post.isShare)
+              _buildMediaContent(widget.post.mediaUrl, widget.post.mediaType, widget.post.thumbnailUrl),
+
+            // Embedded Shared Post UI
+            if (widget.post.isShare)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF091433),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                child: widget.post.originalPost == null
+                    ? Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(AppLocalizations.of(context).postDeletedMsg, style: const TextStyle(color: Colors.white60, fontStyle: FontStyle.italic)),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundImage: widget.post.originalPost!.authorAvatar.isNotEmpty ? NetworkImage(widget.post.originalPost!.authorAvatar) : null,
+                                child: widget.post.originalPost!.authorAvatar.isEmpty ? const Icon(Icons.person, size: 12) : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.post.originalPost!.authorName,
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _getTimeAgo(widget.post.originalPost!.createdAt),
+                                style: const TextStyle(color: Colors.white60, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (widget.post.originalPost!.content.isNotEmpty)
+                            Text(widget.post.originalPost!.content, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14)),
+
+                          _buildMediaContent(widget.post.originalPost!.mediaUrl, widget.post.originalPost!.mediaType, widget.post.originalPost!.thumbnailUrl),
+                        ],
+                      ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // Footer Interactions
+            Row(
+              children: [
+                _buildInteractionButton(
+                  icon: _isLikedByMe ? Icons.favorite : Icons.favorite_border,
+                  color: _isLikedByMe ? const Color(0xFFE62563) : Colors.white70,
+                  count: _reactionCount,
+                  onTap: _toggleLike,
+                ),
+                const SizedBox(width: 24),
+                _buildInteractionButton(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  color: Colors.white70,
+                  count: widget.post.commentCount,
+                  onTap: () {
+                    CommentBottomSheet.show(context, widget.post.id);
+                  },
+                ),
+                const SizedBox(width: 24),
+                _buildInteractionButton(
+                  icon: Icons.share_outlined,
+                  color: Colors.white70,
+                  count: widget.post.shareCount,
+                  onTap: _showShareConfirmation,
                 ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -6,13 +6,14 @@ import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'profile_services.dart';
+
 class MediaService {
   static final _storage = FirebaseStorage.instance;
 
   // Compress and upload image
-  static Future<String?> compressAndUploadImage(File imageFile) async {
+  static Future<String?> compressAndUploadImage(File imageFile, {String folder = 'social'}) async {
     try {
-      final String userId = FirebaseAuth.instance.currentUser!.uid;
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
 
       // Compress image
@@ -27,19 +28,20 @@ class MediaService {
         minHeight: 1024,
       );
 
-      if (compressedFile == null) {
-        throw Exception('Image compression failed');
-      }
+      final File fileToUpload = compressedFile != null
+          ? File(compressedFile.path)
+          : imageFile;
 
-      // Upload to Firebase Storage
-      final ref = _storage.ref().child('chat_media/$userId/images/$fileName');
-      final uploadTask = ref.putFile(File(compressedFile.path));
-
+      // Upload directly to Firebase Storage in the specified folder
+      final ref = _storage.ref().child(folder).child(fileName);
+      final uploadTask = ref.putFile(fileToUpload, SettableMetadata(contentType: 'image/jpeg'));
       final snapshot = await uploadTask.whenComplete(() => {});
       final downloadUrl = await snapshot.ref.getDownloadURL();
 
       // Clean up temp file
-      await File(compressedFile.path).delete();
+      if (compressedFile != null) {
+        await File(compressedFile.path).delete();
+      }
 
       return downloadUrl;
     } catch (e) {

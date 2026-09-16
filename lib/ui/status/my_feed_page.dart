@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/remote/firebase/social_media_service.dart';
+import '../../theme/app_theme.dart';
 import 'post_card.dart'; // Import the new shared widget
 
 class MyFeedPage extends StatefulWidget {
@@ -33,17 +34,12 @@ class _MyFeedPageState extends State<MyFeedPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF000000), Color(0xFF1a0a0a), Color(0xFF2d1b2b), Color(0xFF4a2c4a), Color(0xFFff6b9d)],
-            stops: [0.0, 0.3, 0.6, 0.8, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          const GlobalAppBackground(),
+          SafeArea(
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildAppBar(),
@@ -69,6 +65,7 @@ class _MyFeedPageState extends State<MyFeedPage> {
             ],
           ),
         ),
+        ],
       ),
     );
   }

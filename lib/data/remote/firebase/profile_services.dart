@@ -51,6 +51,63 @@ class ProfileService {
   static final _metadataCollection = _firestore.collection('system_metadata');
   static final _giftsCollection = _firestore.collection('gifting_transactions');
 
+  static bool? _cachedIsModerator;
+  static String? _cachedUserId;
+
+  static bool checkIsModerator(Map<String, dynamic>? data) {
+    if (data == null) return false;
+    final role = data['role']?.toString().toLowerCase().trim() ?? '';
+    final roles = data['roles'];
+    bool hasRole = role == 'moderator' ||
+        role == 'mod' ||
+        role == 'admin' ||
+        role == 'superadmin' ||
+        role == 'super_admin' ||
+        role == 'administrator';
+
+    if (!hasRole && roles is List) {
+      hasRole = roles.any((r) {
+        final rStr = r.toString().toLowerCase().trim();
+        return rStr == 'moderator' ||
+            rStr == 'mod' ||
+            rStr == 'admin' ||
+            rStr == 'superadmin' ||
+            rStr == 'super_admin';
+      });
+    }
+
+    return hasRole ||
+        data['isModerator'] == true ||
+        data['ismoderator'] == true ||
+        data['isAdmin'] == true ||
+        data['isadmin'] == true ||
+        data['isSuperAdmin'] == true ||
+        data['issuperadmin'] == true;
+  }
+
+  static Future<bool> isUserModerator(String userId) async {
+    if (_cachedUserId == userId && _cachedIsModerator != null) {
+      return _cachedIsModerator!;
+    }
+    try {
+      final doc = await _usersCollection.doc(userId).get();
+      if (!doc.exists) return false;
+      final data = doc.data() as Map<String, dynamic>;
+      final isMod = checkIsModerator(data);
+      _cachedUserId = userId;
+      _cachedIsModerator = isMod;
+      return isMod;
+    } catch (e) {
+      debugPrint('Error checking moderator status: $e');
+      return false;
+    }
+  }
+
+  static void clearModeratorCache() {
+    _cachedIsModerator = null;
+    _cachedUserId = null;
+  }
+
   static Future<void> syncUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -167,42 +224,43 @@ class ProfileService {
     }
   }
 
-  /// Uploads an image file to Cloudinary and returns the secure URL.
+  /// Uploads an image file to JusiLive API and returns the secure URL.
   /// Uses an explicit http.Client with close() to prevent Android connection reset errors.
-  static Future<String> _uploadToCloudinary(File imageFile) async {
-    const cloudName = 'dbnffwlpy';
-    const uploadPreset = 'mplive';
-    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+  static Future<String> _uploadImage(File imageFile) async {
+    final uri = Uri.parse('https://api.jusilive.com/api/upload');
 
     // Use an explicit client so we can close it properly — this prevents
     // "Connection reset by peer (errno=104)" on Android.
     final client = http.Client();
     try {
       final request = http.MultipartRequest('POST', uri)
-        ..fields['upload_preset'] = uploadPreset
-        ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+        ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
 
       final streamedResponse = await client.send(request);
       final responseBody = await streamedResponse.stream.bytesToString();
 
-      if (streamedResponse.statusCode == 200) {
+      if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
         final jsonData = jsonDecode(responseBody) as Map<String, dynamic>;
-        final secureUrl = jsonData['secure_url'] as String?;
-        if (secureUrl == null || secureUrl.isEmpty) {
-          throw Exception('Cloudinary returned no URL');
+        final success = jsonData['success'] as bool? ?? false;
+        final url = jsonData['url'] as String?;
+        
+        if (!success || url == null || url.isEmpty) {
+          throw Exception('Upload failed or returned no URL');
         }
-        return secureUrl;
+        return url;
       } else {
-        debugPrint('Cloudinary upload failed (${streamedResponse.statusCode}): $responseBody');
-        throw Exception('Cloudinary upload failed with status ${streamedResponse.statusCode}');
+        debugPrint('Upload failed (${streamedResponse.statusCode}): $responseBody');
+        throw Exception('Upload failed with status ${streamedResponse.statusCode}');
       }
     } finally {
       client.close(); // Always release the connection
     }
   }
 
+  // Updates the user profile in Firestore
   static Future<void> updateUserProfile({
     String? displayName,
+    String? whatsappNumber,
     String? country,
     String? countryFlagEmoji,
     String? gender,
@@ -218,6 +276,7 @@ class ProfileService {
     final Map<String, dynamic> dataToUpdate = {};
 
     if (displayName != null) dataToUpdate['displayName'] = displayName;
+    if (whatsappNumber != null) dataToUpdate['whatsappNumber'] = whatsappNumber;
     if (country != null) dataToUpdate['country'] = country;
     if (countryFlagEmoji != null) dataToUpdate['countryFlagEmoji'] = countryFlagEmoji;
     if (gender != null) dataToUpdate['gender'] = gender;
@@ -225,9 +284,32 @@ class ProfileService {
     if (dob != null) dataToUpdate['dob'] = Timestamp.fromDate(dob);
 
     if (imageFile != null) {
-      // Upload to Cloudinary; the returned secure_url is saved as a string in Firestore
-      final imageUrl = await _uploadToCloudinary(imageFile);
-      dataToUpdate['photoUrl'] = imageUrl;
+      // First, get the current user profile to find the old image URL
+      final userDoc = await _usersCollection.doc(currentUserId).get();
+      String? oldImageUrl;
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        oldImageUrl = data['photoUrl'] as String?;
+      }
+
+      // Upload new image to Firebase Storage
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final ref = _storage.ref().child('profile').child('${currentUserId}_$timestamp.jpg');
+      final uploadTask = ref.putFile(imageFile, SettableMetadata(contentType: 'image/jpeg'));
+      final snapshot = await uploadTask.whenComplete(() => {});
+      final newImageUrl = await snapshot.ref.getDownloadURL();
+      
+      dataToUpdate['photoUrl'] = newImageUrl;
+
+      // Delete the old image from Firebase Storage if it exists and is a Firebase Storage URL
+      if (oldImageUrl != null && oldImageUrl.contains('firebasestorage.googleapis.com')) {
+        try {
+          final oldImageRef = _storage.refFromURL(oldImageUrl);
+          await oldImageRef.delete();
+        } catch (e) {
+          debugPrint("Failed to delete old profile image: $e");
+        }
+      }
     }
 
     if (dataToUpdate.isNotEmpty) {
@@ -248,10 +330,10 @@ class ProfileService {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
 
-    // Upload both NID images to Cloudinary in parallel
+    // Upload both NID images in parallel
     final results = await Future.wait([
-      _uploadToCloudinary(nidFrontFile),
-      _uploadToCloudinary(nidBackFile),
+      _uploadImage(nidFrontFile),
+      _uploadImage(nidBackFile),
     ]);
     final nidFrontUrl = results[0];
     final nidBackUrl = results[1];
@@ -298,8 +380,8 @@ class ProfileService {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
 
-    // Upload selfie to Cloudinary
-    final selfieUrl = await _uploadToCloudinary(selfieFile);
+    // Upload selfie
+    final selfieUrl = await _uploadImage(selfieFile);
 
     final Map<String, dynamic> applicationData = {
       'userId': currentUserId,
@@ -504,9 +586,119 @@ class ProfileService {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
 
+    // Check if host/agency/user is locked
+    final bool isSenderLocked = await isCurrentUserLocked();
+    if (isSenderLocked) {
+      throw Exception("Your account is locked. You cannot send gifts.");
+    }
+
     final int totalCost = giftValue * recipientIds.length;
+    
+    int hostBasicShare = 88;
+    int agencyCommission = 10;
+    int adminCommission = 2;
+    try {
+      final configDoc = await _firestore.collection('appSettings').doc('Commission_config').get();
+      if (configDoc.exists && configDoc.data() != null) {
+        final data = configDoc.data()!;
+        if (data['hostBasicShare'] != null) {
+          hostBasicShare = (data['hostBasicShare'] as num).toInt();
+        }
+        if (data['agencyCommission'] != null) {
+          agencyCommission = (data['agencyCommission'] as num).toInt();
+        }
+        if (data['adminCommission'] != null) {
+          adminCommission = (data['adminCommission'] as num).toInt();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching Commission_config: $e");
+    }
 
     try {
+      // ── PHASE 1: collect all DocumentRefs + read all docs OUTSIDE the transaction ──
+      final adminRef = _firestore.collection('totaldiamond').doc('diamondcalculation');
+
+      // Pre-read every recipient + their agency (if host)
+      final List<Map<String, dynamic>> recipientInfos = [];
+      for (final recipientId in recipientIds) {
+        final recipientDoc = await _usersCollection.doc(recipientId).get();
+        if (!recipientDoc.exists) continue;
+        final recipientData = recipientDoc.data() as Map<String, dynamic>;
+        final bool isHost = recipientData['isHost'] == true || 
+                            recipientData['ishost'] == true || 
+                            recipientData['role'] == 'host';
+
+        // Try multiple field names for agency reference
+        final String? agencyCode = (recipientData['agencyCode'] 
+            ?? recipientData['agencyId'])?.toString();
+
+        String? resolvedAgencyDocId;
+        DocumentSnapshot<Map<String, dynamic>>? agencySnap;
+        String? resolvedAgencyOwnerId;
+
+        if (isHost) {
+          if (agencyCode != null && agencyCode.isNotEmpty) {
+            // Try direct document lookup first
+            final directSnap = await _firestore
+                .collection('agencies')
+                .doc(agencyCode)
+                .get();
+            if (directSnap.exists) {
+              resolvedAgencyDocId = agencyCode;
+              agencySnap = directSnap;
+            }
+          }
+          // Fallback: search agencies where hosts array contains recipientId
+          if (resolvedAgencyDocId == null) {
+            final agencyQuery = await _firestore
+                .collection('agencies')
+                .where('hosts', arrayContains: recipientId)
+                .limit(1)
+                .get();
+            if (agencyQuery.docs.isNotEmpty) {
+              resolvedAgencyDocId = agencyQuery.docs.first.id;
+              agencySnap = agencyQuery.docs.first;
+            }
+          }
+
+          if (agencySnap != null && agencySnap.exists) {
+            final agData = agencySnap.data() as Map<String, dynamic>;
+            resolvedAgencyOwnerId = (agData['ownerId'] ?? agData['userId'])?.toString();
+          }
+
+          // Fallback: lookup owner in agency_applications if ownerId is missing on agencies doc
+          if ((resolvedAgencyOwnerId == null || resolvedAgencyOwnerId.isEmpty) && resolvedAgencyDocId != null) {
+            final appQuery = await _firestore
+                .collection('agency_applications')
+                .where('agencyId', isEqualTo: int.tryParse(resolvedAgencyDocId) ?? resolvedAgencyDocId)
+                .limit(1)
+                .get();
+            if (appQuery.docs.isNotEmpty) {
+              final appData = appQuery.docs.first.data();
+              resolvedAgencyOwnerId = (appData['userId'] ?? appData['ownerId'])?.toString();
+            }
+          }
+
+          // Fallback: recipient's own data
+          if (resolvedAgencyOwnerId == null || resolvedAgencyOwnerId.isEmpty) {
+            resolvedAgencyOwnerId = (recipientData['agencyOwnerId'] ?? recipientData['agencyUserId'])?.toString();
+          }
+
+          debugPrint('sendGift: host=$recipientId, agencyCode=$agencyCode, resolvedAgency=$resolvedAgencyDocId, agencyOwner=$resolvedAgencyOwnerId');
+        }
+
+        recipientInfos.add({
+          'id': recipientId,
+          'data': recipientData,
+          'isHost': isHost,
+          'agencyId': resolvedAgencyDocId,
+          'agencySnap': agencySnap,
+          'agencyOwnerId': resolvedAgencyOwnerId,
+        });
+      }
+
+      // ── PHASE 2: run the transaction (reads first, then writes) ──
       await _firestore.runTransaction((transaction) async {
         final senderRef = _usersCollection.doc(currentUserId);
         final senderDoc = await transaction.get(senderRef);
@@ -514,30 +706,145 @@ class ProfileService {
         if (!senderDoc.exists) throw Exception("Sender profile not found");
 
         final senderData = senderDoc.data() as Map<String, dynamic>;
-        final int currentBalance = senderData['balance'] ?? 0;
+        final bool isLocked = senderData['islock'] == true ||
+            senderData['isLock'] == true ||
+            senderData['isLocked'] == true;
+        if (isLocked) {
+          throw Exception("Your account is locked. You cannot send gifts.");
+        }
+
+        final num currentBalanceNum = senderData['balance'] ?? 0;
+        final double currentBalance = currentBalanceNum.toDouble();
 
         if (currentBalance < totalCost) {
           throw Exception("Insufficient balance. Need $totalCost beans, have $currentBalance beans.");
         }
+
+        // Re-read admin doc inside transaction (must be first)
+        final adminDocTxn = await transaction.get(adminRef);
+
+        // Re-read agency docs inside transaction (must be before any write)
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> agencySnapshots = {};
+        for (final info in recipientInfos) {
+          if (info['isHost'] == true && info['agencyId'] != null) {
+            final agencyRef = _firestore.collection('agencies').doc(info['agencyId'] as String);
+            agencySnapshots[info['agencyId'] as String] = await transaction.get(agencyRef);
+          }
+        }
+
+        // Re-read agency owner user docs inside transaction (must be before any write)
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> agencyOwnerSnapshots = {};
+        for (final info in recipientInfos) {
+          final String? ownerId = info['agencyOwnerId'] as String?;
+          if (info['isHost'] == true && ownerId != null && ownerId.isNotEmpty && !agencyOwnerSnapshots.containsKey(ownerId)) {
+            final ownerRef = _usersCollection.doc(ownerId);
+            final ownerSnap = await transaction.get(ownerRef);
+            if (ownerSnap.exists) {
+              agencyOwnerSnapshots[ownerId] = ownerSnap;
+            }
+          }
+        }
+
+        // ── All reads done – now do all writes ──
 
         transaction.update(senderRef, {
           'balance': FieldValue.increment(-totalCost),
           'totalSent': FieldValue.increment(totalCost),
         });
 
-        for (String recipientId in recipientIds) {
-          transaction.update(_usersCollection.doc(recipientId), {
-            'diamonds': FieldValue.increment(giftValue),
-            'totalReceived': FieldValue.increment(giftValue),
+        double totalAdminShare = 0.0;
+
+        for (final info in recipientInfos) {
+          final String recipientId = info['id'] as String;
+          final bool isHost = info['isHost'] as bool;
+          final String? agencyId = info['agencyId'] as String?;
+          final recipientRef = _usersCollection.doc(recipientId);
+
+          double recipientShare = 0;
+          double adminShare = 0;
+          double agencyShare = 0;
+
+          if (!isHost) {
+            recipientShare = (giftValue * (100 - adminCommission) / 100).toDouble();
+            adminShare = giftValue - recipientShare;
+          } else {
+            recipientShare = (giftValue * hostBasicShare / 100).toDouble();
+            agencyShare = (giftValue * agencyCommission / 100).toDouble();
+            adminShare = giftValue - recipientShare - agencyShare;
+            if (adminShare < 0) adminShare = 0;
+          }
+
+          totalAdminShare += adminShare;
+
+          transaction.update(recipientRef, {
+            'balance': FieldValue.increment(recipientShare),
+            'totalReceived': FieldValue.increment(recipientShare),
           });
+
+          // Agency Share write (use pre-read snapshot)
+          if (isHost && agencyShare > 0 && agencyId != null && agencyId.isNotEmpty) {
+            final agencySnap = agencySnapshots[agencyId];
+            if (agencySnap != null && agencySnap.exists) {
+              final agencyData = agencySnap.data() as Map<String, dynamic>;
+              final currentCommStr = agencyData['agencycommision']?.toString() ?? '0';
+              final double currentComm = double.tryParse(currentCommStr) ?? 0.0;
+              final agencyRef = _firestore.collection('agencies').doc(agencyId);
+              transaction.update(agencyRef, {
+                'agencycommision': (currentComm + agencyShare).toStringAsFixed(2),
+              });
+            }
+          }
 
           final giftDocRef = _giftsCollection.doc();
           transaction.set(giftDocRef, {
             'senderId': currentUserId,
             'recipientId': recipientId,
             'giftValue': giftValue,
+            'hostShare': recipientShare,
+            'agencyShare': agencyShare,
+            if (info['agencyOwnerId'] != null) 'agencyOwnerId': info['agencyOwnerId'],
+            'adminShare': adminShare,
             'timestamp': FieldValue.serverTimestamp(),
           });
+        }
+
+        // ── Agency user balance writes (add agency commission to agency user's balance) ──
+        final Map<String, double> totalAgencyShareByOwner = {};
+        for (final info in recipientInfos) {
+          final bool isHost = info['isHost'] as bool;
+          final String? ownerId = info['agencyOwnerId'] as String?;
+          if (isHost && ownerId != null && ownerId.isNotEmpty) {
+            final double agencyShare = (giftValue * agencyCommission / 100).toDouble();
+            totalAgencyShareByOwner[ownerId] = (totalAgencyShareByOwner[ownerId] ?? 0.0) + agencyShare;
+          }
+        }
+
+        for (final entry in totalAgencyShareByOwner.entries) {
+          final String ownerId = entry.key;
+          final double totalShare = entry.value;
+          if (totalShare > 0 && agencyOwnerSnapshots.containsKey(ownerId)) {
+            final agencyUserRef = _usersCollection.doc(ownerId);
+            transaction.update(agencyUserRef, {
+              'balance': FieldValue.increment(totalShare),
+              'totalReceived': FieldValue.increment(totalShare),
+            });
+          }
+        }
+
+        // Admin Share write – one write for the entire transaction (use pre-read adminDocTxn)
+        if (totalAdminShare > 0) {
+          if (adminDocTxn.exists) {
+            final adminData = adminDocTxn.data() as Map<String, dynamic>;
+            final currentTotalDiamondStr = adminData['totaldiamond']?.toString() ?? '0';
+            final double currentTotalDiamond = double.tryParse(currentTotalDiamondStr) ?? 0.0;
+            transaction.update(adminRef, {
+              'totaldiamond': (currentTotalDiamond + totalAdminShare).toStringAsFixed(2),
+            });
+          } else {
+            transaction.set(adminRef, {
+              'totaldiamond': totalAdminShare.toStringAsFixed(2),
+            });
+          }
         }
       });
     } catch (e) {
@@ -549,9 +856,16 @@ class ProfileService {
   static Future<void> sendRocketGift({
     required int totalCoins,
     required List<String> recipientIds,
+    String? roomId,
   }) async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) throw Exception("No user logged in");
+
+    // Check if host/agency/user is locked
+    final bool isSenderLocked = await isCurrentUserLocked();
+    if (isSenderLocked) {
+      throw Exception("Your account is locked. You cannot send gifts.");
+    }
 
     // 50% vanish, 50% distribute
     final int distributionAmount = totalCoins ~/ 2;
@@ -564,7 +878,15 @@ class ProfileService {
 
         if (!senderDoc.exists) throw Exception("Sender profile not found");
 
-        final int currentBalance = (senderDoc.data() as Map<String, dynamic>)['balance'] ?? 0;
+        final senderData = senderDoc.data() as Map<String, dynamic>;
+        final bool isLocked = senderData['islock'] == true ||
+            senderData['isLock'] == true ||
+            senderData['isLocked'] == true;
+        if (isLocked) {
+          throw Exception("Your account is locked. You cannot send gifts.");
+        }
+
+        final int currentBalance = senderData['balance'] ?? 0;
 
         if (currentBalance < totalCoins) {
           throw Exception("Insufficient balance. Need $totalCoins beans, have $currentBalance beans.");
@@ -609,7 +931,7 @@ class ProfileService {
       final doc = await _usersCollection.doc(currentUserId).get();
       if (!doc.exists) return 0;
       final data = doc.data() as Map<String, dynamic>;
-      return data['balance'] ?? 0;
+      return (data['balance'] as num?)?.toInt() ?? 0;
     } catch (e) {
       return 0;
     }
@@ -622,7 +944,92 @@ class ProfileService {
     return _usersCollection.doc(currentUserId).snapshots().map((snapshot) {
       if (!snapshot.exists) return 0;
       final data = snapshot.data() as Map<String, dynamic>;
-      return data['balance'] ?? 0;
+      return (data['balance'] as num?)?.toInt() ?? 0;
+    });
+  }
+
+  static Future<bool> isCurrentUserLocked() async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) return false;
+
+    try {
+      final doc = await _usersCollection.doc(currentUserId).get();
+      if (!doc.exists) return false;
+      final data = doc.data() as Map<String, dynamic>;
+
+      // 1. Direct lock check on user document
+      if (data['islock'] == true ||
+          data['isLock'] == true ||
+          data['isLocked'] == true) {
+        return true;
+      }
+
+      // 2. Agency role lock check
+      final bool isAgency = data['role'] == 'agency' ||
+          data['isAgency'] == true ||
+          data['isagency'] == true;
+
+      final agencyId = (data['agencyId'] ?? data['agencyCode'])?.toString();
+
+      if (isAgency || (agencyId != null && agencyId.isNotEmpty)) {
+        // Check agency document by agencyId
+        if (agencyId != null && agencyId.isNotEmpty) {
+          final agencyDoc = await _firestore.collection('agencies').doc(agencyId).get();
+          if (agencyDoc.exists) {
+            final agData = agencyDoc.data() ?? {};
+            if (agData['islock'] == true ||
+                agData['isLock'] == true ||
+                agData['isLocked'] == true) {
+              return true;
+            }
+          }
+        }
+
+        // Check agencies collection by ownerId
+        final ownerAgenciesQuery = await _firestore
+            .collection('agencies')
+            .where('ownerId', isEqualTo: currentUserId)
+            .limit(1)
+            .get();
+        if (ownerAgenciesQuery.docs.isNotEmpty) {
+          final agData = ownerAgenciesQuery.docs.first.data();
+          if (agData['islock'] == true ||
+              agData['isLock'] == true ||
+              agData['isLocked'] == true) {
+            return true;
+          }
+        }
+
+        // Check agency_applications collection by userId
+        final appQuery = await _firestore
+            .collection('agency_applications')
+            .where('userId', isEqualTo: currentUserId)
+            .limit(1)
+            .get();
+        if (appQuery.docs.isNotEmpty) {
+          final appData = appQuery.docs.first.data();
+          if (appData['islock'] == true ||
+              appData['isLock'] == true ||
+              appData['isLocked'] == true) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint("Error checking isCurrentUserLocked: $e");
+      return false;
+    }
+  }
+
+  static Stream<bool> getCurrentUserLockStream() {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) return Stream.value(false);
+
+    return _usersCollection.doc(currentUserId).snapshots().asyncMap((snapshot) async {
+      if (!snapshot.exists) return false;
+      return await isCurrentUserLocked();
     });
   }
 
@@ -634,13 +1041,57 @@ class ProfileService {
     });
   }
 
+  static Future<void> exchangeDiamondsToBeans(int diamondsToExchange) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) throw Exception("No user logged in");
+    if (diamondsToExchange <= 0) throw Exception("Invalid amount");
+
+    // Fetch dynamic exchange rate from Firestore
+    double exchangeRatePct = 60.0; // fallback
+    try {
+      final configDoc = await _firestore
+          .collection('appSettings')
+          .doc('Commission_config')
+          .get();
+      if (configDoc.exists) {
+        final raw = configDoc.data()?['exchangerate'];
+        final parsed = double.tryParse(raw?.toString() ?? '');
+        if (parsed != null) exchangeRatePct = parsed;
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch exchange rate: $e');
+    }
+
+    await _firestore.runTransaction((transaction) async {
+      final userRef = _usersCollection.doc(currentUserId);
+      final userDoc = await transaction.get(userRef);
+
+      if (!userDoc.exists) throw Exception("User profile not found");
+
+      final data = userDoc.data() as Map<String, dynamic>;
+      final currentDiamonds = data['diamonds'] ?? 0;
+
+      if (currentDiamonds < diamondsToExchange) {
+        throw Exception("Insufficient earning coins (diamonds).");
+      }
+
+      final beansToAdd = (diamondsToExchange * exchangeRatePct / 100).toInt();
+
+      transaction.update(userRef, {
+        'diamonds': FieldValue.increment(-diamondsToExchange),
+        'balance': FieldValue.increment(beansToAdd),
+      });
+    });
+  }
+
 
   static Stream<int> getUserDiamondsStream(String userId) {
     if (userId.isEmpty) return Stream.value(0);
     return _usersCollection.doc(userId).snapshots().map((snapshot) {
       if (!snapshot.exists) return 0;
       final data = snapshot.data() as Map<String, dynamic>;
-      return data['diamonds'] ?? 0;
+      final num balanceNum = data['balance'] ?? 0;
+      return balanceNum.toInt();
     });
   }
 
@@ -846,17 +1297,25 @@ class ProfileService {
           startDate = DateTime(now.year, now.month, now.day);
       }
 
+      // Fetch all gifts for this recipient and filter locally to avoid composite index requirements
       final giftsSnapshot = await _giftsCollection
           .where('recipientId', isEqualTo: hostId)
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .get();
 
       final Map<String, int> senderTotals = {};
 
       for (final doc in giftsSnapshot.docs) {
         final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp != null) {
+          final date = timestamp.toDate();
+          if (date.isBefore(startDate)) {
+            continue; // Skip gifts before the start date
+          }
+        }
+        
         final senderId = data['senderId'] as String;
-        final giftValue = data['giftValue'] as int;
+        final giftValue = (data['giftValue'] as num?)?.toInt() ?? 0;
 
         senderTotals[senderId] = (senderTotals[senderId] ?? 0) + giftValue;
       }
@@ -1037,41 +1496,76 @@ class ProfileService {
     }
   }
 
-  static Future<void> recordGameWin({
-    required String roomId,
-    required String gameName,
-    required int winAmount,
-  }) async {
+
+  // --- Restored Missing Methods ---
+
+  static Future<void> syncFollowingNotificationTopics() async {}
+  static Future<Map<String, dynamic>> getSystemTags() async { return {}; }
+  static Future<String> getLevelImageUrl(int level) async { return ''; }
+  
+  static Future<dynamic> getCoinSellerApplicationStatus() async {
     final currentUserId = _auth.currentUser?.uid;
-    if (currentUserId == null) {
-      debugPrint("recordGameWin failed: currentUserId is null");
-      return;
-    }
-
+    if (currentUserId == null) throw Exception("No user logged in");
+    return await _firestore.collection('coin_seller_applications').doc(currentUserId).get();
+  }
+  
+  static Future<void> applyForCoinSeller({required String name, required String whatsappNumber}) async {}
+  static Future<void> cancelCoinSellerApplication() async {}
+  static Future<void> transferCoinsAsReseller(String targetDisplayId, int amount) async {}
+  static Future<void> requestCoinsAsReseller(int amount, String note) async {}
+  static Future<String> uploadImageApi(File file) => _uploadImage(file);
+  static Future<String> getAgencyName(String agencyId) async {
     try {
-      debugPrint("recordGameWin starting for user: $currentUserId, roomId: $roomId, game: $gameName, amount: $winAmount");
-      final doc = await _usersCollection.doc(currentUserId).get();
-      if (!doc.exists) {
-        debugPrint("recordGameWin failed: User document does not exist for $currentUserId");
-        return;
+      final doc = await FirebaseFirestore.instance.collection('agencies').doc(agencyId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return (data['agencyName'] ?? data['name'] ?? data['holderName'] ?? data['agencyname'] ?? '').toString();
       }
-      final data = doc.data() as Map<String, dynamic>;
-      final String displayName = data['displayName'] ?? data['name'] ?? 'User';
-      final String? photoUrl = data['photoUrl'] ?? data['profilePic'];
-
-      await _firestore.collection('room_game_wins').add({
-        'roomId': roomId,
-        'userId': currentUserId,
-        'displayName': displayName,
-        'photoUrl': photoUrl,
-        'gameName': gameName,
-        'winAmount': winAmount,
-        'timestamp': FieldValue.serverTimestamp(),
-        'bannerType': winAmount >= 550000 ? 'red' : 'blue',
-      });
-      debugPrint("recordGameWin successfully written to Firestore for roomId: $roomId");
     } catch (e) {
-      debugPrint("Error recording game win: $e");
+      debugPrint("Error fetching agency name: $e");
     }
+    return '';
+  }
+
+  /// Checks whether a user has an active, unexpired King or Royal package.
+  static Future<bool> hasKingOrRoyalPackage(String userId) async {
+    try {
+      final doc = await _usersCollection.doc(userId).get();
+      if (!doc.exists) return false;
+      final data = doc.data();
+      if (data == null) return false;
+
+      // 1. Check direct package fields
+      final String directPkg = (data['activePackage'] ?? data['package'] ?? '').toString().toLowerCase();
+      if (directPkg.contains('royal') || directPkg.contains('king')) {
+        return true;
+      }
+
+      // 2. Check activeAddOns map
+      if (data.containsKey('activeAddOns')) {
+        final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
+        final now = DateTime.now();
+        for (var entry in addOns.entries) {
+          final key = entry.key.toLowerCase().trim();
+          final itemData = entry.value as Map<String, dynamic>?;
+          if (itemData != null) {
+            final expiry = itemData['expiresAt'] as Timestamp?;
+            final isNotExpired = expiry == null || expiry.toDate().isAfter(now);
+            if (isNotExpired) {
+              final itemName = (itemData['name'] ?? itemData['title'] ?? '').toString().toLowerCase();
+              final itemUrl = (itemData['imageUrl'] ?? itemData['imageURL'] ?? '').toString().toLowerCase();
+              final fullStr = '$key $itemName $itemUrl';
+
+              if (fullStr.contains('royal') || fullStr.contains('king')) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking royal/king package: $e");
+    }
+    return false;
   }
 }

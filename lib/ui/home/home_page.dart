@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'dart:developer';
 import 'package:get_it/get_it.dart';
@@ -8,10 +10,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/services/home_banner_cache_service.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/cubits/app_cubit.dart';
-import '../../core/widgets/big_winner_overlay.dart';
+
+import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
 import '../../theme/app_theme.dart';
 import 'home_cubit.dart';
@@ -30,9 +36,13 @@ class _HomePageState extends State<HomePage>
 
   @override
   void initState() {
-    GetIt.I<BigWinnerQueue>().init();
+
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    ProfileService.syncFollowingNotificationTopics();
   }
 
   @override
@@ -104,27 +114,29 @@ class _HomePageState extends State<HomePage>
               }
             },
             child: Scaffold(
+              extendBodyBehindAppBar: false,
+              backgroundColor: const Color(0xFF091433),
               appBar: _buildNewAppBar(context),
-              body: SafeArea(
-                top: false,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildPopularTab(cubit),
-                          SingleChildScrollView(
-                            child: _buildFresherGrid(cubit),
-                          ),
-                          _buildPartyTab(cubit),
-                          PKTab(cubit: cubit),
-                          _buildGamesTab(),
-                        ],
-                      ),
+              body: Column(
+                children: [
+                  _buildTickerBanner(),
+                  _buildFilterTabs(),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildPopularTab(cubit), // 0: All
+                        _buildPopularTab(cubit, isVideo: true), // 1: Video
+                        _buildPopularTab(cubit, isVideo: false), // 2: Audio
+                        SingleChildScrollView(
+                          child: _buildFresherGrid(cubit),
+                        ), // 3: Following
+                        PKTab(cubit: cubit), // 4: PK
+                        _buildPartyTab(cubit), // 5: Party
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
@@ -134,79 +146,370 @@ class _HomePageState extends State<HomePage>
   }
 
   PreferredSizeWidget _buildNewAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: AppColors.barColor,
-      elevation: 0,
-      toolbarHeight: 56,
-      automaticallyImplyLeading: false,
-      title: Align(
-        alignment: Alignment.centerLeft,
-        child: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          indicator: const UnderlineTabIndicator(
-            borderSide: BorderSide(width: 3.0, color: Colors.white),
-            insets: EdgeInsets.symmetric(horizontal: 16.0),
-          ),
-          indicatorSize: TabBarIndicatorSize.label,
-          dividerColor: Colors.transparent,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 16,
-          ),
-          tabs: [
-            Tab(text: AppLocalizations.of(context).popular),
-            Tab(text: AppLocalizations.of(context).freshers),
-            Tab(text: AppLocalizations.of(context).party),
-            Tab(text: AppLocalizations.of(context).pk),
-            Tab(text: AppLocalizations.of(context).games),
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(56),
+      child: AppBar(
+        backgroundColor: const Color(0xFFE62563),
+        elevation: 0,
+        toolbarHeight: 56,
+        automaticallyImplyLeading: false,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Image.asset(
+                'assets/logo/SB Live.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'SB Live',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.language, color: Colors.white, size: 24),
-          onPressed: () {
-            _showLanguageBottomSheet(context.read<AppCubit>());
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.public, color: Colors.white, size: 24),
-          onPressed: () {
-            _showRegionBottomSheet(context.read<HomeCubit>());
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.search, color: Colors.white, size: 24),
-          onPressed: () {
-            context.push(Routes.search.path);
-          },
-        ),
-        GestureDetector(
-          onTap: () {
-            context.push(Routes.ranks.path);
-          },
-          child: Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Icon(
-              Icons.emoji_events_outlined,
-              color: Colors.amber[700],
-              size: 24,
+        actions: [
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('appSettings')
+                .doc('notificationnotice')
+                .snapshots(),
+            builder: (context, snapshot) {
+              int noticeCount = 0;
+              if (snapshot.hasData && snapshot.data!.exists) {
+                final data = snapshot.data!.data();
+                final raw = data?['notification'] ?? data?['notices'];
+                if (raw is List) {
+                  noticeCount = raw.where((e) => e.toString().trim().isNotEmpty).length;
+                }
+              }
+
+              return IconButton(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 26),
+                    if (noticeCount > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFB300),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            noticeCount > 99 ? '99+' : '$noticeCount',
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                onPressed: () => context.push(Routes.notificationNotice.path),
+              );
+            },
+          ),
+          GestureDetector(
+            onTap: () => context.push(Routes.ranks.path),
+            child: Container(
+              margin: const EdgeInsets.only(right: 14, left: 4),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.emoji_events_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildPopularTab(HomeCubit cubit) {
+  Widget _buildTickerBanner() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('noticetext').limit(1).snapshots(),
+      builder: (context, snapshot) {
+        String tickerText = 'Welcome To SB Live ↔ Enjoy your best time with SB Live ↔';
+        
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          final data = snapshot.data!.docs.first.data() as Map<String, dynamic>?;
+          if (data != null && data.containsKey('text') && data['text'].toString().isNotEmpty) {
+            tickerText = data['text'] as String;
+          }
+        }
+
+        return Container(
+          width: double.infinity,
+          color: const Color(0xFFC81D52),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.swap_horizontal_circle, color: Colors.cyanAccent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ScrollingTickerText(
+                  text: tickerText,
+                  style: GoogleFonts.hindSiliguri(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterTabs() {
+    final activeIndex = _tabController.index;
+
+    return Container(
+      color: const Color(0xFF091433),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildPillTab(
+              label: 'All',
+              isSelected: activeIndex == 0,
+              onTap: () => _tabController.animateTo(0),
+            ),
+            const SizedBox(width: 10),
+            _buildPillTab(
+              label: 'Video',
+              icon: Icons.videocam_rounded,
+              isSelected: activeIndex == 1,
+              onTap: () => _tabController.animateTo(1),
+            ),
+            const SizedBox(width: 10),
+            _buildPillTab(
+              label: 'Audio',
+              icon: Icons.mic_rounded,
+              isSelected: activeIndex == 2,
+              onTap: () => _tabController.animateTo(2),
+            ),
+            const SizedBox(width: 10),
+            _buildPillTab(
+              label: 'Following',
+              icon: Icons.favorite_rounded,
+              isSelected: activeIndex == 3,
+              onTap: () => _tabController.animateTo(3),
+            ),
+            const SizedBox(width: 10),
+            _buildPillTab(
+              label: 'PK',
+              iconText: 'PK',
+              isSelected: activeIndex == 4,
+              onTap: () => _tabController.animateTo(4),
+            ),
+            const SizedBox(width: 10),
+            _buildPillTab(
+              label: 'Party',
+              icon: Icons.celebration_rounded,
+              isSelected: activeIndex == 5,
+              onTap: () => _tabController.animateTo(5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPillTab({
+    required String label,
+    IconData? icon,
+    String? assetPath,
+    String? iconText,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    const primaryColor = Color(0xFFE62563);
+    
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor : Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(
+            color: isSelected ? primaryColor : Colors.white.withValues(alpha: 0.2),
+            width: 1.5,
+          ),
+          boxShadow: [
+            if (isSelected)
+              BoxShadow(
+                color: primaryColor.withValues(alpha: 0.4),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (assetPath != null) ...[
+              Image.asset(
+                assetPath,
+                width: 20,
+                height: 20,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 6),
+            ] else if (icon != null) ...[
+              Icon(
+                icon,
+                color: Colors.white,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+            ] else if (iconText != null) ...[
+              Text(
+                iconText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.85),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlimPromoBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE62563), Color(0xFFFF4081)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE62563).withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Colors.amberAccent,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '🔥 VIP Live Bonus Extravaganza',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Recharge today & get up to 50% extra diamonds!',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'Claim',
+              style: TextStyle(
+                color: Color(0xFFE62563),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPopularTab(HomeCubit cubit, {bool? isVideo}) {
     return StreamBuilder<List<StreamerModel>>(
       stream: cubit.allRoomsStream,
       builder: (context, snapshot) {
@@ -223,31 +526,40 @@ class _HomePageState extends State<HomePage>
           );
         }
 
-        final allRooms = snapshot.data ?? [];
+        final allRooms = (snapshot.data ?? []).where((room) {
+          if (isVideo == null) return true;
+          return room.isVideo == isVideo;
+        }).toList();
 
         if (allRooms.isEmpty) {
           return SingleChildScrollView(
             child: Column(
               children: [
                 CarouselBanner(
+                  aspectRatio: 1600 / 580,
                   imageUrls: BannerUrls.liveStreamingBanners,
                   autoPlayDuration: const Duration(seconds: 4),
                   onBannerTap: (index) {
                     debugPrint('Banner $index tapped');
                   },
                 ),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-                Icon(
-                  Icons.videocam_off,
-                  size: 60,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  AppLocalizations.of(context).noActiveRooms,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 16,
+                const AgencyCarouselSlider(),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(top: 10, bottom: 10),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: .9,
+                    ),
+                    itemCount: 6,
+                    itemBuilder: (context, index) {
+                      return const RoomSkeletonWidget();
+                    },
                   ),
                 ),
               ],
@@ -259,12 +571,14 @@ class _HomePageState extends State<HomePage>
           child: Column(
             children: [
               CarouselBanner(
+                aspectRatio: 1600 / 580,
                 imageUrls: BannerUrls.liveStreamingBanners,
                 autoPlayDuration: const Duration(seconds: 4),
                 onBannerTap: (index) {
                   debugPrint('Banner $index tapped');
                 },
               ),
+              const AgencyCarouselSlider(),
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 10),
                 child: GridView.builder(
@@ -283,7 +597,7 @@ class _HomePageState extends State<HomePage>
                   },
                 ),
               ),
-              const SizedBox(height: 80),
+              const SizedBox(height: 140),
             ],
           ),
         );
@@ -306,7 +620,7 @@ class _HomePageState extends State<HomePage>
                   debugPrint('Banner $index tapped');
                 },
               ),
-              const SizedBox(height: 100),
+              const SizedBox(height: 140),
               const Center(child: CircularProgressIndicator()),
             ],
           );
@@ -322,7 +636,7 @@ class _HomePageState extends State<HomePage>
                   debugPrint('Banner $index tapped');
                 },
               ),
-              const SizedBox(height: 100),
+              const SizedBox(height: 140),
               Center(
                 child: Text(
                   'Error: ${snapshot.error}',
@@ -345,18 +659,22 @@ class _HomePageState extends State<HomePage>
                   debugPrint('Banner $index tapped');
                 },
               ),
-              SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-              Icon(
-                Icons.videocam_off,
-                size: 60,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                AppLocalizations.of(context).noActiveRooms,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 16,
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(top: 16, bottom: 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: .9,
+                  ),
+                  itemCount: 6,
+                  itemBuilder: (context, index) {
+                    return const RoomSkeletonWidget();
+                  },
                 ),
               ),
             ],
@@ -390,7 +708,7 @@ class _HomePageState extends State<HomePage>
                 },
               ),
             ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 140),
           ],
         );
       },
@@ -428,19 +746,20 @@ class _HomePageState extends State<HomePage>
                     debugPrint('Banner $bannerIndex tapped');
                   },
                 ),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-                Icon(
-                  Icons.mic_off,
-                  size: 60,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  AppLocalizations.of(context).noAudioRooms,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 16,
-                  ),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 20),
+                  itemCount: 6,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: const SizedBox(
+                        height: 120,
+                        child: RoomSkeletonWidget(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -448,7 +767,7 @@ class _HomePageState extends State<HomePage>
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 80),
+          padding: const EdgeInsets.only(bottom: 140),
           itemCount: audioRooms.length + 1,
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -490,16 +809,6 @@ class _HomePageState extends State<HomePage>
                   ),
                   child: Stack(
                     children: [
-                      if (index <= 3)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            "assets/animations/border_effect_$index.gif",
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: 120,
-                          ),
-                        ),
                       Container(
                         height: 120,
                         decoration: BoxDecoration(
@@ -706,147 +1015,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildGamesTab() {
-    final List<Map<String, String>> games = [
-      {
-        'name': 'Greedy',
-        'image': 'assets/greedy/greedy.jpeg',
-        'path': Routes.greedy.path,
-      },
-      {
-        'name': 'Tin Patti',
-        'image': 'assets/gameimages/card_back.png',
-        'path': Routes.teenPatti.path,
-      },
-      {
-        'name': 'Animal Game',
-        'image': 'assets/animalgame/bg.png',
-        'path': Routes.animalGame.path,
-      },
-    ];
-
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          CarouselBanner(
-            imageUrls: BannerUrls.liveStreamingBanners,
-            autoPlayDuration: const Duration(seconds: 4),
-            onBannerTap: (index) {
-              log('Game Banner $index tapped');
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  AppLocalizations.of(context).featuredGames,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: games.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemBuilder: (context, index) {
-                    return _buildGameCard(games[index]);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGameCard(Map<String, String> game) {
-    final String name = game['name']!;
-    final String imagePath = game['image']!;
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Image.asset(
-                  imagePath,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.pinkDark.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.gamepad,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (game['path'] != null) {
-                    context.push(game['path']!);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.pinkLight,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-                child: Text(
-                  AppLocalizations.of(context).playNow,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showLanguageBottomSheet(AppCubit appCubit) {
     showModalBottomSheet(
@@ -1246,6 +1414,12 @@ class StreamerModel {
   final bool isLocked;
   final bool isLiveStream;
   final String country;
+  final String? packageBadgeUrl;
+  final bool isHost;
+  final bool isAgency;
+  final bool isReseller;
+  final bool hasPackage;
+  final int packagePriority;
 
   const StreamerModel({
     required this.id,
@@ -1259,5 +1433,391 @@ class StreamerModel {
     this.isLocked = false,
     this.isLiveStream = false,
     this.country = 'Unknown',
+    this.packageBadgeUrl,
+    this.isHost = false,
+    this.isAgency = false,
+    this.isReseller = false,
+    this.hasPackage = false,
+    this.packagePriority = 0,
   });
 }
+
+class ScrollingTickerText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const ScrollingTickerText({
+    super.key,
+    required this.text,
+    required this.style,
+  });
+
+  @override
+  State<ScrollingTickerText> createState() => _ScrollingTickerTextState();
+}
+
+class _ScrollingTickerTextState extends State<ScrollingTickerText>
+    with SingleTickerProviderStateMixin {
+  late ScrollController _scrollController;
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _animationController = AnimationController(vsync: this);
+    _setupAnimation();
+    _animationController.addListener(_scroll);
+  }
+
+  @override
+  void didUpdateWidget(ScrollingTickerText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _setupAnimation();
+    }
+  }
+
+  void _setupAnimation() {
+    // Calculate duration based on text length for a constant, smooth reading speed.
+    // Slower speed: ~4 characters per second.
+    final int durationSeconds = (widget.text.length / 4).ceil().clamp(15, 600);
+    _animationController.duration = Duration(seconds: durationSeconds);
+    if (_animationController.isAnimating) {
+      _animationController.repeat();
+    } else {
+      _animationController.repeat();
+    }
+  }
+
+  void _scroll() {
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      if (maxScroll > 0) {
+        final currentScroll = _animationController.value * maxScroll;
+        _scrollController.jumpTo(currentScroll);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.removeListener(_scroll);
+    _animationController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      child: Row(
+        children: [
+          Text(widget.text, style: widget.style),
+          const SizedBox(width: 40),
+          Text(widget.text, style: widget.style),
+          const SizedBox(width: 40),
+          Text(widget.text, style: widget.style),
+        ],
+      ),
+    );
+  }
+}
+
+class AgencyCarouselSlider extends StatefulWidget {
+  const AgencyCarouselSlider({super.key});
+
+  @override
+  State<AgencyCarouselSlider> createState() => _AgencyCarouselSliderState();
+}
+
+class _AgencyCarouselSliderState extends State<AgencyCarouselSlider> {
+  late PageController _pageController;
+  Timer? _timer;
+  List<AgencyModel> _agencies = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.92, initialPage: 1000);
+    // Instant frame-0 loading from in-memory cache
+    _agencies = List.from(HomeBannerCacheService.agencies);
+
+    HomeBannerCacheService.agencyNotifier.addListener(_onAgenciesUpdated);
+
+    if (_agencies.length > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _startAutoPlay();
+      });
+    }
+  }
+
+  void _onAgenciesUpdated() {
+    if (!mounted) return;
+    final newAgencies = HomeBannerCacheService.agencies;
+    setState(() {
+      _agencies = List.from(newAgencies);
+    });
+
+    if (_agencies.length > 1 && _timer == null) {
+      _startAutoPlay();
+    }
+  }
+
+  void _startAutoPlay() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_pageController.hasClients && _agencies.length > 1) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    HomeBannerCacheService.agencyNotifier.removeListener(_onAgenciesUpdated);
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildRankBadge(String topRank) {
+    final rankNum = int.tryParse(topRank.replaceAll(RegExp(r'[^0-9]'), '')) ?? 99;
+
+    Color badgeColor;
+    Color textColor;
+    String icon;
+
+    if (rankNum == 1) {
+      badgeColor = const Color(0xFFFFD700);
+      textColor = const Color(0xFF7A5800);
+      icon = '🏆';
+    } else if (rankNum == 2) {
+      badgeColor = const Color(0xFFC0C0C0);
+      textColor = const Color(0xFF404040);
+      icon = '🥈';
+    } else if (rankNum == 3) {
+      badgeColor = const Color(0xFFCD7F32);
+      textColor = const Color(0xFF4A2800);
+      icon = '🥉';
+    } else {
+      badgeColor = Colors.black38;
+      textColor = Colors.white;
+      icon = '#';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: badgeColor.withValues(alpha: 0.5),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 3),
+          Text(
+            'Top $rankNum',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_agencies.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      height: 92,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: PageView.builder(
+        controller: _pageController,
+        itemBuilder: (context, index) {
+          final agency = _agencies[index % _agencies.length];
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: agency.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: agency.cardColor.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Avatar Image
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    color: Colors.white24,
+                  ),
+                  child: ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: agency.imageUrl,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (context, url) => Container(
+                        color: Colors.white24,
+                        alignment: Alignment.center,
+                      ),
+                      errorWidget: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.white24,
+                          alignment: Alignment.center,
+                          child: Text(
+                            agency.name.isNotEmpty ? agency.name[0].toUpperCase() : 'A',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Text details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              agency.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          _buildRankBadge(agency.topRank),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Agency Code: ${agency.code}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Hosts: ${agency.hosts}  •  Diamonds: ${agency.diamonds}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class RoomSkeletonWidget extends StatelessWidget {
+  const RoomSkeletonWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.25),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 30,
+            left: 10,
+            child: Container(
+              width: 100,
+              height: 12,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 10,
+            left: 10,
+            child: Container(
+              width: 60,
+              height: 12,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

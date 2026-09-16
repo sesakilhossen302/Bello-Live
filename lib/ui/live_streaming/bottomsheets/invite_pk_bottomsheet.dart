@@ -123,53 +123,59 @@ class _InvitePKBottomSheetState extends State<InvitePKBottomSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16.0),
-            child: Text(
-              'Invite PK',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const Divider(color: Colors.white24, height: 1, thickness: 1),
-          if (widget.pendingInvites.isNotEmpty) _buildReceivedInvitesSection(),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-            child: Row(
+      child: CustomScrollView(
+        controller: widget.scrollController,
+        slivers: [
+          const SliverToBoxAdapter(
+            child: Column(
               children: [
-                Text(
-                  'Available to Invite',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                  child: Text(
+                    'Invite PK',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
+                Divider(color: Colors.white24, height: 1, thickness: 1),
               ],
             ),
           ),
-          Expanded(child: _buildAvailableHostsList()),
+          if (widget.pendingInvites.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                child: Text(
+                  'Received Invites',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildReceivedInviteRow(widget.pendingInvites[index]),
+                childCount: widget.pendingInvites.length,
+              ),
+            ),
+            const SliverToBoxAdapter(
+              child: Divider(color: Colors.white24, height: 1, thickness: 1, indent: 16, endIndent: 16),
+            ),
+          ],
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+              child: Row(
+                children: [
+                  Text(
+                    'Available to Invite',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _buildAvailableHostsSliverList(),
         ],
       ),
-    );
-  }
-
-  Widget _buildReceivedInvitesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Text(
-            'Received Invites',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: widget.pendingInvites.length,
-          itemBuilder: (context, index) => _buildReceivedInviteRow(widget.pendingInvites[index]),
-        ),
-        const Divider(color: Colors.white24, height: 1, thickness: 1, indent: 16, endIndent: 16),
-      ],
     );
   }
 
@@ -198,50 +204,68 @@ class _InvitePKBottomSheetState extends State<InvitePKBottomSheet> {
           const SizedBox(width: 12),
           TextButton(
             onPressed: () => _rejectInvite(invite),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             child: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
           ),
+          const SizedBox(width: 8),
           ElevatedButton(
             onPressed: () => _acceptInvite(invite),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAvailableHostsList() {
+  Widget _buildAvailableHostsSliverList() {
     return FutureBuilder<List<SimpleUser>>(
       future: _mutualsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Colors.pink));
-        }
-
-        if (snapshot.hasError) {
-          return _EmptyListWidget(icon: Icons.error_outline, message: 'Failed to load list: ${snapshot.error}');
-        }
-
-        //  The list is already fully filtered by our new Future logic above!
-        final availableHosts = snapshot.data ?? [];
-
-        if (availableHosts.isEmpty) {
-          return const _EmptyListWidget(
-            icon: Icons.people_outline,
-            message: 'No friends are currently hosting available rooms.',
+          return const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.0),
+                child: CircularProgressIndicator(color: Colors.pink),
+              ),
+            ),
           );
         }
 
-        return ListView.builder(
-          controller: widget.scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          itemCount: availableHosts.length,
-          itemBuilder: (context, index) => _buildUserRow(availableHosts[index]),
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(
+            child: _EmptyListWidget(icon: Icons.error_outline, message: 'Failed to load list: ${snapshot.error}'),
+          );
+        }
+
+        final availableHosts = snapshot.data ?? [];
+
+        if (availableHosts.isEmpty) {
+          return const SliverToBoxAdapter(
+            child: _EmptyListWidget(
+              icon: Icons.people_outline,
+              message: 'No friends are currently hosting available rooms.',
+            ),
+          );
+        }
+
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => _buildUserRow(availableHosts[index]),
+            childCount: availableHosts.length,
+          ),
         );
       },
     );
@@ -249,7 +273,7 @@ class _InvitePKBottomSheetState extends State<InvitePKBottomSheet> {
 
   Widget _buildUserRow(SimpleUser user) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       child: Row(
         children: [
           CircleAvatar(
@@ -276,7 +300,9 @@ class _InvitePKBottomSheetState extends State<InvitePKBottomSheet> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text('Invite', style: TextStyle(fontWeight: FontWeight.bold)),
           ),

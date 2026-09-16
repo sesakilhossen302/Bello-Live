@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class StoreItemModel {
   final String id;
@@ -75,7 +76,8 @@ class StoreService {
       if (!userDoc.exists) throw Exception("User not found");
 
       final userData = userDoc.data() ?? {};
-      final currentBalance = userData['balance'] ?? 0;
+      final rawBalance = userData['balance'] ?? userData['beans'] ?? 0;
+      final num currentBalance = rawBalance is num ? rawBalance : (num.tryParse(rawBalance.toString()) ?? 0);
       if (currentBalance < item.price) {
         throw Exception("Insufficient diamonds to purchase this item.");
       }
@@ -86,14 +88,16 @@ class StoreService {
       if (bagDoc.exists) {
         final bagData = bagDoc.data();
         final currentExpTimestamp = bagData?['expiresAt'] as Timestamp?;
+        final int daysToAdd = item.category.toLowerCase().contains('package') ? 365 : 30;
 
         if (currentExpTimestamp != null && currentExpTimestamp.toDate().isAfter(DateTime.now())) {
-          newExpirationDate = currentExpTimestamp.toDate().add(const Duration(days: 30));
+          newExpirationDate = currentExpTimestamp.toDate().add(Duration(days: daysToAdd));
         } else {
-          newExpirationDate = DateTime.now().add(const Duration(days: 30));
+          newExpirationDate = DateTime.now().add(Duration(days: daysToAdd));
         }
       } else {
-        newExpirationDate = DateTime.now().add(const Duration(days: 30));
+        final int daysToAdd = item.category.toLowerCase().contains('package') ? 365 : 30;
+        newExpirationDate = DateTime.now().add(Duration(days: daysToAdd));
       }
 
       final Map<String, dynamic> userUpdates = {'balance': FieldValue.increment(-item.price)};
@@ -126,17 +130,43 @@ class StoreService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception("User not logged in");
 
+    final cat = item.category.toLowerCase().trim();
+    final isRoomSkinOrScreen = cat.contains('screen') || cat.contains('skin');
+
     if (equip) {
       // Set this item as the active one for this specific category
       await _usersCollection.doc(uid).update({
         'activeAddOns.${item.category}': {
           'imageUrl': item.imageUrl,
+          'name': item.name,
           'expiresAt': item.expiresAt != null ? Timestamp.fromDate(item.expiresAt!) : null,
         },
+        if (isRoomSkinOrScreen) 'preferredRoomSkin': item.imageUrl,
       });
+
+      // If user currently has an active room, update it live!
+      if (isRoomSkinOrScreen) {
+        try {
+          final userDoc = await _usersCollection.doc(uid).get();
+          final currentRoomId = userDoc.data()?['currentRoomId'] as String?;
+          if (currentRoomId != null && currentRoomId.isNotEmpty) {
+            await FirebaseDatabase.instance.ref('rooms/$currentRoomId').update({
+              'backgroundUrl': item.imageUrl,
+              'backgroundUpdatedAt': ServerValue.timestamp,
+            });
+            await FirebaseDatabase.instance.ref('live_streams/$currentRoomId').update({
+              'backgroundUrl': item.imageUrl,
+              'backgroundUpdatedAt': ServerValue.timestamp,
+            });
+          }
+        } catch (_) {}
+      }
     } else {
       // Remove the active item for this category
-      await _usersCollection.doc(uid).update({'activeAddOns.${item.category}': FieldValue.delete()});
+      await _usersCollection.doc(uid).update({
+        'activeAddOns.${item.category}': FieldValue.delete(),
+        if (isRoomSkinOrScreen) 'preferredRoomSkin': FieldValue.delete(),
+      });
     }
   }
 

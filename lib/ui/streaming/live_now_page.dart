@@ -19,8 +19,10 @@ class LiveNowPage extends StatelessWidget {
     return BlocProvider(
       create: (context) => HomeCubit()..init(),
       child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
-          backgroundColor: AppColors.barColor,
+          backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text(
             AppLocalizations.of(context).liveNow,
@@ -35,10 +37,7 @@ class LiveNowPage extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: AppColors.backgroundGradient,
-          ),
+        body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

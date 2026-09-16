@@ -26,25 +26,27 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _onItemTapped(int index) {
+    if (index == 2) {
+      context.push(Routes.hostPage.path);
+      return; // Do not update _selectedPosition for the center button
+    }
+
     setState(() {
       _selectedPosition = index;
     });
 
     switch (index) {
       case 0:
-        context.push(Routes.home.path);
+        context.go(Routes.home.path); // Use go to switch tabs without pushing a new stack
         break;
       case 1:
-        context.push(Routes.status.path);
-        break;
-      case 2:
-        context.go(Routes.hostPage.path);
+        context.go(Routes.status.path);
         break;
       case 3:
-        context.push(Routes.inbox.path);
+        context.go(Routes.inbox.path);
         break;
       case 4:
-        context.push(Routes.profile.path);
+        context.go(Routes.profile.path);
         break;
     }
   }
@@ -54,7 +56,8 @@ class _MainPageState extends State<MainPage> {
     return BlocBuilder<AppCubit, AppState>(
       builder: (context, state) {
         return Scaffold(
-          extendBody: true,
+          backgroundColor: const Color(0xFF091433),
+          extendBody: false,
           bottomNavigationBar: MyBottomNavBar(
             selectedPosition: _selectedPosition,
             onItemTapped: _onItemTapped,

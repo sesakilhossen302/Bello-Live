@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:intl/intl.dart';
 
 import '../../data/remote/firebase/profile_services.dart';
@@ -24,6 +27,7 @@ class _EarningsPageState extends State<EarningsPage> {
   int currentMonthRate = 0;
   int giftReceiveTarget = 2000000;
   int giftReceiveReward = 0;
+  String earningNoteText = 'Totals below 200,000 diamonds cannot be withdrawn and will remain in your account until the next payment month.';
 
   Map<String, dynamic>? earningsData;
 
@@ -31,6 +35,15 @@ class _EarningsPageState extends State<EarningsPage> {
   void initState() {
     super.initState();
     _checkHostStatus();
+  }
+
+  Stream<int> _buildGiftingStream(String userId) {
+    final now = DateTime.now();
+    if (selectedMonth.year == now.year && selectedMonth.month == now.month) {
+      return ProfileService.getMonthlyReceivedDiamondsStream(userId);
+    } else {
+      return Stream.value(earningsData?['revenue'] ?? 0);
+    }
   }
 
   Future<void> _checkHostStatus() async {
@@ -45,7 +58,7 @@ class _EarningsPageState extends State<EarningsPage> {
       if (userDoc.exists) {
         final data = userDoc.data() as Map<String, dynamic>;
         setState(() {
-          isHost = data['isHost'] ?? false;
+          isHost = data['isHost'] ?? false; // Reverted back to correct role check
         });
 
         if (isHost) {
@@ -89,6 +102,18 @@ class _EarningsPageState extends State<EarningsPage> {
       } else {
         giftReceiveTarget = 2000000;
         giftReceiveReward = 0;
+      }
+
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('earningnote')
+          .doc('note')
+          .get(const GetOptions(source: Source.server));
+
+      if (noteDoc.exists && noteDoc.data() != null) {
+        final noteStr = noteDoc.data()!['note1'];
+        if (noteStr != null && noteStr.toString().isNotEmpty) {
+          earningNoteText = noteStr.toString();
+        }
       }
 
       if (mounted) setState(() {});
@@ -183,21 +208,19 @@ class _EarningsPageState extends State<EarningsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.pink))
-                    : isHost
-                        ? _buildHostEarningsView()
-                        : _buildNonHostView(),
-              ),
-            ],
-          ),
+      backgroundColor: const Color(0xFF091433),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  : isHost
+                      ? _buildHostEarningsView()
+                      : _buildNonHostView(),
+            ),
+          ],
         ),
       ),
     );
@@ -213,16 +236,13 @@ class _EarningsPageState extends State<EarningsPage> {
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           const SizedBox(width: 8),
-          Expanded(
+          const Expanded(
             child: Text(
-              isHost ? 'Earnings Dashboard' : 'Official Talent Instruction',
+              'Earnings',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-                shadows: [
-                  Shadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 2)),
-                ],
               ),
             ),
           ),
@@ -239,14 +259,13 @@ class _EarningsPageState extends State<EarningsPage> {
 
     final rawReceivedGifts = earningsData?['revenue'] ?? 0;
 
-    int receiveBonus = 0;
-    if (giftReceiveTarget > 0 && giftReceiveReward > 0) {
-      receiveBonus = (rawReceivedGifts ~/ giftReceiveTarget) * giftReceiveReward;
-    }
+    final calculatedDailyBonus = earningsData?['dailyRewardTotal'] ?? 0;
+    final total = rawReceivedGifts + calculatedDailyBonus;
 
-    final finalReceivedAmount = rawReceivedGifts + receiveBonus;
-    final calculatedDailyBonus = validDays * currentMonthRate;
-    final total = finalReceivedAmount + calculatedDailyBonus;
+    const containerColor = Color(0xFF0F1E42);
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+
+    final dailyRecords = earningsData?['dailyRecords'] as List<dynamic>? ?? [];
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -254,6 +273,7 @@ class _EarningsPageState extends State<EarningsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
           // User Profile Header
           StreamBuilder<DocumentSnapshot>(
             stream: ProfileService.getUserProfileStream(userId),
@@ -262,23 +282,19 @@ class _EarningsPageState extends State<EarningsPage> {
               final data = snapshot.data!.data() as Map<String, dynamic>;
 
               return Container(
-                padding: const EdgeInsets.all(20),
-                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.pink.withValues(alpha: 0.4), width: 1.5),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 10)),
-                  ],
+                  color: containerColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor, width: 1.5),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 32,
+                      radius: 28,
                       backgroundColor: AppColors.pink.withValues(alpha: 0.2),
                       backgroundImage: data['photoUrl'] != null ? NetworkImage(data['photoUrl']) : null,
-                      child: data['photoUrl'] == null ? const Icon(Icons.person, color: Colors.white, size: 32) : null,
+                      child: data['photoUrl'] == null ? const Icon(Icons.person, color: Colors.white, size: 28) : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -287,28 +303,25 @@ class _EarningsPageState extends State<EarningsPage> {
                         children: [
                           Text(
                             data['displayName'] ?? 'User',
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'ID: ${data['displayId'] ?? 'N/A'}',
-                            style: const TextStyle(color: AppColors.pink400, fontSize: 15, fontWeight: FontWeight.w600),
+                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Colors.amber, Colors.orange]),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: Colors.orange.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4)),
-                        ],
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(
                         'HOST',
-                        style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ],
@@ -316,176 +329,372 @@ class _EarningsPageState extends State<EarningsPage> {
               );
             },
           ),
+          const SizedBox(height: 20),
 
           // Month Selector
           Center(
             child: GestureDetector(
               onTap: _selectMonth,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.pink.withValues(alpha: 0.4)),
+                  color: containerColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_month, color: AppColors.pink, size: 20),
-                    const SizedBox(width: 10),
                     Text(
                       DateFormat('MMMM yyyy').format(selectedMonth),
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.keyboard_arrow_down, color: AppColors.pink),
+                    const Icon(Icons.arrow_drop_down, color: Colors.white),
                   ],
                 ),
               ),
             ),
           ),
-
-          const SizedBox(height: 24),
-
-          // Stats Cards Grid
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatBox(title: "Valid Days", value: "$validDays", icon: Icons.verified, color: Colors.greenAccent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatBox(title: "Audio Live", value: _formatDuration(audioMinutes), icon: Icons.mic, color: Colors.blueAccent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatBox(title: "Video Live", value: _formatDuration(videoMinutes), icon: Icons.videocam, color: Colors.purpleAccent),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Earnings Breakdown
-          const Text(
-            "Earnings Breakdown",
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          _buildEarningRow('Received Gifts Revenue', finalReceivedAmount, isPositive: true),
-          const SizedBox(height: 12),
-          _buildEarningRow('Daily Active Reward', calculatedDailyBonus, isPositive: true),
           const SizedBox(height: 16),
-          _buildEarningRow('Total Target Revenue', total, isTotal: true),
 
-          const SizedBox(height: 24),
+          // Live Room Timer — shows if host currently has a room open
+          _LiveRoomTimerCard(userId: userId),
+          const SizedBox(height: 16),
 
-          // Note
+          // Stats Table
           Container(
-            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.4), width: 1.5),
+              color: containerColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
               children: [
-                const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 24),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    'Totals below 200,000 diamonds cannot be withdrawn and will remain in your account until the next payment month.',
-                    style: TextStyle(color: Colors.orange.shade100, fontSize: 14, height: 1.5),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF162B5B),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Expanded(child: Center(child: Text("Valid Days", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)))),
+                      Expanded(child: Center(child: Text("Audio Live", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)))),
+                      Expanded(child: Center(child: Text("Video Live", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)))),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            "$validDays",
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            _formatDuration(audioMinutes),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            _formatDuration(videoMinutes),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // Earnings List — Gifting is real-time
+          StreamBuilder<int>(
+            stream: _buildGiftingStream(userId),
+            builder: (context, giftSnap) {
+              final liveGiftTotal = giftSnap.data ?? rawReceivedGifts;
+              final liveTotal = liveGiftTotal + calculatedDailyBonus;
+
+              return Column(
+                children: [
+                  _buildEarningItem(
+                    'Gifting (Coins)',
+                    liveGiftTotal,
+                    isLive: true,
+                    isLoading: giftSnap.connectionState == ConnectionState.waiting,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildEarningItem('Daily Reward', calculatedDailyBonus),
+                  const SizedBox(height: 16),
+
+                  // Total Target
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: containerColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: borderColor, width: 1.0),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Target',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          _formatNumber(liveTotal),
+                          style: const TextStyle(color: Color(0xFFFFB300), fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // Note
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    earningNoteText,
+                    style: const TextStyle(color: Colors.orangeAccent, fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Daily Details Section
+          const Text(
+            'Daily Details',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+
+          if (dailyRecords.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: containerColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: const Center(
+                child: Text(
+                  'No streaming records for this month',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: dailyRecords.map<Widget>((record) {
+                final date = record['date'] as DateTime?;
+                final dateStr = record['dateString'] as String? ?? '';
+                final formattedDate = date != null ? DateFormat('dd MMMM yyyy').format(date) : dateStr;
+                final audioMins = (record['audioMinutes'] as num?)?.toInt() ?? 0;
+                final videoMins = (record['videoMinutes'] as num?)?.toInt() ?? 0;
+                final dailyReward = (record['dailyReward'] as num?)?.toInt() ?? 0;
+                final isValid = record['isValidDay'] as bool? ?? false;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: containerColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isValid ? Colors.green.withValues(alpha: 0.3) : borderColor,
+                      width: isValid ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            formattedDate,
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          if (isValid)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                              ),
+                              child: const Text(
+                                'Valid Day',
+                                style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Audio Live', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatDuration(audioMins),
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Video Live', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatDuration(videoMins),
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('Daily Reward', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text(
+                                dailyReward > 0 ? '+${_formatNumber(dailyReward)}' : '0',
+                                style: TextStyle(
+                                  color: dailyReward > 0 ? Colors.greenAccent : Colors.white54,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildStatBox({required String title, required String value, required IconData icon, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEarningRow(String label, int amount, {bool isPositive = false, bool isTotal = false}) {
+  Widget _buildEarningItem(
+    String label,
+    int amount, {
+    bool isLive = false,
+    bool isLoading = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: isTotal ? AppColors.pink.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isTotal ? AppColors.pink : Colors.white.withValues(alpha: 0.15), width: isTotal ? 2 : 1),
-        boxShadow: isTotal
-            ? [BoxShadow(color: AppColors.pink.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 6))]
-            : [],
+        color: isLive ? Colors.green.withValues(alpha: 0.1) : const Color(0xFF0F1E42),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isLive ? Colors.green.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isTotal ? Colors.white : Colors.white70,
-              fontSize: isTotal ? 18 : 16,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-            ),
-          ),
           Row(
             children: [
-              if (isTotal)
-                const Icon(Icons.stars, color: Colors.amber, size: 24)
-              else
-                const Icon(Icons.diamond, color: Colors.cyanAccent, size: 20),
-              const SizedBox(width: 8),
               Text(
-                '${isPositive ? '+' : ''}${_formatNumber(amount)}',
-                style: TextStyle(
-                  color: isTotal ? Colors.amberAccent : Colors.white,
-                  fontSize: isTotal ? 24 : 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
               ),
+              if (isLive) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.5)),
+                  ),
+                  child: const Text(
+                    'LIVE',
+                    style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
+          isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.greenAccent,
+                  ),
+                )
+              : Text(
+                  '+${_formatNumber(amount)}',
+                  style: TextStyle(
+                    color: isLive ? Colors.greenAccent : const Color(0xFFFFB300),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
         ],
       ),
     );
   }
 
   String _formatDuration(int minutes) {
+    if (minutes == 0) return '0 m';
     final hours = minutes ~/ 60;
     final mins = minutes % 60;
-    return '${hours.toString().padLeft(1, '0')}:${mins.toString().padLeft(2, '0')}';
+    
+    if (hours > 0 && mins > 0) {
+      return '$hours h $mins m';
+    } else if (hours > 0) {
+      return '$hours h';
+    } else {
+      return '$mins m';
+    }
   }
 
   String _formatNumber(int number) {
@@ -500,17 +709,15 @@ class _EarningsPageState extends State<EarningsPage> {
       stream: ProfileService.getUserProfileStream(currentUserId),
       builder: (context, snapshot) {
         int liveEarning = 0;
-        int gameEarning = 0;
         int giftingEarning = 0;
 
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           liveEarning = data['liveEarnings'] ?? data['revenue'] ?? data['todaysRevenue'] ?? 0;
-          gameEarning = data['gameEarnings'] ?? 0;
-          giftingEarning = data['totalReceived'] ?? data['diamonds'] ?? 0;
+          giftingEarning = data['diamonds'] ?? 0;
         }
 
-        int totalEarning = liveEarning + gameEarning + giftingEarning;
+        int totalEarning = liveEarning + giftingEarning;
 
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -520,85 +727,7 @@ class _EarningsPageState extends State<EarningsPage> {
             children: [
               const SizedBox(height: 10),
 
-              // Title Section
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.barColor.withValues(alpha: 0.9), Colors.black.withValues(alpha: 0.4)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.pink.withValues(alpha: 0.4)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.pink.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.auto_awesome, color: AppColors.pink, size: 32),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Official Talent Guide",
-                            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            "Everything you need to know about streaming & earning rewards.",
-                            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: 28),
-
-              // Requirements Section
-              _buildSectionTitle("Requirements to Become Official Talent", Icons.check_circle_outline, Colors.greenAccent),
-              const SizedBox(height: 14),
-              _buildInstructionCard(
-                title: "Gems Earning Target",
-                description: "Earn at least 2,000,000 gems from your broadcasts to qualify and apply as an Official Streamer.",
-                icon: Icons.diamond,
-                iconColor: Colors.cyanAccent,
-              ),
-              const SizedBox(height: 12),
-              _buildInstructionCard(
-                title: "Direct Agency Onboarding",
-                description: "If you already have an Agency ID, you can join an Agency instantly and bypass the gems threshold.",
-                icon: Icons.business_center,
-                iconColor: Colors.amberAccent,
-              ),
-
-              const SizedBox(height: 28),
-
-              // Benefits Section
-              _buildSectionTitle("Why Become an Official Streamer?", Icons.star_border, Colors.amber),
-              const SizedBox(height: 14),
-              _buildBenefitTile("Real Money Payouts", "Receive regular monthly salary allowances plus real money conversions from your gems balance."),
-              const SizedBox(height: 10),
-              _buildBenefitTile("Homepage Spotlight", "Your live broadcasts will automatically appear under the 'Popular' category for maximum user engagement."),
-              const SizedBox(height: 10),
-              _buildBenefitTile("Discovery & New Star Ribbon", "Unlock a prestigious 'New Star' ribbon on your profile and get special ranking placement."),
-              const SizedBox(height: 10),
-              _buildBenefitTile("Exclusive Training", "Get official 24/7 priority support, streamer training, and agency perks directly from our core team."),
-
-              const SizedBox(height: 32),
 
               // --- COIN EARNING SUMMARY BOXES ---
               const Text(
@@ -620,10 +749,10 @@ class _EarningsPageState extends State<EarningsPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildEarningSummaryBox(
-                      title: "Game Earning",
-                      amount: gameEarning,
-                      icon: Icons.sports_esports,
-                      color: Colors.purpleAccent,
+                      title: "Gifting Earning",
+                      amount: giftingEarning,
+                      icon: Icons.card_giftcard,
+                      color: Colors.pinkAccent,
                     ),
                   ),
                 ],
@@ -634,10 +763,10 @@ class _EarningsPageState extends State<EarningsPage> {
                 children: [
                   Expanded(
                     child: _buildEarningSummaryBox(
-                      title: "Gifting Earning",
-                      amount: giftingEarning,
-                      icon: Icons.card_giftcard,
-                      color: Colors.pinkAccent,
+                      title: "Total Earning",
+                      amount: totalEarning,
+                      icon: Icons.account_balance_wallet,
+                      color: Colors.amber,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -653,93 +782,7 @@ class _EarningsPageState extends State<EarningsPage> {
                 ],
               ),
 
-              const SizedBox(height: 32),
 
-              // --- DAILY STREAM BONUS TARGET BANNER ---
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.amber.shade700, Colors.orange.shade900],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(color: Colors.orange.withValues(alpha: 0.5), blurRadius: 25, offset: const Offset(0, 10)),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.access_time_filled, color: Colors.white, size: 40),
-                    ),
-                    const SizedBox(width: 18),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.local_fire_department, color: Colors.yellowAccent, size: 20),
-                              SizedBox(width: 6),
-                              Text(
-                                "Daily Streaming Target",
-                                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            "Stream for a minimum of 1 hour daily (Audio or Video live) to receive 4,000 Coins reward!",
-                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Notice Section
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade900.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.5), width: 1.5),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
-                    SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Age Restriction Notice",
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            "MP Live requires all broadcasters to be at least 18 years old. Underage applications will be strictly declined.",
-                            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
               const SizedBox(height: 40),
             ],
@@ -931,6 +974,253 @@ class _EarningsPageState extends State<EarningsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Room Timer Card
+// Shows how long the host's current audio or video board has been open.
+// Queries Firebase Realtime Database for active rooms where hostId == userId.
+// ─────────────────────────────────────────────────────────────────────────────
+class _LiveRoomTimerCard extends StatefulWidget {
+  final String userId;
+  const _LiveRoomTimerCard({required this.userId});
+
+  @override
+  State<_LiveRoomTimerCard> createState() => _LiveRoomTimerCardState();
+}
+
+class _LiveRoomTimerCardState extends State<_LiveRoomTimerCard> {
+  // Detected active room info
+  int? _audioRoomStart; // createdAt in milliseconds
+  int? _videoRoomStart;
+
+  Timer? _ticker;
+  Duration _audioElapsed = Duration.zero;
+  Duration _videoElapsed = Duration.zero;
+
+  StreamSubscription<DatabaseEvent>? _audioSub;
+  StreamSubscription<DatabaseEvent>? _videoSub;
+
+  final _db = FirebaseDatabase.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToRooms();
+    // Tick every second to update elapsed times
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recalculate());
+    });
+  }
+
+  void _recalculate() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _audioElapsed = _audioRoomStart != null
+        ? Duration(milliseconds: now - _audioRoomStart!)
+        : Duration.zero;
+    _videoElapsed = _videoRoomStart != null
+        ? Duration(milliseconds: now - _videoRoomStart!)
+        : Duration.zero;
+  }
+
+  void _listenToRooms() {
+    // Audio rooms
+    _audioSub = _db
+        .ref('audioRooms')
+        .orderByChild('hostId')
+        .equalTo(widget.userId)
+        .onValue
+        .listen((event) {
+      int? found;
+      if (event.snapshot.exists) {
+        final rooms = event.snapshot.value as Map<dynamic, dynamic>;
+        for (final entry in rooms.entries) {
+          final room = entry.value as Map<dynamic, dynamic>;
+          final isActive = room['isActive'] == true;
+          final createdAt = room['createdAt'] as int?;
+          if (isActive && createdAt != null) {
+            found = createdAt;
+            break;
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _audioRoomStart = found;
+          _recalculate();
+        });
+      }
+    });
+
+    // Video rooms
+    _videoSub = _db
+        .ref('videoRooms')
+        .orderByChild('hostId')
+        .equalTo(widget.userId)
+        .onValue
+        .listen((event) {
+      int? found;
+      if (event.snapshot.exists) {
+        final rooms = event.snapshot.value as Map<dynamic, dynamic>;
+        for (final entry in rooms.entries) {
+          final room = entry.value as Map<dynamic, dynamic>;
+          final isActive = room['isActive'] == true;
+          final createdAt = room['createdAt'] as int?;
+          if (isActive && createdAt != null) {
+            found = createdAt;
+            break;
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _videoRoomStart = found;
+          _recalculate();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _audioSub?.cancel();
+    _videoSub?.cancel();
+    super.dispose();
+  }
+
+  String _formatElapsed(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAudio = _audioRoomStart != null;
+    final hasVideo = _videoRoomStart != null;
+
+    // Nothing to show if no active rooms
+    if (!hasAudio && !hasVideo) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Blinking red dot
+              _BlinkingDot(),
+              const SizedBox(width: 8),
+              const Text(
+                'Live Board Open',
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (hasAudio)
+            _buildTimerRow(
+              icon: Icons.mic,
+              label: 'Audio Live',
+              elapsed: _audioElapsed,
+              color: Colors.blueAccent,
+            ),
+          if (hasAudio && hasVideo) const SizedBox(height: 8),
+          if (hasVideo)
+            _buildTimerRow(
+              icon: Icons.videocam,
+              label: 'Video Live',
+              elapsed: _videoElapsed,
+              color: Colors.purpleAccent,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimerRow({
+    required IconData icon,
+    required String label,
+    required Duration elapsed,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Text(
+            _formatElapsed(elapsed),
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A small blinking red dot to indicate live status.
+class _BlinkingDot extends StatefulWidget {
+  @override
+  State<_BlinkingDot> createState() => _BlinkingDotState();
+}
+
+class _BlinkingDotState extends State<_BlinkingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: const BoxDecoration(
+          color: Colors.redAccent,
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }

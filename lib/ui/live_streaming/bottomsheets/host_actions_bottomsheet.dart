@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
+import '../../../data/remote/firebase/room_services.dart';
+import '../../streaming/audio_room_page.dart'; // To get RoomParticipant
 
 class HostActionsBottomSheet extends StatelessWidget {
   final String targetUserId;
@@ -24,11 +27,8 @@ class HostActionsBottomSheet extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white.withValues(alpha: 0.1),
             minimumSize: const Size(double.infinity, 50),
-            // Full width
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            // --- MODIFIED: Changed alignment to center ---
             alignment: Alignment.center,
-            // --- END MODIFICATION ---
             padding: const EdgeInsets.symmetric(horizontal: 16),
           ),
           onPressed: onPressed,
@@ -36,37 +36,116 @@ class HostActionsBottomSheet extends StatelessWidget {
       );
     }
 
-    // Placeholder function for actions
-    void performAction(BuildContext context, String action) {
-      // TODO: Implement actual host actions
-      // e.g., VideoRoomService.kickUser(roomId, targetUserId);
-      debugPrint('Host action: $action on $targetUserName ($targetUserId) in room $roomId');
-      Navigator.of(context).pop(); // Close the sheet
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$action performed on $targetUserName.'), backgroundColor: Colors.green));
-    }
-
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Manage $targetUserName',
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+    return StreamBuilder<DatabaseEvent>(
+      stream: RoomService.getParticipantStream(roomId, targetUserId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.snapshot.exists) {
+          return const SafeArea(
+            child: SizedBox(
+              height: 200,
+              child: Center(child: CircularProgressIndicator(color: Colors.pink)),
             ),
+          );
+        }
+
+        final data = snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
+        final participant = RoomParticipant.fromRTDB(snapshot.data!.snapshot.key!, data);
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Manage $targetUserName',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(color: Colors.white24, height: 1),
+              buildActionButton(
+                participant.isAdmin ? 'Remove Admin' : 'Set Admin',
+                participant.isAdmin ? Icons.security_outlined : Icons.security,
+                () async {
+                  try {
+                    await RoomService.setAdmin(roomId, targetUserId, !participant.isAdmin);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(participant.isAdmin ? 'Removed admin.' : 'Set as admin.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+              ),
+              buildActionButton(
+                participant.isMuted ? 'Unmute' : 'Mute',
+                participant.isMuted ? Icons.mic : Icons.mic_off,
+                () async {
+                  try {
+                    await RoomService.muteParticipant(roomId, targetUserId, !participant.isMuted);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(participant.isMuted ? 'Unmuted.' : 'Muted.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+              ),
+              buildActionButton(
+                participant.isChatMuted ? 'Unmute Chat' : 'Chat Mute',
+                participant.isChatMuted ? Icons.speaker_notes : Icons.no_sim,
+                () async {
+                  try {
+                    await RoomService.chatMuteParticipant(roomId, targetUserId, !participant.isChatMuted);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(participant.isChatMuted ? 'Chat unmuted.' : 'Chat muted.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+              ),
+              buildActionButton('Kick Out', Icons.exit_to_app, () async {
+                try {
+                  await RoomService.kickParticipant(roomId, targetUserId);
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Kicked out.')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              }),
+              const SizedBox(height: 16),
+            ],
           ),
-          const Divider(color: Colors.white24, height: 1),
-          buildActionButton('Set Admin', Icons.security, () => performAction(context, 'Set Admin')),
-          buildActionButton('Mute', Icons.mic_off, () => performAction(context, 'Mute')),
-          buildActionButton('Chat Mute', Icons.no_sim, () => performAction(context, 'Chat Mute')),
-          buildActionButton('Kick Out', Icons.exit_to_app, () => performAction(context, 'Kick Out')),
-          const SizedBox(height: 16),
-        ],
-      ),
+        );
+      },
     );
   }
 }

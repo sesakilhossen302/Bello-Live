@@ -1,13 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../../data/remote/firebase/live_streaming_services.dart';
 import '../../streaming/bottomsheets/play_music_bottomsheet.dart';
 import '../../streaming/blocked_users_page.dart';
-import '../../streaming/bottomsheets/game_list_bottomsheet.dart';
+
 import 'invite_pk_bottomsheet.dart';
 import 'share_bottomsheet.dart';
-import 'package:zego_express_engine/zego_express_engine.dart';
+import 'package:picture_live/core/services/livekit_service.dart';
 import '../../streaming/bottomsheets/rocket_config_bottomsheet.dart';
 
 class _ToolItem {
@@ -43,6 +42,7 @@ final List<_ToolItem> _hostTools = [
     icon: CupertinoIcons.speaker_2_fill,
     iconBgColor: Colors.blue.shade600,
   ),
+
   _ToolItem(
     label: 'Rocket',
     icon: Icons.rocket_launch,
@@ -62,11 +62,6 @@ final List<_ToolItem> _hostTools = [
     label: 'Play music',
     icon: Icons.music_note_outlined,
     iconBgColor: Colors.pink.shade600,
-  ),
-  _ToolItem(
-    label: 'Games',
-    icon: Icons.games_outlined,
-    iconBgColor: Colors.green.shade700,
   ),
   _ToolItem(
     label: 'Random PK',
@@ -97,15 +92,11 @@ final List<_ToolItem> _guestTools = [
     icon: CupertinoIcons.speaker_2_fill,
     iconBgColor: Colors.blue.shade600,
   ),
+
   _ToolItem(
     label: 'Rocket',
     icon: Icons.rocket_launch,
     iconBgColor: Colors.purple.shade600,
-  ),
-  _ToolItem(
-    label: 'Games',
-    icon: Icons.games_outlined,
-    iconBgColor: Colors.green.shade700,
   ),
 ];
 
@@ -133,16 +124,18 @@ class LiveToolsBottomSheet extends StatefulWidget {
 
 class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
   bool _isSpeakerMuted = false;
+  bool _isCameraOn = true;
 
 
   @override
   void initState() {
     super.initState();
     _loadSpeakerState();
+    _isCameraOn = true;
   }
 
   Future<void> _loadSpeakerState() async {
-    final isMuted = await ZegoExpressEngine.instance.isSpeakerMuted();
+    final isMuted = LiveKitService.instance.isSpeakerMuted;
     if (mounted) {
       setState(() {
         _isSpeakerMuted = isMuted;
@@ -154,23 +147,23 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16.0),
-            child: Text(
-              'Tools',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                'Tools',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-          ),
-          const Divider(color: Colors.white24, height: 1, thickness: 1),
-          Flexible(
-            child: Padding(
+            const Divider(color: Colors.white24, height: 1, thickness: 1),
+            Padding(
               padding: const EdgeInsets.all(16.0),
               child: GridView.builder(
                 shrinkWrap: true,
@@ -188,7 +181,7 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                   final tool = widget.isHost
                       ? _hostTools[index]
                       : _guestTools[index];
-
+    
                   VoidCallback onTapLogic;
                   if (tool.label == 'Invite PK') {
                     onTapLogic = () {
@@ -239,10 +232,11 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                       setState(() {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
-                      await ZegoExpressEngine.instance.muteSpeaker(
+                      await LiveKitService.instance.setSpeakerMuted(
                         _isSpeakerMuted,
                       );
                     };
+
                   } else if (tool.label == 'Rocket') {
                     onTapLogic = () {
                       Navigator.pop(context);
@@ -257,11 +251,6 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                     onTapLogic = () {
                       Navigator.pop(context);
                       _showNoticeDialog(context);
-                    };
-                  } else if (tool.label == 'Games') {
-                    onTapLogic = () {
-                      Navigator.pop(context);
-                      showGamesListBottomSheet(context);
                     };
                   } else if (tool.label == 'Block') {
                     onTapLogic = () {
@@ -282,15 +271,16 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                       Navigator.pop(context);
                     };
                   }
-
+    
                   // Update icon for speaker button based on state
                   IconData displayIcon = tool.icon;
                   if (tool.label == 'Speaker') {
                     displayIcon = _isSpeakerMuted
                         ? CupertinoIcons.speaker_slash_fill
                         : CupertinoIcons.speaker_2_fill;
-                  }
 
+                  }
+    
                   return _buildToolButton(
                     icon: displayIcon,
                     label: tool.label,
@@ -300,8 +290,8 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                 },
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -325,14 +315,14 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: iconBgColor,
                 ),
-                child: Icon(icon, color: Colors.white, size: 24),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: const TextStyle(
@@ -468,26 +458,29 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [5, 7, 10].map((minutes) {
                       final isSelected = selectedMinutes == minutes;
-                      return GestureDetector(
-                        onTap: () => setState(() => selectedMinutes = minutes),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
-                          margin: EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.pink
-                                : Colors.transparent,
-                            border: Border.all(color: Colors.pink, width: 2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '$minutes min',
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.pink,
-                              fontWeight: FontWeight.bold,
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => selectedMinutes = minutes),
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                            ),
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.pink
+                                  : Colors.transparent,
+                              border: Border.all(color: Colors.pink, width: 2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$minutes min',
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.pink,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ),

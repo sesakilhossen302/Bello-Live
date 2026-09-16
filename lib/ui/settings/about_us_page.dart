@@ -63,10 +63,10 @@ class AboutUsPage extends StatelessWidget {
                   final data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
                   
                   // Title variations
-                  final String title = data['title'] ?? data['app_name'] ?? data['name'] ?? 'Picture Live';
+                  final String title = data['title'] ?? data['app_name'] ?? data['name'] ?? 'ProLive';
                   
                   // Content/About variations
-                  final String content = data['content'] ?? data['description'] ?? data['about'] ?? data['about_text'] ?? data['text'] ?? 'Welcome to Picture Live!';
+                  final String content = data['content'] ?? data['description'] ?? data['about'] ?? data['about_text'] ?? data['text'] ?? 'Welcome to ProLive!';
                   
                   // Image variations
                   final String? imageUrl = data['image'] ?? data['logo'] ?? data['photo_url'] ?? data['photo'] ?? data['img'];
