@@ -2,14 +2,15 @@ import 'package:flutter/foundation.dart';
 
 class AppConfig {
   /// Default LiveKit SFU WebSocket URL (Deployed VPS).
-  static String defaultLiveKitUrl = 'ws://129.212.226.12:7880';
+  static String defaultLiveKitUrl = 'ws://167.71.207.84:7880';
 
   /// Default Node.js / TypeScript RTC Token Control Plane URL (`rtc_server`).
-  static String defaultTokenServerUrl = 'http://129.212.226.12:5000/api';
+  static String defaultTokenServerUrl = 'http://167.71.207.84:5000/api';
 
   /// Active runtime endpoints (initialized from Firestore or fallbacks)
   static String liveKitUrl = defaultLiveKitUrl;
   static String tokenServerUrl = defaultTokenServerUrl;
+  static String get apiBaseUrl => tokenServerUrl;
 
   /// Update active runtime endpoints
   static void updateEndpoints({String? livekit, String? tokenServer}) {
