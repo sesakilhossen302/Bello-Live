@@ -227,7 +227,7 @@ class ProfileService {
   /// Uploads an image file to JusiLive API and returns the secure URL.
   /// Uses an explicit http.Client with close() to prevent Android connection reset errors.
   static Future<String> _uploadImage(File imageFile) async {
-    final uri = Uri.parse('https://api.jusilive.com/api/upload');
+    final uri = Uri.parse('https://api.sdlive.fun/api/upload');
 
     // Use an explicit client so we can close it properly — this prevents
     // "Connection reset by peer (errno=104)" on Android.
@@ -292,12 +292,8 @@ class ProfileService {
         oldImageUrl = data['photoUrl'] as String?;
       }
 
-      // Upload new image to Firebase Storage
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final ref = _storage.ref().child('profile').child('${currentUserId}_$timestamp.jpg');
-      final uploadTask = ref.putFile(imageFile, SettableMetadata(contentType: 'image/jpeg'));
-      final snapshot = await uploadTask.whenComplete(() => {});
-      final newImageUrl = await snapshot.ref.getDownloadURL();
+      // Upload new image using custom API
+      final newImageUrl = await _uploadImage(imageFile);
       
       dataToUpdate['photoUrl'] = newImageUrl;
 

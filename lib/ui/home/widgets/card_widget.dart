@@ -63,6 +63,10 @@ class _AnimatedStreamerCardState extends State<AnimatedStreamerCard> {
       badges.add(buildMiniBadge('Reseller', const Color(0xFF2196F3)));
       hasRole = true;
     }
+    if (widget.streamer.isModerator) {
+      badges.add(buildMiniBadge('Moderator', const Color(0xFFE91E63)));
+      hasRole = true;
+    }
 
     if (!hasRole) {
       badges.add(buildMiniBadge('General User', const Color(0xFF607D8B)));
@@ -182,7 +186,7 @@ class _AnimatedStreamerCardState extends State<AnimatedStreamerCard> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF8A004F), Color(0xFFE62563)],
+                          colors: [Color(0xFF8A004F), Color(0xFF5A189A)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),

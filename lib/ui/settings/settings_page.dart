@@ -13,13 +13,13 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Bar
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               child: Row(
                 children: [
@@ -109,10 +109,10 @@ class SettingsPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: const Color(0xFFE62563), size: 22),
+              child: Icon(icon, color: const Color(0xFF5A189A), size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(

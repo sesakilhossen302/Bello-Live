@@ -46,13 +46,25 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF1A052A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Section
             Container(
-              color: const Color(0xFFE62563),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF3B0B59), Color(0xFF1A052A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: const Color(0xFFFF1E7A).withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
@@ -197,6 +209,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               isReseller: data['isReseller'] == true || data['role'] == 'reseller',
                               totalReceived: (data['totalReceived'] as num?)?.toInt() ?? 0,
                               giftSendingLevel: level,
+                              isModerator: ProfileService.checkIsModerator(data),
                               manualTags: (data['manualTags'] as List<dynamic>?)
                                       ?.map((e) => e.toString())
                                       .toList() ??
@@ -209,7 +222,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   const SizedBox(height: 20),
                                   _buildTopAvatar(userProfile),
                                   const SizedBox(height: 12),
-                                  _buildNameAndId(userProfile, data['email'] ?? FirebaseAuth.instance.currentUser?.email),
+                                  _buildNameAndId(userProfile, data['email'] ?? FirebaseAuth.instance.currentUser?.email, data['activeAddOns'] as Map<String, dynamic>?),
                                   const SizedBox(height: 16),
                                   _buildBadges(userProfile, systemTags),
                                   const SizedBox(height: 24),
@@ -270,7 +283,7 @@ class _ProfilePageState extends State<ProfilePage> {
       height: avatarSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFE62563), width: 3.5),
+        border: Border.all(color: const Color(0xFF5A189A), width: 3.5),
       ),
       padding: const EdgeInsets.all(3),
       child: ClipOval(
@@ -342,6 +355,10 @@ class _ProfilePageState extends State<ProfilePage> {
       badges.add(buildBadge('Reseler', const Color(0xFF2196F3), Icons.storefront));
       hasRole = true;
     }
+    if (userProfile.isModerator) {
+      badges.add(buildBadge('Moderator', const Color(0xFFE91E63), Icons.security));
+      hasRole = true;
+    }
 
     if (!hasRole) {
       badges.add(buildBadge('General User', const Color(0xFF607D8B), Icons.person));
@@ -350,7 +367,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return badges;
   }
 
-  Widget _buildNameAndId(UserProfile userProfile, String? userEmail) {
+  Widget _buildNameAndId(UserProfile userProfile, String? userEmail, Map<String, dynamic>? activeAddOns) {
     return Column(
       children: [
         Text(
@@ -465,11 +482,11 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFE62563),
+                color: const Color(0xFF5A189A),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFE62563).withValues(alpha: 0.25),
+                    color: const Color(0xFF5A189A).withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -713,7 +730,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE62563),
+                    backgroundColor: const Color(0xFF5A189A),
                   ),
                   child: isExchanging
                       ? const SizedBox(
@@ -741,16 +758,20 @@ class _ProfilePageState extends State<ProfilePage> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F1E42),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.25), width: 1.2),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF3B0B59), Color(0xFF1A052A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFFF1E7A).withValues(alpha: 0.3), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+              color: const Color(0xFFFF1E7A).withValues(alpha: 0.15),
+              blurRadius: 15,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -760,7 +781,7 @@ class _ProfilePageState extends State<ProfilePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (icon != null) ...[
-                  const Icon(Icons.diamond_rounded, size: 18, color: Color(0xFF00E5FF)),
+                  const Icon(Icons.diamond_rounded, size: 20, color: Color(0xFFFFD700)),
                   const SizedBox(width: 6),
                 ],
                 Flexible(
@@ -781,9 +802,9 @@ class _ProfilePageState extends State<ProfilePage> {
             Text(
               '$value',
               style: const TextStyle(
-                color: Color(0xFF00E5FF),
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+                color: Color(0xFFFFD700),
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
               ),
             ),
             if (value >= 100000) ...[
@@ -959,14 +980,14 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFFE62563), Color(0xFFFF4081)],
+            colors: [Color(0xFF5A189A), Color(0xFFFF4081)],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE62563).withValues(alpha: 0.35),
+              color: const Color(0xFF5A189A).withValues(alpha: 0.35),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -988,7 +1009,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.diamond_rounded, color: Color(0xFFE62563), size: 22),
+              child: const Icon(Icons.diamond_rounded, color: Color(0xFF5A189A), size: 22),
             ),
             const SizedBox(width: 14),
             const Expanded(
@@ -1010,21 +1031,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildMulticolorMenuItem(_PinkMenuItemData item) {
-    final gradient = item.gradient ?? const [Color(0xFFE62563), Color(0xFFFF4081)];
+    final gradient = item.gradient ?? const [Color(0xFF5A189A), Color(0xFFFF4081)];
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradient,
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: const Color(0xFF2A1542),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.05),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: gradient.first.withValues(alpha: 0.35),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1041,12 +1062,16 @@ class _ProfilePageState extends State<ProfilePage> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
+                    gradient: LinearGradient(
+                      colors: gradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 4,
+                        color: gradient.first.withValues(alpha: 0.4),
+                        blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
                     ],
@@ -1314,7 +1339,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _shareApp() {
     Share.share(
-      'Download and join SB Live now!\nhttps://play.google.com/store/apps/details?id=com.sblivebd.app',
+      'Download and join Pigo Live now!\nhttps://play.google.com/store/apps/details?id=com.pigobdlive.app',
     );
   }
 
@@ -1361,7 +1386,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('Terms & Conditions'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using SB Live, you agree to our terms of service, community guidelines, and content policies.',
+            'By using Pigo Live, you agree to our terms of service, community guidelines, and content policies.',
           ),
         ),
         actions: [
@@ -1533,6 +1558,7 @@ class UserProfile {
   final bool isAgency;
   final String gender;
   final bool isReseller;
+  final bool isModerator;
   final int totalReceived;
   final List<String> manualTags;
 
@@ -1553,99 +1579,10 @@ class UserProfile {
     this.isAgency = false,
     this.gender = '',
     this.isReseller = false,
+    this.isModerator = false,
     this.totalReceived = 0,
     this.manualTags = const [],
   });
-}
-
-// ========== SVGA ID BADGE ==========
-
-class _SvgaIdBadge extends StatefulWidget {
-  final String displayId;
-  final VoidCallback onCopy;
-
-  const _SvgaIdBadge({required this.displayId, required this.onCopy});
-
-  @override
-  State<_SvgaIdBadge> createState() => _SvgaIdBadgeState();
-}
-
-class _SvgaIdBadgeState extends State<_SvgaIdBadge>
-    with SingleTickerProviderStateMixin {
-  SVGAAnimationController? _controller;
-  MovieEntity? _videoItem;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = SVGAAnimationController(vsync: this);
-    _loadSvga();
-  }
-
-  Future<void> _loadSvga() async {
-    try {
-      final videoItem = await SVGAParser.shared.decodeFromAssets(
-        'assets/svga/idbg.svga',
-      );
-      if (mounted) {
-        videoItem.audios.clear();
-        setState(() => _videoItem = videoItem);
-        _controller?.videoItem = videoItem;
-        _controller?.repeat();
-      }
-    } catch (e) {
-      debugPrint('Error loading idbg.svga: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onCopy,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 190,
-            height: 52,
-            child: Stack(
-              children: [
-                // SVGA background
-                if (_controller != null && _videoItem != null)
-                  Positioned.fill(
-                    child: SVGAImage(_controller!, fit: BoxFit.fill),
-                  ),
-                // ID text — centered
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 30, right: 8),
-                    child: Text(
-                      'ID: ${widget.displayId}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Icon(Icons.copy, color: Colors.white70, size: 16),
-        ],
-      ),
-    );
-  }
 }
 
 // ========== USER LIST BOTTOM SHEET ==========

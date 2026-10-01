@@ -115,7 +115,7 @@ class _HomePageState extends State<HomePage>
             },
             child: Scaffold(
               extendBodyBehindAppBar: false,
-              backgroundColor: const Color(0xFF091433),
+              backgroundColor: const Color(0xFF1A052A),
               appBar: _buildNewAppBar(context),
               body: Column(
                 children: [
@@ -147,34 +147,77 @@ class _HomePageState extends State<HomePage>
 
   PreferredSizeWidget _buildNewAppBar(BuildContext context) {
     return PreferredSize(
-      preferredSize: const Size.fromHeight(56),
+      preferredSize: const Size.fromHeight(60),
       child: AppBar(
-        backgroundColor: const Color(0xFFE62563),
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B0B59), Color(0xFF1A052A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: const Color(0xFFFF1E7A).withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF1E7A).withValues(alpha: 0.1),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+        ),
         elevation: 0,
-        toolbarHeight: 56,
+        toolbarHeight: 60,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF1A052A),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFFF1E7A),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF1E7A).withValues(alpha: 0.5),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
-              child: Image.asset(
-                'assets/logo/SB Live.png',
-                width: 26,
-                height: 26,
-                fit: BoxFit.contain,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/logo/pigo live.png',
+                  width: 28,
+                  height: 28,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
-            const SizedBox(width: 10),
-            const Text(
-              'SB Live',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            const SizedBox(width: 12),
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFFFFD700), Color(0xFFFF8C00), Color(0xFFFF1E7A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: const Text(
+                'Pigo Live',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ],
@@ -234,14 +277,14 @@ class _HomePageState extends State<HomePage>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                  colors: [Color(0xFFFFD700), Color(0xFFFF8C00), Color(0xFFFF1E7A)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFFD700).withValues(alpha: 0.4),
-                    blurRadius: 6,
+                    color: const Color(0xFFFF1E7A).withValues(alpha: 0.5),
+                    blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -262,7 +305,7 @@ class _HomePageState extends State<HomePage>
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('noticetext').limit(1).snapshots(),
       builder: (context, snapshot) {
-        String tickerText = 'Welcome To SB Live ↔ Enjoy your best time with SB Live ↔';
+        String tickerText = 'Welcome To Pigo Live ↔ Enjoy your best time with Pigo Live ↔';
         
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           final data = snapshot.data!.docs.first.data() as Map<String, dynamic>?;
@@ -273,8 +316,20 @@ class _HomePageState extends State<HomePage>
 
         return Container(
           width: double.infinity,
-          color: const Color(0xFFC81D52),
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF9D4EDD), Color(0xFF5A189A)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: const Color(0xFFFF1E7A).withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
           child: Row(
             children: [
               const Icon(Icons.swap_horizontal_circle, color: Colors.cyanAccent, size: 18),
@@ -300,7 +355,7 @@ class _HomePageState extends State<HomePage>
     final activeIndex = _tabController.index;
 
     return Container(
-      color: const Color(0xFF091433),
+      color: Colors.transparent,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -360,7 +415,7 @@ class _HomePageState extends State<HomePage>
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    const primaryColor = Color(0xFFE62563);
+    const primaryColor = Color(0xFF5A189A);
     
     return GestureDetector(
       onTap: onTap,
@@ -435,13 +490,13 @@ class _HomePageState extends State<HomePage>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         gradient: const LinearGradient(
-          colors: [Color(0xFFE62563), Color(0xFFFF4081)],
+          colors: [Color(0xFF5A189A), Color(0xFF9D4EDD)],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE62563).withValues(alpha: 0.3),
+            color: const Color(0xFF5A189A).withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -498,7 +553,7 @@ class _HomePageState extends State<HomePage>
             child: const Text(
               'Claim',
               style: TextStyle(
-                color: Color(0xFFE62563),
+                color: Color(0xFF5A189A),
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
               ),
@@ -1418,6 +1473,7 @@ class StreamerModel {
   final bool isHost;
   final bool isAgency;
   final bool isReseller;
+  final bool isModerator;
   final bool hasPackage;
   final int packagePriority;
 
@@ -1437,6 +1493,7 @@ class StreamerModel {
     this.isHost = false,
     this.isAgency = false,
     this.isReseller = false,
+    this.isModerator = false,
     this.hasPackage = false,
     this.packagePriority = 0,
   });

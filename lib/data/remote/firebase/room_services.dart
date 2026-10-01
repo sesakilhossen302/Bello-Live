@@ -176,16 +176,13 @@ class RoomService {
 
     await _setupPresence(roomId, user.uid, isHost: true);
     
-    // Set host offline on disconnect instead of deleting the entire room immediately
-    await participantRef.child('isOnline').onDisconnect().set(false);
-    
     _setupParticipantCountSync(roomId);
     await _usersCollection.doc(user.uid).update({'currentRoomId': roomId});
 
     // Send push notification to all followers subscribed to host_$userId topic
     NotificationService.sendTopicNotification(
       topic: 'host_${user.uid}',
-      title: 'SB Live',
+      title: 'Pigo Live',
       body: '$hostName is live now! Join the room.',
       data: {
         'roomId': roomId,
@@ -340,6 +337,7 @@ class RoomService {
     String userName = user.displayName ?? 'Anonymous';
     String? userPicture = user.photoURL;
     String displayId = '';
+    String? idEntryUrl;
 
     if (userProfileDoc.exists) {
       final data = userProfileDoc.data() as Map<String, dynamic>;
@@ -354,6 +352,24 @@ class RoomService {
       userName = data['displayName'] ?? userName;
       displayId = data['displayId'] ?? '';
       userPicture = data['photoUrl'] ?? data['profilePicture'] ?? userPicture;
+      
+      final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
+      final now = DateTime.now();
+      
+      Map<String, dynamic>? idEntryData;
+      for (var entry in addOns.entries) {
+        if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+          idEntryData = entry.value as Map<String, dynamic>?;
+          break;
+        }
+      }
+      
+      if (idEntryData != null) {
+        final expiry = idEntryData['expiresAt'] as Timestamp?;
+        if (expiry == null || expiry.toDate().isAfter(now)) {
+          idEntryUrl = idEntryData['imageUrl'] as String?;
+        }
+      }
     }
 
     // Check if user has an active co-host rental for this host
@@ -409,6 +425,7 @@ class RoomService {
       'isApprovedSpeaker': isCoHost,
       'isModerator': false,
       if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
+      if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
     });
 
     await _setupPresence(roomId, user.uid, isHost: false);
@@ -524,7 +541,10 @@ class RoomService {
 
     try {
       if (isHost) {
-        await participantRef.child('isOnline').onDisconnect().set(false);
+        await _roomsRef.child(roomId).onDisconnect().remove();
+        await _participantsRef.child(roomId).onDisconnect().remove();
+        await _eventsRef.child(roomId).onDisconnect().remove();
+        await _requestsRef.child(roomId).onDisconnect().remove();
         _participantCountListeners[roomId]?.cancel();
         _participantCountListeners.remove(roomId);
         await roomRef.child('lastActive').set(ServerValue.timestamp);

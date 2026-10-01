@@ -4,14 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Brand Colors
-  static const primaryColor = Color(0xFFE62563);
-  static const primary = Color(0xFFE62563);
-  static const secondary = Color(0xFFB026FF);
+  static const primaryColor = Color(0xFF5A189A);
+  static const primary = Color(0xFF5A189A);
+  static const secondary = Color(0xFF9D4EDD);
   static const accent = Color(0xFF1E88FF);
 
   // Background
-  static const backgroundColor = Color(0xFF0A0A10);
-  static const background = Color(0xFF0A0A10);
+  static const backgroundColor = Color(0xFF0D1B2A);
+  static const background = Color(0xFF0D1B2A);
   
   static const pinkGlow = Color(0xFFFF1E7A);
   static const purpleGlow = Color(0xFF7C245A);
@@ -95,8 +95,8 @@ class AppColors {
 class AppGradients {
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [
-      Color(0xFFE62563), // Primary Pink
-      Color(0xFFB026FF), // Purple
+      Color(0xFF5A189A), // Primary Pink
+      Color(0xFF9D4EDD), // Purple
       Color(0xFF1E88FF), // Blue
     ],
     begin: Alignment.topLeft,
@@ -105,8 +105,8 @@ class AppGradients {
 
   static const LinearGradient rechargeGradient = LinearGradient(
     colors: [
-      Color(0xFFE62563), // Primary Pink
-      Color(0xFFB026FF), // Purple
+      Color(0xFF5A189A), // Primary Pink
+      Color(0xFF9D4EDD), // Purple
     ],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,

@@ -67,7 +67,7 @@ class _PackageStorePageState extends State<PackageStorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         elevation: 0,
@@ -214,7 +214,7 @@ class _PackageCardState extends State<_PackageCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1E42),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: widget.isInUse ? const Color(0xFFE62563) : Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: widget.isInUse ? const Color(0xFF5A189A) : Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),

@@ -263,7 +263,7 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Host request sent to ${agency['name']} ($liveType)!'),
-            backgroundColor: const Color(0xFFE62563),
+            backgroundColor: const Color(0xFF5A189A),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -337,7 +337,7 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
             decoration: BoxDecoration(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
@@ -407,7 +407,7 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
             decoration: BoxDecoration(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
@@ -445,8 +445,8 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
             height: 44,
             child: ElevatedButton.icon(
               onPressed: () => _cancelHostRequest(pendingId),
-              icon: const Icon(Icons.power_settings_new, color: Color(0xFFE62563), size: 20),
-              label: const Text('Remove', style: TextStyle(color: Color(0xFFE62563), fontSize: 16, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.power_settings_new, color: Color(0xFF5A189A), size: 20),
+              label: const Text('Remove', style: TextStyle(color: Color(0xFF5A189A), fontSize: 16, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
@@ -468,13 +468,13 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Bar
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               child: Row(
                 children: [
@@ -498,7 +498,7 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
             // Content
             Expanded(
               child: _isLoading 
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                   : _approvedAgencyId != null
                       ? _buildApprovedUI()
                       : _pendingAgencyIds.isNotEmpty 
@@ -645,7 +645,7 @@ class _ApplyHostingPageState extends State<ApplyHostingPage> {
                                                 ),
                                                 child: const Icon(
                                                   Icons.touch_app_outlined,
-                                                  color: Color(0xFFE62563),
+                                                  color: Color(0xFF5A189A),
                                                   size: 24,
                                                 ),
                                               ),

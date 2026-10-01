@@ -240,7 +240,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       appBar: _buildAppBar(),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,10 +251,10 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
           const SizedBox(height: 10),
           Expanded(
             child: _isLoadingInitial
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                 : RefreshIndicator(
                     onRefresh: _loadInitialPosts,
-                    color: const Color(0xFFE62563),
+                    color: const Color(0xFF5A189A),
                     child: _posts.isEmpty
                         ? Center(
                             child: Container(
@@ -275,12 +275,12 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                                      color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                                     ),
                                     child: const Icon(
                                       Icons.article_outlined,
                                       size: 50,
-                                      color: Color(0xFFE62563),
+                                      color: Color(0xFF5A189A),
                                     ),
                                   ),
                                   const SizedBox(height: 20),
@@ -306,7 +306,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                               if (index == _posts.length) {
                                 return const Padding(
                                   padding: EdgeInsets.all(16.0),
-                                  child: Center(child: CircularProgressIndicator(color: Color(0xFFE62563))),
+                                  child: Center(child: CircularProgressIndicator(color: Color(0xFF5A189A))),
                                 );
                               }
                               return PostCard(
@@ -324,7 +324,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: const Color(0xFFE62563),
+      backgroundColor: const Color(0xFF5A189A),
       elevation: 0,
       leading: IconButton(
         icon: const Icon(CupertinoIcons.back, color: Colors.white),
@@ -345,7 +345,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
 
   Widget _buildTabBar() {
     return Container(
-      color: const Color(0xFF091433),
+      color: const Color(0xFF0D1B2A),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
       child: Row(
         children: [
@@ -361,7 +361,7 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
 
   Widget _buildTabItem(String title, int index, IconData icon) {
     bool isSelected = selectedTabIndex == index;
-    const primaryColor = Color(0xFFE62563);
+    const primaryColor = Color(0xFF5A189A);
 
     return Expanded(
       child: GestureDetector(
@@ -452,16 +452,16 @@ class _NewsfeedPageState extends State<NewsfeedPage> with TickerProviderStateMix
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.collections, color: Color(0xFFE62563)),
+                      icon: const Icon(Icons.collections, color: Color(0xFF5A189A)),
                       onPressed: () => _handleImagePick(ImageSource.gallery),
                     ),
                     _isUploadingPost
                         ? const Padding(
                             padding: EdgeInsets.all(12.0),
-                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE62563))),
+                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF5A189A))),
                           )
                         : IconButton(
-                            icon: const Icon(Icons.send_rounded, color: Color(0xFFE62563)),
+                            icon: const Icon(Icons.send_rounded, color: Color(0xFF5A189A)),
                             onPressed: _handleCreatePost,
                           ),
                   ],

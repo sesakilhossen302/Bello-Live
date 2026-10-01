@@ -172,9 +172,6 @@ class LiveStreamService {
 
     await _setupPresence(roomId, user.uid, isHost: true);
     
-    // Set host offline on socket disconnect instead of deleting the entire room immediately
-    await participantRef.child('isOnline').onDisconnect().set(false);
-    
     _setupParticipantCountSync(roomId);
 
     return roomId;
@@ -335,6 +332,7 @@ class LiveStreamService {
     String userName = user.displayName ?? 'Anonymous';
     String? userPicture = user.photoURL;
     String displayId = '';
+    String? idEntryUrl;
 
     if (userDoc.exists) {
       final userData = userDoc.data() as Map<String, dynamic>;
@@ -342,6 +340,24 @@ class LiveStreamService {
       displayId = userData['displayId'] ?? '';
       userPicture =
           userData['photoUrl'] ?? userData['userPicture'] ?? userPicture;
+          
+      final addOns = userData['activeAddOns'] as Map<String, dynamic>? ?? {};
+      final now = DateTime.now();
+      
+      Map<String, dynamic>? idEntryData;
+      for (var entry in addOns.entries) {
+        if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+          idEntryData = entry.value as Map<String, dynamic>?;
+          break;
+        }
+      }
+      
+      if (idEntryData != null) {
+        final expiry = idEntryData['expiresAt'] as Timestamp?;
+        if (expiry == null || expiry.toDate().isAfter(now)) {
+          idEntryUrl = idEntryData['imageUrl'] as String?;
+        }
+      }
       final gender = userData['gender'];
       final bool isModerator = ProfileService.checkIsModerator(userData);
 
@@ -367,6 +383,7 @@ class LiveStreamService {
           'isCameraOn': false,
           'isOnSeat': false,
           'isModerator': false,
+          if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
         });
       }
 
@@ -439,7 +456,10 @@ class LiveStreamService {
 
     try {
       if (isHost) {
-        await participantRef.child('isOnline').onDisconnect().set(false);
+        await _roomsRef.child(roomId).onDisconnect().remove();
+        await _participantsRef.child(roomId).onDisconnect().remove();
+        await _eventsRef.child(roomId).onDisconnect().remove();
+        await _requestsRef.child(roomId).onDisconnect().remove();
         _participantCountListeners[roomId]?.cancel();
         _participantCountListeners.remove(roomId);
         await roomRef.child('lastActive').set(ServerValue.timestamp);

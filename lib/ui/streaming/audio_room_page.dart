@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svga/flutter_svga.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:picture_live/core/services/livekit_service.dart';
+import 'package:picture_live/core/services/streaming_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/cubits/app_cubit.dart';
@@ -16,6 +16,7 @@ import '../../core/cubits/app_cubit.dart';
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../core/widgets/GiftImageWidget.dart';
 import '../../core/widgets/auto_scroll_text.dart';
+import '../../core/widgets/network_svga_player.dart';
 import '../../data/remote/firebase/room_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
@@ -90,6 +91,7 @@ class RoomParticipant {
   final bool isChatMuted;
   final String displayId;
   final bool isModerator;
+  final String? idEntryUrl;
 
   RoomParticipant({
     required this.userId,
@@ -106,6 +108,7 @@ class RoomParticipant {
     this.isAdmin = false,
     this.isChatMuted = false,
     this.isModerator = false,
+    this.idEntryUrl,
   });
 
   factory RoomParticipant.fromRTDB(String key, Map<dynamic, dynamic> data) {
@@ -124,6 +127,7 @@ class RoomParticipant {
       isAdmin: data['isAdmin'] ?? false,
       isChatMuted: data['isChatMuted'] ?? false,
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
+      idEntryUrl: data['idEntryUrl'] as String?,
     );
   }
 
@@ -134,6 +138,7 @@ class RoomParticipant {
     bool? isAdmin,
     bool? isChatMuted,
     bool? isModerator,
+    String? idEntryUrl,
   }) {
     return RoomParticipant(
       userId: userId,
@@ -150,6 +155,7 @@ class RoomParticipant {
       isAdmin: isAdmin ?? this.isAdmin,
       isChatMuted: isChatMuted ?? this.isChatMuted,
       isModerator: isModerator ?? this.isModerator,
+      idEntryUrl: idEntryUrl ?? this.idEntryUrl,
     );
   }
 }
@@ -278,6 +284,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   Timer? _joinAnimationTimer;
   String? _newJoinerName;
+  String? _newJoinerIdEntryUrl;
 
   Timer? _leavePopupTimer;
   String? _leaverName;
@@ -385,7 +392,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       } else {
         RoomService.leaveRoom(widget.roomID);
       }
-      LiveKitService.instance.disconnect();
+      StreamingService.instance.disconnect();
     }
     super.dispose();
   }
@@ -495,7 +502,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       });
     }
 
-    await LiveKitService.instance.connectRoom(
+    await StreamingService.instance.connectRoom(
       roomName: widget.roomID,
       userId: currentUser.uid,
       userName: _currentUserName,
@@ -508,7 +515,30 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       await RoomService.joinRoom(widget.roomID);
       if (!_isCurrentModerator) {
         _sendJoinMessage();
-        _showJoinAnimation(_currentUserName);
+        
+        final userDoc = await ProfileService.getUserProfile(currentUser.uid);
+        String? idEntryUrl;
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
+          final now = DateTime.now();
+          
+          Map<String, dynamic>? idEntryData;
+          for (var entry in addOns.entries) {
+            if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+              idEntryData = entry.value as Map<String, dynamic>?;
+              break;
+            }
+          }
+          
+          if (idEntryData != null) {
+            final expiry = idEntryData['expiresAt'] as Timestamp?;
+            if (expiry == null || expiry.toDate().isAfter(now)) {
+              idEntryUrl = idEntryData['imageUrl'] as String?;
+            }
+          }
+        }
+        _showJoinAnimation(_currentUserName, idEntryUrl: idEntryUrl);
       }
     }
 
@@ -732,7 +762,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       }
     });
 
-    _messageSubscription = LiveKitService.instance.chatMessagesStream.listen((message) {
+    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
       if (mounted) {
         setState(() {
           _messages.insert(
@@ -749,7 +779,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       }
     });
 
-    LiveKitService.instance.dataMessagesStream.listen((data) {
+    StreamingService.instance.dataMessagesStream.listen((data) {
       if (!mounted) return;
       if (data['type'] == 'emoji') {
         final emoji = data['emoji'] as String? ?? '';
@@ -800,7 +830,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
             if (newGuest.userId.isNotEmpty && !newGuest.isModerator) {
               final displayIdText = newGuest.displayId.isNotEmpty ? newGuest.displayId : newGuest.userId.substring(0, 6);
-              _showJoinAnimation('${newGuest.userName} (ID: $displayIdText)');
+              _showJoinAnimation('${newGuest.userName} (ID: $displayIdText)', idEntryUrl: newGuest.idEntryUrl);
               
               if (mounted) {
                 setState(() {
@@ -881,10 +911,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   newCurrentUser.seatNo > 0;
               if (canSpeak) {
                 if (newCurrentUser.isMuted != oldCurrentUser.isMuted || oldCurrentUser.seatNo != newCurrentUser.seatNo) {
-                  LiveKitService.instance.setMicrophoneEnabled(!newCurrentUser.isMuted);
+                  StreamingService.instance.setMicrophoneEnabled(!newCurrentUser.isMuted);
                 }
               } else {
-                LiveKitService.instance.setMicrophoneEnabled(false);
+                StreamingService.instance.setMicrophoneEnabled(false);
               }
             }
           }
@@ -1094,17 +1124,34 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     });
   }
 
-  void _showJoinAnimation(String userName) {
+  void _showJoinAnimation(String userName, {String? idEntryUrl}) {
     _joinAnimationTimer?.cancel();
     _joinAnimationController.forward(from: 0.0);
     setState(() {
       _newJoinerName = userName;
+      _newJoinerIdEntryUrl = idEntryUrl;
     });
-    _joinAnimationTimer = Timer(welcomeTime, () {
+    
+    bool isSvga = idEntryUrl != null && idEntryUrl.toLowerCase().endsWith('.svga');
+    if (!isSvga) {
+      _joinAnimationTimer = Timer(welcomeTime, () {
+        if (mounted) {
+          setState(() {
+            _newJoinerName = null;
+            _newJoinerIdEntryUrl = null;
+          });
+        }
+      });
+    }
+  }
+
+  void _hideJoinAnimation() {
+    if (mounted) {
       setState(() {
         _newJoinerName = null;
+        _newJoinerIdEntryUrl = null;
       });
-    });
+    }
   }
 
   void _showLeavePopup(String userName, String displayId) {
@@ -1656,18 +1703,33 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   Widget _buildJoinAnimationOverlay() {
     return Visibility(
       visible: _newJoinerName != null,
-      child: Container(
-        width: double.infinity,
-        height: 100,
-        margin: EdgeInsets.zero,
-        color: Colors.transparent,
-        child: SlideTransition(
-          position: _joinAnimationOffset,
+      child: IgnorePointer(
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          margin: EdgeInsets.zero,
+          color: Colors.transparent,
+          child: SlideTransition(
+            position: _joinAnimationOffset,
           child: Stack(
             fit: StackFit.expand,
             alignment: Alignment.center,
             children: [
-              Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
+              if (_newJoinerIdEntryUrl != null && _newJoinerIdEntryUrl!.isNotEmpty)
+                if (_newJoinerIdEntryUrl!.toLowerCase().endsWith('.svga'))
+                  NetworkSVGAPlayer(
+                    imageUrl: _newJoinerIdEntryUrl!,
+                    fit: BoxFit.cover,
+                    onFinished: _hideJoinAnimation,
+                  )
+                else
+                  Image.network(
+                    _newJoinerIdEntryUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
+                  )
+              else
+                Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
               Center(
                 child: Text(
                   '${_newJoinerName ?? ''} joined!',
@@ -1689,6 +1751,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -2359,7 +2422,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 width: size,
                 height: size,
                 child: StreamBuilder<List<String>>(
-                  stream: LiveKitService.instance.activeSpeakersStream,
+                  stream: StreamingService.instance.activeSpeakersStream,
                   builder: (context, snapshot) {
                     final isSpeaking = !isMuted && (snapshot.data ?? []).contains(hostId);
                     return Stack(
@@ -2863,7 +2926,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               if (shouldLeave == true) {
                 try {
                   await RoomService.leaveSeat(widget.roomID);
-                  LiveKitService.instance.setMicrophoneEnabled(false);
+                  StreamingService.instance.setMicrophoneEnabled(false);
                 } catch (e) {
                   debugPrint("Error leaving seat: $e");
                 }
@@ -2884,7 +2947,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     width: avatarSize,
                     height: avatarSize,
                     child: StreamBuilder<List<String>>(
-                      stream: LiveKitService.instance.activeSpeakersStream,
+                      stream: StreamingService.instance.activeSpeakersStream,
                       builder: (context, snapshot) {
                         final isSpeaking = !participant.isMuted && (snapshot.data ?? []).contains(participant.userId);
                         return Stack(
@@ -3402,7 +3465,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF091433).withValues(alpha: 0.85),
+            color: const Color(0xFF0D1B2A).withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFF1E88E5), width: 1.2),
             boxShadow: [
@@ -3659,64 +3722,95 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
         // Regular chat message (Updated with Dynamic Level Badge)
         return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  showProfileInfoBottomSheet(
-                    context,
-                    userId: m.userId,
-                    hostId: roomData['hostId'] ?? '',
-                    roomId: widget.roomID,
-                    isCurrentUserAdmin: _participants.firstWhere((p) => p.userId == _auth.currentUser!.uid, orElse: () => RoomParticipant(userId: '', displayId: '', userName: '', seatNo: -1, isCoHost: false, isMuted: false)).isAdmin,
-                  );
-                },
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _buildChatAvatar(m.userId, m.username),
-                    _buildLevelBadge(m.userId),
-                    SizedBox(
-                      width: 120,
-                      child: Text(
-                        m.username,
-                        style: TextStyle(
-                          color: Colors.pink.shade300,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black87,
-                              blurRadius: 3,
-                              offset: Offset(1, 1),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const LinearGradient(
+                  colors: [Colors.pinkAccent, Colors.purpleAccent, Colors.cyanAccent],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              padding: const EdgeInsets.all(1.5),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A1128),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      showProfileInfoBottomSheet(
+                        context,
+                        userId: m.userId,
+                        hostId: roomData['hostId'] ?? '',
+                        roomId: widget.roomID,
+                        isCurrentUserAdmin: _participants.firstWhere((p) => p.userId == _auth.currentUser!.uid, orElse: () => RoomParticipant(userId: '', displayId: '', userName: '', seatNo: -1, isCoHost: false, isMuted: false)).isAdmin,
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: _buildChatAvatar(m.userId, m.username),
+                    ),
+                  ),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildLevelBadge(m.userId),
+                            Flexible(
+                              child: Text(
+                                m.username,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black87,
+                                      blurRadius: 3,
+                                      offset: Offset(1, 1),
+                                    ),
+                                  ],
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          m.message,
+                          style: const TextStyle(
+                            color: Colors.white, 
+                            fontSize: 13,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black87,
+                                blurRadius: 3,
+                                offset: Offset(1, 1),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(left: 0, top: 2),
-                child: Text(
-                  m.message,
-                  style: const TextStyle(
-                    color: Colors.white, 
-                    fontSize: 14,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black87,
-                        blurRadius: 3,
-                        offset: Offset(1, 1),
-                      ),
-                    ],
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
+            ),
           ),
         );
       },
@@ -3800,7 +3894,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               height: 38.0,
               padding: const EdgeInsets.only(left: 4, right: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF091433),
+                color: const Color(0xFF0D1B2A),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
                   color: const Color(0xFF1E88E5),
@@ -3850,7 +3944,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                       child: const Center(
                         child: Icon(
                           Icons.send_rounded,
-                          color: Color(0xFF091433),
+                          color: Color(0xFF0D1B2A),
                           size: 15,
                         ),
                       ),
@@ -3951,7 +4045,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                       _localMuteOverride = newMuteState;
                     });
                     try {
-                      await LiveKitService.instance.setMicrophoneEnabled(!newMuteState);
+                      await StreamingService.instance.setMicrophoneEnabled(!newMuteState);
                       await RoomService.toggleMuteState(widget.roomID, newMuteState);
                     } catch (e) {
                       debugPrint('Error toggling mute state: $e');
@@ -4070,7 +4164,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     }
 
     try {
-      await LiveKitService.instance.sendChatMessage(messageText);
+      await StreamingService.instance.sendChatMessage(messageText);
       setState(() {
         _isCommentsHidden = false;
         _messages.insert(
@@ -4094,7 +4188,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   void _sendJoinMessage() async {
     const messageText = "Just joined the room!";
     try {
-      await LiveKitService.instance.sendChatMessage(messageText);
+      await StreamingService.instance.sendChatMessage(messageText);
       if (mounted) {
         setState(() {
           _messages.insert(
@@ -4142,7 +4236,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    LiveKitService.instance.disconnect();
+    StreamingService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
@@ -4164,7 +4258,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    LiveKitService.instance.disconnect();
+    StreamingService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
@@ -4281,7 +4375,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   void _sendEmojiMessage(String emoji) async {
     try {
-      await LiveKitService.instance.sendEmoji(emoji);
+      await StreamingService.instance.sendEmoji(emoji);
       _showFloatingEmoji(emoji, senderName: _currentUserName);
     } catch (e) {
       debugPrint('Error sending emoji message: $e');
@@ -4848,3 +4942,4 @@ class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget> with SingleT
     );
   }
 }
+

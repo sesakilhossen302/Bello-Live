@@ -1,11 +1,11 @@
 {
-    "name": "SB Live",
-    "short_name": "SB Live",
+    "name": "Pigo Live",
+    "short_name": "Pigo Live",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "App for SB Live",
+    "description": "App for Pigo Live",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

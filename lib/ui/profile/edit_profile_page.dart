@@ -120,13 +120,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Section
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               child: Row(
                 children: [
@@ -148,7 +148,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
             Expanded(
               child: _isFetching
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                   : SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                       child: Form(
@@ -247,9 +247,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: Container(
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
-                color: const Color(0xFFE62563),
+                color: const Color(0xFF5A189A),
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF091433), width: 2.5),
+                border: Border.all(color: const Color(0xFF0D1B2A), width: 2.5),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.3),
@@ -335,7 +335,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       child: ElevatedButton(
         onPressed: _isLoading ? null : _saveProfile,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFE62563),
+          backgroundColor: const Color(0xFF5A189A),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 2,

@@ -87,13 +87,13 @@ class _TopUpPageState extends State<TopUpPage> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Bar
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               child: Row(
                 children: [
@@ -174,12 +174,12 @@ class _TopUpPageState extends State<TopUpPage> with SingleTickerProviderStateMix
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                              color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.diamond_rounded,
-                              color: Color(0xFFE62563),
+                              color: Color(0xFF5A189A),
                               size: 38,
                             ),
                           ),
@@ -221,7 +221,7 @@ class _TopUpPageState extends State<TopUpPage> with SingleTickerProviderStateMix
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFE62563)),
+                      child: CircularProgressIndicator(color: Color(0xFF5A189A)),
                     );
                   }
 

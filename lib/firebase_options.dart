@@ -40,11 +40,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCYOOxG92sQMHOF8uc0zFwSdYuj-f1vSe8',
-    appId: '1:237642997621:android:32a189e92d8a3b815ebd3c',
-    messagingSenderId: '237642997621',
-    projectId: 'sblivebd',
-    storageBucket: 'sblivebd.firebasestorage.app',
+    apiKey: 'AIzaSyAj3HO7Cuxgggu76fRgd_jyEA5XH9xXXcA',
+    appId: '1:993990672871:android:6b8b9b285b1d97e0573d42',
+    messagingSenderId: '993990672871',
+    projectId: 'pigolive-adf4c',
+    storageBucket: 'pigolive-adf4c.firebasestorage.app',
   );
 }
 

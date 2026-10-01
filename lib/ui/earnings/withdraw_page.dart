@@ -101,7 +101,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Withdrawal request submitted successfully!'),
-              backgroundColor: Color(0xFFE62563),
+              backgroundColor: Color(0xFF5A189A),
             ),
           );
           _accountController.clear();
@@ -124,13 +124,13 @@ class _WithdrawPageState extends State<WithdrawPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Top App Bar with Tabs
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               child: Column(
                 children: [
                   // App Bar Title
@@ -249,13 +249,13 @@ class _WithdrawPageState extends State<WithdrawPage> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFE62563), Color(0xFF2C132B)],
+                  colors: [Color(0xFF5A189A), Color(0xFF2C132B)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFE62563).withValues(alpha: 0.25),
+                    color: const Color(0xFF5A189A).withValues(alpha: 0.25),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -315,7 +315,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                     width: 32,
                     height: 32,
                     decoration: const BoxDecoration(
-                      color: Color(0xFFE62563),
+                      color: Color(0xFF5A189A),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.account_balance_wallet, color: Colors.white, size: 18),
@@ -346,7 +346,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                                   SvgPicture.asset(assetPath, width: 24, height: 24),
                                   const SizedBox(width: 12),
                                 ] else if (method == 'Bank Transfer') ...[
-                                  const Icon(Icons.account_balance, color: Color(0xFFE62563), size: 24),
+                                  const Icon(Icons.account_balance, color: Color(0xFF5A189A), size: 24),
                                   const SizedBox(width: 12),
                                 ],
                                 Text(method),
@@ -387,7 +387,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       children: [
                         Icon(
                           isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                          color: isSelected ? const Color(0xFFE62563) : Colors.white54,
+                          color: isSelected ? const Color(0xFF5A189A) : Colors.white54,
                           size: 22,
                         ),
                         const SizedBox(width: 6),
@@ -437,7 +437,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitWithdrawal,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE62563),
+                  backgroundColor: const Color(0xFF5A189A),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 2,
@@ -523,7 +523,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)));
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)));
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -571,10 +571,10 @@ class _WithdrawPageState extends State<WithdrawPage> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                      color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.diamond_outlined, color: Color(0xFFE62563), size: 22),
+                    child: const Icon(Icons.diamond_outlined, color: Color(0xFF5A189A), size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(

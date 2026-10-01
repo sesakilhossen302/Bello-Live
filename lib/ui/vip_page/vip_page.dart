@@ -34,7 +34,7 @@ class _VIPPageState extends State<VIPPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
@@ -62,7 +62,7 @@ class _VIPPageState extends State<VIPPage> {
 
   Widget _buildHeader() {
     return Container(
-      color: const Color(0xFFE62563),
+      color: const Color(0xFF5A189A),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: Row(
         children: [
@@ -447,7 +447,7 @@ class _VIPPageState extends State<VIPPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Successfully upgraded to ${tier.name}!'),
-        backgroundColor: const Color(0xFFE62563),
+        backgroundColor: const Color(0xFF5A189A),
         duration: const Duration(seconds: 2),
       ),
     );

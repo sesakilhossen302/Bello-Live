@@ -34,7 +34,7 @@ class ForceUpdateScreen extends StatelessWidget {
                 const Icon(
                   Icons.system_update_rounded,
                   size: 100,
-                  color: Color(0xFFFE2C55),
+                  color: Color(0xFF5A189A),
                 ),
                 const SizedBox(height: 32),
                 const Text(
@@ -61,7 +61,7 @@ class ForceUpdateScreen extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: _launchUpdateUrl,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFE2C55),
+                      backgroundColor: const Color(0xFF5A189A),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28),
                       ),

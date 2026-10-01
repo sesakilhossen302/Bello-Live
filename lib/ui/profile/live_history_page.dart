@@ -35,13 +35,13 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             // Header Bar
             Container(
-              color: const Color(0xFFE62563),
+              color: const Color(0xFF5A189A),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               child: Row(
                 children: [
@@ -75,7 +75,7 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(
-                            child: CircularProgressIndicator(color: Color(0xFFE62563)),
+                            child: CircularProgressIndicator(color: Color(0xFF5A189A)),
                           );
                         }
 
@@ -128,13 +128,13 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(20),
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFFE62563), Color(0xFF2C132B)],
+                                    colors: [Color(0xFF5A189A), Color(0xFF2C132B)],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFE62563).withValues(alpha: 0.25),
+                                      color: const Color(0xFF5A189A).withValues(alpha: 0.25),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -312,13 +312,13 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
                                             width: 44,
                                             height: 44,
                                             decoration: BoxDecoration(
-                                              color: (isVideo ? const Color(0xFFE62563) : const Color(0xFF0088FF))
+                                              color: (isVideo ? const Color(0xFF5A189A) : const Color(0xFF0088FF))
                                                   .withValues(alpha: 0.1),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Icon(
                                               isVideo ? CupertinoIcons.videocam_fill : CupertinoIcons.mic_fill,
-                                              color: isVideo ? const Color(0xFFE62563) : const Color(0xFF0088FF),
+                                              color: isVideo ? const Color(0xFF5A189A) : const Color(0xFF0088FF),
                                               size: 22,
                                             ),
                                           ),
@@ -349,13 +349,13 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                                              color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                                               borderRadius: BorderRadius.circular(12),
                                             ),
                                             child: Text(
                                               '$duration mins',
                                               style: const TextStyle(
-                                                color: Color(0xFFE62563),
+                                                color: Color(0xFF5A189A),
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.bold,
                                               ),

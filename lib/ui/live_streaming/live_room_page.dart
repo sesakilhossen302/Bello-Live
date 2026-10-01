@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_svga/flutter_svga.dart';
-import 'package:picture_live/core/services/livekit_service.dart';
+import 'package:picture_live/core/services/streaming_service.dart';
 import 'package:collection/collection.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,6 +18,7 @@ import '../../core/widgets/gift_image_widget.dart'; // For MyImageWidget
 import '../../core/widgets/GiftImageWidget.dart'; // For GiftImageWidget
 import 'widgets/floating_youtube_player.dart';
 import '../../core/widgets/auto_scroll_text.dart';
+import '../../core/widgets/network_svga_player.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../../navigation/routes.dart';
@@ -45,6 +46,7 @@ class LiveStreamParticipant {
   final bool isLocked;
   final String? gender;
   final bool isModerator;
+  final String? idEntryUrl;
 
   LiveStreamParticipant({
     required this.userId,
@@ -56,6 +58,7 @@ class LiveStreamParticipant {
     this.isLocked = false,
     this.gender,
     this.isModerator = false,
+    this.idEntryUrl,
   });
 
   factory LiveStreamParticipant.fromRTDB(
@@ -72,6 +75,7 @@ class LiveStreamParticipant {
       isLocked: data['isLocked'] ?? false,
       gender: data['gender'],
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
+      idEntryUrl: data['idEntryUrl'] as String?,
     );
   }
 }
@@ -201,6 +205,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   String? _newJoinerName;
   String? _newJoinerPicture;
   String? _newJoinerId;
+  String? _newJoinerIdEntryUrl;
   late AnimationController _joinAnimationController;
   late Animation<Offset> _joinAnimationOffset;
 
@@ -368,7 +373,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
           String opponentHostId = _pkState['opponentHostId'] ?? '';
           if (opponentHostId.isNotEmpty) {
-            LiveKitService.instance.disconnectOpponentPKRoom();
+            StreamingService.instance.disconnectOpponentPKRoom();
           }
         }
         LiveStreamService.deleteRoom(widget.roomID);
@@ -377,7 +382,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           LiveStreamService.leaveRoom(widget.roomID);
         }
       }
-      LiveKitService.instance.disconnect();
+      StreamingService.instance.disconnect();
     }
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(
@@ -484,7 +489,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       });
     }
 
-    await LiveKitService.instance.connectRoom(
+    await StreamingService.instance.connectRoom(
       roomName: widget.roomID,
       userId: currentUser.uid,
       userName: _currentUserName,
@@ -499,6 +504,30 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       await LiveStreamService.joinRoom(widget.roomID);
       if (!_isCurrentModerator) {
         _sendJoinMessage();
+        
+        final userDoc = await ProfileService.getUserProfile(currentUser.uid);
+        String? idEntryUrl;
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
+          final now = DateTime.now();
+          
+          Map<String, dynamic>? idEntryData;
+          for (var entry in addOns.entries) {
+            if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+              idEntryData = entry.value as Map<String, dynamic>?;
+              break;
+            }
+          }
+          
+          if (idEntryData != null) {
+            final expiry = idEntryData['expiresAt'] as Timestamp?;
+            if (expiry == null || expiry.toDate().isAfter(now)) {
+              idEntryUrl = idEntryData['imageUrl'] as String?;
+            }
+          }
+        }
+        _showJoinAnimation(_currentUserName, currentUser.photoURL, currentUser.uid, idEntryUrl: idEntryUrl);
       }
     }
 
@@ -587,7 +616,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       debugPrint(
         "Starting to play opponent's stream: $opponentHostId from room $opponentRoomId",
       );
-      LiveKitService.instance.connectOpponentPKRoom(
+      StreamingService.instance.connectOpponentPKRoom(
         opponentRoomId: opponentRoomId,
         opponentHostId: opponentHostId,
       );
@@ -642,120 +671,178 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     });
   }
 
-  void _showJoinAnimation(String userName, String? userPicture, String userId) {
+  void _showJoinAnimation(String userName, String? userPicture, String userId, {String? idEntryUrl}) {
     _joinAnimationTimer?.cancel();
     _joinAnimationController.forward(from: 0.0);
     setState(() {
       _newJoinerName = userName;
       _newJoinerPicture = userPicture;
       _newJoinerId = userId;
+      _newJoinerIdEntryUrl = idEntryUrl;
     });
-    _joinAnimationTimer = Timer(welcomeTime, () {
-      if (mounted) {
-        setState(() {
-          _newJoinerName = null;
-          _newJoinerPicture = null;
-          _newJoinerId = null;
-        });
-      }
-    });
+
+    bool isSvga = idEntryUrl != null && idEntryUrl.toLowerCase().endsWith('.svga');
+    if (!isSvga) {
+      _joinAnimationTimer = Timer(welcomeTime, () {
+        if (mounted) {
+          setState(() {
+            _newJoinerName = null;
+            _newJoinerPicture = null;
+            _newJoinerId = null;
+            _newJoinerIdEntryUrl = null;
+          });
+        }
+      });
+    }
+  }
+
+  void _hideJoinAnimation() {
+    if (mounted) {
+      setState(() {
+        _newJoinerName = null;
+        _newJoinerPicture = null;
+        _newJoinerId = null;
+        _newJoinerIdEntryUrl = null;
+      });
+    }
   }
 
   Widget _buildJoinAnimationOverlay() {
     return Visibility(
       visible: _newJoinerName != null,
-      child: SlideTransition(
-        position: _joinAnimationOffset,
-        child: Center(
-          child: Container(
-            width: 140,
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
+      child: IgnorePointer(
+        child: SlideTransition(
+          position: _joinAnimationOffset,
+          child: _newJoinerIdEntryUrl != null && _newJoinerIdEntryUrl!.isNotEmpty
+              ? Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                color: Colors.transparent,
+                child: Stack(
+                  fit: StackFit.expand,
                   alignment: Alignment.center,
                   children: [
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFFFD700),
-                          width: 2,
-                        ),
+                    if (_newJoinerIdEntryUrl!.toLowerCase().endsWith('.svga'))
+                      NetworkSVGAPlayer(
+                        imageUrl: _newJoinerIdEntryUrl!,
+                        fit: BoxFit.cover,
+                        onFinished: _hideJoinAnimation,
+                      )
+                    else
+                      Image.network(
+                        _newJoinerIdEntryUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
                       ),
-                      child: ClipOval(
-                        child:
-                            _newJoinerPicture != null &&
-                                _newJoinerPicture!.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: _newJoinerPicture!,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 40,
-                                ),
-                                errorWidget: (context, url, error) =>
-                                    const Icon(
+                    Center(
+                      child: Text(
+                        '${_newJoinerName ?? ''} joined!',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          shadows: [
+                            BoxShadow(
+                              color: Colors.black54,
+                              blurRadius: 4,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Center(
+                child: Container(
+                  width: 140,
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFFFD700),
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: _newJoinerPicture!,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 40,
+                                      ),
+                                      errorWidget: (context, url, error) => const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 40,
+                                      ),
+                                    )
+                                  : const Icon(
                                       Icons.person,
                                       color: Colors.white,
                                       size: 40,
                                     ),
-                              )
-                            : const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 40,
-                              ),
-                      ),
-                    ),
-                    if (_newJoinerId != null)
-                      Positioned(
-                        width: 91, // 70 * 1.3
-                        height: 91,
-                        child: IgnorePointer(
-                          child: ActiveFrameWidget(
-                            userId: _newJoinerId!,
-                            size: 91,
+                            ),
                           ),
-                        ),
+                          if (_newJoinerId != null)
+                            Positioned(
+                              width: 91,
+                              height: 91,
+                              child: IgnorePointer(
+                                child: ActiveFrameWidget(
+                                  userId: _newJoinerId!,
+                                  size: 91,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _newJoinerName ?? '',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                      const SizedBox(height: 12),
+                      Text(
+                        _newJoinerName ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Joined the room!',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Joined the room!',
-                  style: TextStyle(color: Colors.white70, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
+              ),
         ),
       ),
     );
@@ -826,7 +913,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         } else if (!isNowInPK && _isPKMode) {
           debugPrint("PK Mode ENDING");
           
-          LiveKitService.instance.disconnectOpponentPKRoom();
+          StreamingService.instance.disconnectOpponentPKRoom();
           
           _opponentParticipantsSubscription?.cancel();
           _pkTimer?.cancel();
@@ -845,7 +932,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     });
 
-    _messageSubscription = LiveKitService.instance.chatMessagesStream.listen((message) {
+    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
       if (mounted) {
         setState(() {
           _messages.insert(
@@ -862,7 +949,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     });
 
-    LiveKitService.instance.dataMessagesStream.listen((data) {
+    StreamingService.instance.dataMessagesStream.listen((data) {
       if (!mounted) return;
       if (data['type'] == 'emoji') {
         final emoji = data['emoji'] as String? ?? '';
@@ -910,6 +997,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 newGuests.first.userName,
                 newGuests.first.userPicture,
                 newGuests.first.userId,
+                idEntryUrl: newGuests.first.idEntryUrl,
               );
             }
           }
@@ -944,10 +1032,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               orElse: () => myParticipant,
             );
             if (myParticipant.isMuted != oldMe.isMuted) {
-              LiveKitService.instance.setMicrophoneEnabled(!myParticipant.isMuted);
+              StreamingService.instance.setMicrophoneEnabled(!myParticipant.isMuted);
             }
             if (!myParticipant.isCameraOn && oldMe.isCameraOn) {
-              LiveKitService.instance.setCameraEnabled(false);
+              StreamingService.instance.setCameraEnabled(false);
             }
           }
 
@@ -955,11 +1043,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
           if (isNowJoined && !_isJoined) {
             debugPrint("Join request approved! Starting local audio stream.");
-            LiveKitService.instance.setMicrophoneEnabled(true);
+            StreamingService.instance.setMicrophoneEnabled(true);
           } else if (!isNowJoined && _isJoined) {
             debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
-            LiveKitService.instance.setMicrophoneEnabled(false);
-            LiveKitService.instance.setCameraEnabled(false);
+            StreamingService.instance.setMicrophoneEnabled(false);
+            StreamingService.instance.setCameraEnabled(false);
           }
 
           if (mounted) {
@@ -1158,7 +1246,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    LiveKitService.instance.disconnect();
+    StreamingService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
@@ -1180,7 +1268,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (_isRoomEnded || !mounted) return;
 
     // Immediately stop streaming
-    LiveKitService.instance.disconnect();
+    StreamingService.instance.disconnect();
 
     setState(() {
       _isRoomEnded = true;
@@ -1316,7 +1404,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         widget.roomID,
                         invite,
                       );
-                      LiveKitService.instance.connectOpponentPKRoom(
+                      StreamingService.instance.connectOpponentPKRoom(
                         opponentRoomId: invite.senderRoomId,
                         opponentHostId: invite.senderHostId,
                       );
@@ -1390,7 +1478,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               Navigator.of(context).pop();
 
               LiveStreamService.acceptPKInvite(widget.roomID, invite);
-              LiveKitService.instance.connectOpponentPKRoom(
+              StreamingService.instance.connectOpponentPKRoom(
                 opponentRoomId: invite.senderRoomId,
                 opponentHostId: invite.senderHostId,
               );
@@ -2662,7 +2750,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         // Talking indicator (when camera is off)
         if (!participant.isCameraOn)
           StreamBuilder<List<String>>(
-            stream: LiveKitService.instance.activeSpeakersStream,
+            stream: StreamingService.instance.activeSpeakersStream,
             builder: (context, snapshot) {
               final isSpeaking = !participant.isMuted && (snapshot.data ?? []).contains(participant.userId);
               if (!isSpeaking) return const SizedBox.shrink();
@@ -2844,7 +2932,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       );
     }
 
-    final allParticipants = [host, ...guests.take(8)]; // Max 9
+    final allParticipants = [host, ...guests.take(11)]; // Max 12
     final count = allParticipants.length;
 
     if (count == 1) {
@@ -2900,7 +2988,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       Widget bottomRow2_2 = count >= 8 ? _buildParticipantVideo(allParticipants[7]) : const SizedBox.shrink();
       Widget bottomRow2_3 = count >= 9 ? _buildParticipantVideo(allParticipants[8]) : const SizedBox.shrink();
 
+      Widget bottomRow3_1 = count >= 10 ? _buildParticipantVideo(allParticipants[9]) : const SizedBox.shrink();
+      Widget bottomRow3_2 = count >= 11 ? _buildParticipantVideo(allParticipants[10]) : const SizedBox.shrink();
+      Widget bottomRow3_3 = count >= 12 ? _buildParticipantVideo(allParticipants[11]) : const SizedBox.shrink();
+
       bool hasFourthRow = count > 6;
+      bool hasFifthRow = count > 9;
 
       gridLayout = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2947,6 +3040,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   Expanded(flex: 1, child: bottomRow2_1),
                   Expanded(flex: 1, child: bottomRow2_2),
                   Expanded(flex: 1, child: bottomRow2_3),
+                ],
+              ),
+            ),
+          if (hasFifthRow)
+            Expanded(
+              flex: 1,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 1, child: bottomRow3_1),
+                  Expanded(flex: 1, child: bottomRow3_2),
+                  Expanded(flex: 1, child: bottomRow3_3),
                 ],
               ),
             ),
@@ -3328,7 +3433,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF091433).withValues(alpha: 0.85),
+            color: const Color(0xFF0D1B2A).withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFF1E88E5), width: 1.2),
             boxShadow: [
@@ -3509,44 +3614,77 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           }
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    showProfileInfoBottomSheet(
-                      context,
-                      userId: m.userId,
-                      hostId: roomData['hostId'] ?? '',
-                      roomId: widget.roomID,
-                    );
-                  },
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    colors: [Colors.pinkAccent, Colors.purpleAccent, Colors.cyanAccent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                padding: const EdgeInsets.all(1.5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A1128),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildChatAvatar(m.userId, m.username),
-                      _buildLevelBadge(m.userId),
-                      Text(
-                        "${m.username}: ",
-                        style: TextStyle(
-                          color: Colors.pink.shade300,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                      GestureDetector(
+                        onTap: () {
+                          showProfileInfoBottomSheet(
+                            context,
+                            userId: m.userId,
+                            hostId: roomData['hostId'] ?? '',
+                            roomId: widget.roomID,
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: _buildChatAvatar(m.userId, m.username),
+                        ),
+                      ),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildLevelBadge(m.userId),
+                                Flexible(
+                                  child: Text(
+                                    m.username,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              m.message,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 0, top: 2),
-                  child: Text(
-                    m.message,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
@@ -3625,7 +3763,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               height: 38.0,
               padding: const EdgeInsets.only(left: 4, right: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF091433),
+                color: const Color(0xFF0D1B2A),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
                   color: const Color(0xFF1E88E5),
@@ -3675,7 +3813,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       child: const Center(
                         child: Icon(
                           Icons.send_rounded,
-                          color: Color(0xFF091433),
+                          color: Color(0xFF0D1B2A),
                           size: 15,
                         ),
                       ),
@@ -3768,7 +3906,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       _localMuteOverride = newMuteState;
                     });
                     try {
-                      await LiveKitService.instance.setMicrophoneEnabled(!newMuteState);
+                      await StreamingService.instance.setMicrophoneEnabled(!newMuteState);
                       await LiveStreamService.toggleMuteState(
                         widget.roomID,
                         newMuteState,
@@ -3813,7 +3951,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         return;
                       }
                     }
-                    LiveKitService.instance.setCameraEnabled(newCameraState);
+                    StreamingService.instance.setCameraEnabled(newCameraState);
                     if (!newCameraState) {
                       _isFrontCamera = true;
                     }
@@ -3849,7 +3987,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         _isSwitchingCamera = true;
                       });
                       try {
-                        final isFront = await LiveKitService.instance.flipCamera();
+                        final isFront = await StreamingService.instance.flipCamera();
                         if (mounted) {
                           setState(() {
                             _isFrontCamera = isFront;
@@ -4013,8 +4151,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     }
                     FocusManager.instance.primaryFocus?.unfocus();
                     try {
-                      LiveKitService.instance.setMicrophoneEnabled(false);
-                      LiveKitService.instance.setCameraEnabled(false);
+                      StreamingService.instance.setMicrophoneEnabled(false);
+                      StreamingService.instance.setCameraEnabled(false);
                       await LiveStreamService.leaveSeat(widget.roomID);
                     } catch (e) {
                       debugPrint("Error leaving call: $e");
@@ -4065,7 +4203,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (messageText.isEmpty) return;
 
     try {
-      await LiveKitService.instance.sendChatMessage(messageText);
+      await StreamingService.instance.sendChatMessage(messageText);
       setState(() {
         _isCommentsHidden = false;
         _messages.insert(
@@ -4142,7 +4280,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   void _sendEmojiMessage(String emoji) async {
     try {
-      await LiveKitService.instance.sendEmoji(emoji);
+      await StreamingService.instance.sendEmoji(emoji);
       _showFloatingEmoji(emoji, senderName: _currentUserName);
     } catch (e) {
       debugPrint('Error sending emoji message: $e');
@@ -4195,7 +4333,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   void _sendJoinMessage() async {
     const messageText = "Just joined the room!";
     try {
-      await LiveKitService.instance.sendChatMessage(messageText);
+      await StreamingService.instance.sendChatMessage(messageText);
       if (mounted) {
         setState(() {
           _messages.insert(
@@ -4509,7 +4647,7 @@ class _SafeParticipantVideoWidgetState extends State<_SafeParticipantVideoWidget
   @override
   void initState() {
     super.initState();
-    _subscription = LiveKitService.instance.remoteParticipantsChangedStream.listen((_) {
+    _subscription = StreamingService.instance.remoteParticipantsChangedStream.listen((_) {
       if (mounted) setState(() {});
     });
   }
@@ -4526,10 +4664,11 @@ class _SafeParticipantVideoWidgetState extends State<_SafeParticipantVideoWidget
       return Container(color: Colors.black);
     }
 
-    return LiveKitService.instance.buildVideoView(
+    return StreamingService.instance.buildVideoView(
       widget.participant.userId,
       fit: BoxFit.cover,
     );
   }
 }
+
 

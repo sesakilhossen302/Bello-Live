@@ -6,7 +6,7 @@ import '../../navigation/routes.dart';
 import '../../navigation/my_router.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/room_services.dart';
-import '../../core/services/livekit_service.dart';
+import '../../core/services/streaming_service.dart';
 
 class FloatingMinimizedRoom extends StatefulWidget {
   const FloatingMinimizedRoom({super.key});
@@ -133,7 +133,7 @@ class _FloatingMinimizedRoomState extends State<FloatingMinimizedRoom>
                             LiveStreamService.leaveRoom(data.roomId);
                           }
                         }
-                        LiveKitService.instance.disconnect();
+                        StreamingService.instance.disconnect();
                         context.read<AppCubit>().closeMinimizedRoom();
                       },
                       child: Container(
@@ -156,3 +156,4 @@ class _FloatingMinimizedRoomState extends State<FloatingMinimizedRoom>
     );
   }
 }
+

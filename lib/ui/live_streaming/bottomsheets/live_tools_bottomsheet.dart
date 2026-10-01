@@ -6,7 +6,7 @@ import '../../streaming/blocked_users_page.dart';
 
 import 'invite_pk_bottomsheet.dart';
 import 'share_bottomsheet.dart';
-import 'package:picture_live/core/services/livekit_service.dart';
+import 'package:picture_live/core/services/streaming_service.dart';
 import '../../streaming/bottomsheets/rocket_config_bottomsheet.dart';
 
 class _ToolItem {
@@ -135,7 +135,7 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
   }
 
   Future<void> _loadSpeakerState() async {
-    final isMuted = LiveKitService.instance.isSpeakerMuted;
+    final isMuted = StreamingService.instance.isSpeakerMuted;
     if (mounted) {
       setState(() {
         _isSpeakerMuted = isMuted;
@@ -232,7 +232,7 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                       setState(() {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
-                      await LiveKitService.instance.setSpeakerMuted(
+                      await StreamingService.instance.setSpeakerMuted(
                         _isSpeakerMuted,
                       );
                     };
@@ -572,3 +572,4 @@ void showLiveToolsBottomSheet(
     },
   );
 }
+

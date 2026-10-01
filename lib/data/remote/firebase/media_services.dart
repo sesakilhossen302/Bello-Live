@@ -5,6 +5,8 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import 'profile_services.dart';
 
@@ -32,11 +34,25 @@ class MediaService {
           ? File(compressedFile.path)
           : imageFile;
 
-      // Upload directly to Firebase Storage in the specified folder
-      final ref = _storage.ref().child(folder).child(fileName);
-      final uploadTask = ref.putFile(fileToUpload, SettableMetadata(contentType: 'image/jpeg'));
-      final snapshot = await uploadTask.whenComplete(() => {});
-      final downloadUrl = await snapshot.ref.getDownloadURL();
+      // Upload to custom API
+      final uri = Uri.parse('https://api.sdlive.fun/api/upload');
+      final request = http.MultipartRequest('POST', uri)
+        ..files.add(await http.MultipartFile.fromPath('image', fileToUpload.path));
+      
+      final streamedResponse = await request.send();
+      final responseBody = await streamedResponse.stream.bytesToString();
+      
+      String downloadUrl = '';
+      if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
+        final jsonData = jsonDecode(responseBody) as Map<String, dynamic>;
+        if (jsonData['success'] == true && jsonData['url'] != null) {
+          downloadUrl = jsonData['url'];
+        } else {
+          throw Exception('API returned success=false');
+        }
+      } else {
+        throw Exception('API failed with status ${streamedResponse.statusCode}');
+      }
 
       // Clean up temp file
       if (compressedFile != null) {

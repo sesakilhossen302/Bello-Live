@@ -428,7 +428,7 @@ class _PostCardState extends State<PostCard> {
                 margin: const EdgeInsets.only(top: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF091433),
+                  color: const Color(0xFF0D1B2A),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 ),
@@ -475,7 +475,7 @@ class _PostCardState extends State<PostCard> {
               children: [
                 _buildInteractionButton(
                   icon: _isLikedByMe ? Icons.favorite : Icons.favorite_border,
-                  color: _isLikedByMe ? const Color(0xFFE62563) : Colors.white70,
+                  color: _isLikedByMe ? const Color(0xFF5A189A) : Colors.white70,
                   count: _reactionCount,
                   onTap: _toggleLike,
                 ),

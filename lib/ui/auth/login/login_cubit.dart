@@ -20,7 +20,7 @@ class LoginCubit extends Cubit<LoginState> {
     try {
       // serverClientId from google-services.json (Web client ID)
       await _googleSignIn.initialize(
-        serverClientId: "237642997621-g04tngvmvchl56na01i5dn3c9g41r2s0.apps.googleusercontent.com",
+        serverClientId: "993990672871-cbflbvibv8eglkathunk6vn2qb3nq5tj.apps.googleusercontent.com",
       );
       _isGoogleSignInInitialized = true;
     } catch (e) {

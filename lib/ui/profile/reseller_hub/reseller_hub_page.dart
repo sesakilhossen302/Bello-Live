@@ -203,7 +203,7 @@ class _ResellerHubPageState extends State<ResellerHubPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: _isRechargeTab ? const Color(0xFFE62563) : Colors.transparent,
+                  color: _isRechargeTab ? const Color(0xFF5A189A) : Colors.transparent,
                   borderRadius: BorderRadius.circular(26),
                 ),
                 child: Row(
@@ -233,7 +233,7 @@ class _ResellerHubPageState extends State<ResellerHubPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: !_isRechargeTab ? const Color(0xFFE62563) : Colors.transparent,
+                  color: !_isRechargeTab ? const Color(0xFF5A189A) : Colors.transparent,
                   borderRadius: BorderRadius.circular(26),
                 ),
                 child: Row(
@@ -331,7 +331,7 @@ class _ResellerHubPageState extends State<ResellerHubPage> {
               decoration: InputDecoration(
                 hintText: 'Search User ID...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(CupertinoIcons.search, color: Color(0xFFE62563)),
+                prefixIcon: const Icon(CupertinoIcons.search, color: Color(0xFF5A189A)),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 suffixIcon: IconButton(
@@ -444,7 +444,7 @@ class _ResellerHubPageState extends State<ResellerHubPage> {
             child: ElevatedButton(
               onPressed: _isTransferring ? null : _transferBalance,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE62563),
+                backgroundColor: const Color(0xFF5A189A),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               child: _isTransferring

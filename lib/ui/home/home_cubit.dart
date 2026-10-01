@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../data/remote/firebase/profile_services.dart';
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -234,6 +235,7 @@ class HomeCubit extends Cubit<HomeState> {
           roomData['isHost'] = roles['isHost'];
           roomData['isAgency'] = roles['isAgency'];
           roomData['isReseller'] = roles['isReseller'];
+          roomData['isModerator'] = roles['isModerator'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             diamonds: hostDiamonds,
@@ -272,6 +274,7 @@ class HomeCubit extends Cubit<HomeState> {
           roomData['isHost'] = roles['isHost'];
           roomData['isAgency'] = roles['isAgency'];
           roomData['isReseller'] = roles['isReseller'];
+          roomData['isModerator'] = roles['isModerator'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
             diamonds: hostDiamonds,
@@ -328,6 +331,7 @@ class HomeCubit extends Cubit<HomeState> {
           roomData['isHost'] = roles['isHost'];
           roomData['isAgency'] = roles['isAgency'];
           roomData['isReseller'] = roles['isReseller'];
+          roomData['isModerator'] = roles['isModerator'];
           return _RoomWithDiamonds(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             diamonds: hostDiamonds,
@@ -386,6 +390,7 @@ class HomeCubit extends Cubit<HomeState> {
           roomData['isHost'] = roles['isHost'];
           roomData['isAgency'] = roles['isAgency'];
           roomData['isReseller'] = roles['isReseller'];
+          roomData['isModerator'] = roles['isModerator'];
           return _RoomWithTimestamp(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: false),
             timestamp: hostCreatedAt,
@@ -424,6 +429,7 @@ class HomeCubit extends Cubit<HomeState> {
           roomData['isHost'] = roles['isHost'];
           roomData['isAgency'] = roles['isAgency'];
           roomData['isReseller'] = roles['isReseller'];
+          roomData['isModerator'] = roles['isModerator'];
           return _RoomWithTimestamp(
             streamer: _mapToStreamerModel(roomId, roomData, isVideo: true),
             timestamp: hostCreatedAt,
@@ -521,6 +527,7 @@ class HomeCubit extends Cubit<HomeState> {
       isHost: data['isHost'] == true,
       isAgency: data['isAgency'] == true,
       isReseller: data['isReseller'] == true,
+      isModerator: data['isModerator'] == true,
       hasPackage: data['hasPackage'] == true,
       packagePriority: (data['packagePriority'] as int?) ?? 0,
     );
@@ -538,7 +545,7 @@ class HomeCubit extends Cubit<HomeState> {
   final Map<String, Future<Map<String, bool>>> _hostRolesFetchFutures = {};
 
   Future<Map<String, bool>> _fetchHostRoles(String? hostId) async {
-    if (hostId == null) return {'isHost': false, 'isAgency': false, 'isReseller': false};
+    if (hostId == null) return {'isHost': false, 'isAgency': false, 'isReseller': false, 'isModerator': false};
     if (_hostRolesCache.containsKey(hostId)) return _hostRolesCache[hostId]!;
 
     if (_hostRolesFetchFutures.containsKey(hostId)) {
@@ -555,13 +562,14 @@ class HomeCubit extends Cubit<HomeState> {
               'isHost': data['isHost'] == true || data['role'] == 'host',
               'isAgency': data['isAgency'] == true || data['role'] == 'agency',
               'isReseller': data['isReseller'] == true || data['role'] == 'reseller',
+              'isModerator': ProfileService.checkIsModerator(data),
             };
             _hostRolesCache[hostId] = roles;
             return roles;
           }
         }
       } catch (_) {}
-      final defaultRoles = {'isHost': false, 'isAgency': false, 'isReseller': false};
+      final defaultRoles = {'isHost': false, 'isAgency': false, 'isReseller': false, 'isModerator': false};
       _hostRolesCache[hostId] = defaultRoles;
       return defaultRoles;
     }();

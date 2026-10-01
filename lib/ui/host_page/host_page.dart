@@ -26,7 +26,7 @@ class _HostPageState extends State<HostPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFE2C55),
+      backgroundColor: const Color(0xFF5A189A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -61,7 +61,7 @@ class _HostPageState extends State<HostPage> {
                 ],
               ),
               child: Image.asset(
-                'assets/logo/SB Live.png',
+                'assets/logo/pigo live.png',
                 height: 260, // Increased from 160
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => const Icon(
@@ -148,14 +148,14 @@ class _HostPageState extends State<HostPage> {
           children: [
             Icon(
               icon,
-              color: isSelected ? const Color(0xFFFE2C55) : Colors.white,
+              color: isSelected ? const Color(0xFF5A189A) : Colors.white,
               size: 32,
             ),
             const SizedBox(height: 10),
             Text(
               title,
               style: TextStyle(
-                color: isSelected ? const Color(0xFFFE2C55) : Colors.white,
+                color: isSelected ? const Color(0xFF5A189A) : Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
               ),
@@ -195,12 +195,12 @@ class _HostPageState extends State<HostPage> {
               ? const SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(color: Color(0xFFFE2C55), strokeWidth: 2.5),
+                  child: CircularProgressIndicator(color: Color(0xFF5A189A), strokeWidth: 2.5),
                 )
               : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(CupertinoIcons.play_circle_fill, size: 28, color: Color(0xFFFE2C55)),
+                    Icon(CupertinoIcons.play_circle_fill, size: 28, color: Color(0xFF5A189A)),
                     SizedBox(width: 12),
                     Text(
                       'Start Live',
@@ -208,7 +208,7 @@ class _HostPageState extends State<HostPage> {
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.0,
-                        color: Color(0xFFFE2C55),
+                        color: Color(0xFF5A189A),
                       ),
                     ),
                   ],

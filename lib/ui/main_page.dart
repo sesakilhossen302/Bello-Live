@@ -56,8 +56,8 @@ class _MainPageState extends State<MainPage> {
     return BlocBuilder<AppCubit, AppState>(
       builder: (context, state) {
         return Scaffold(
-          backgroundColor: const Color(0xFF091433),
-          extendBody: false,
+          backgroundColor: const Color(0xFF1A052A),
+          extendBody: true,
           bottomNavigationBar: MyBottomNavBar(
             selectedPosition: _selectedPosition,
             onItemTapped: _onItemTapped,

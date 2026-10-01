@@ -52,14 +52,14 @@ class _MyBagPageState extends State<MyBagPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             _buildAppBar(),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                   : _categories.isEmpty
                       ? const Center(
                           child: Text(
@@ -91,7 +91,7 @@ class _MyBagPageState extends State<MyBagPage> {
 
   Widget _buildAppBar() {
     return Container(
-      color: const Color(0xFFE62563),
+      color: const Color(0xFF5A189A),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: Row(
         children: [
@@ -125,7 +125,7 @@ class _MyBagPageState extends State<MyBagPage> {
               ),
               child: const Text(
                 'Store',
-                style: TextStyle(color: Color(0xFFE62563), fontSize: 13, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Color(0xFF5A189A), fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -154,10 +154,10 @@ class _MyBagPageState extends State<MyBagPage> {
         isScrollable: _categories.length > 3,
         indicator: BoxDecoration(
           borderRadius: BorderRadius.circular(25),
-          gradient: const LinearGradient(colors: [Color(0xFFE62563), Color(0xFFFF7043)]),
+          gradient: const LinearGradient(colors: [Color(0xFF5A189A), Color(0xFFFF7043)]),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE62563).withValues(alpha: 0.3),
+              color: const Color(0xFF5A189A).withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -238,7 +238,7 @@ class BagItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         color: const Color(0xFF0F1E42),
         border: Border.all(
-          color: isEquipped ? const Color(0xFFE62563) : Colors.white.withValues(alpha: 0.08),
+          color: isEquipped ? const Color(0xFF5A189A) : Colors.white.withValues(alpha: 0.08),
           width: isEquipped ? 2 : 1,
         ),
         boxShadow: [
@@ -249,7 +249,7 @@ class BagItemCard extends StatelessWidget {
           ),
           if (isEquipped)
             BoxShadow(
-              color: const Color(0xFFE62563).withValues(alpha: 0.25),
+              color: const Color(0xFF5A189A).withValues(alpha: 0.25),
               blurRadius: 12,
               offset: const Offset(0, 0),
             ),
@@ -299,7 +299,7 @@ class BagItemCard extends StatelessWidget {
                 ElevatedButton(
                   onPressed: onEquipToggle,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isEquipped ? const Color(0xFF8E8E93) : const Color(0xFFE62563),
+                    backgroundColor: isEquipped ? const Color(0xFF8E8E93) : const Color(0xFF5A189A),
                     minimumSize: const Size(double.infinity, 32),
                     padding: EdgeInsets.zero,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

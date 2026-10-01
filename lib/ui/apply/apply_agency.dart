@@ -103,7 +103,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Agency application submitted successfully!'),
-            backgroundColor: Color(0xFFE62563),
+            backgroundColor: Color(0xFF5A189A),
           ),
         );
         _checkApplicationStatus();
@@ -188,7 +188,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continue', style: TextStyle(color: Color(0xFFE62563), fontWeight: FontWeight.bold)),
+            child: const Text('Continue', style: TextStyle(color: Color(0xFF5A189A), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -222,14 +222,14 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
               child: _isCheckingStatus
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                   : _conflictingApplicationError != null
                       ? _buildErrorDisplay(_conflictingApplicationError!)
                       : _applicationStatus != null
@@ -248,7 +248,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
 
   Widget _buildHeader() {
     return Container(
-      color: const Color(0xFFE62563),
+      color: const Color(0xFF5A189A),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: [
@@ -344,7 +344,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE62563),
+                  color: const Color(0xFF5A189A),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
@@ -376,7 +376,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
               const SizedBox(height: 6),
               Text(
                 agencyCode,
-                style: const TextStyle(color: Color(0xFFE62563), fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
+                style: const TextStyle(color: Color(0xFF5A189A), fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
               ),
             ],
           ),
@@ -498,7 +498,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
               icon: const Icon(CupertinoIcons.arrow_clockwise),
               label: const Text('Re-apply for Agency'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE62563),
+                backgroundColor: const Color(0xFF5A189A),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -597,7 +597,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 16),
-            child: Icon(icon, color: const Color(0xFFE62563), size: 20),
+            child: Icon(icon, color: const Color(0xFF5A189A), size: 20),
           ),
           Expanded(
             child: TextFormField(
@@ -622,7 +622,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
     final countryText = _selectedCountryName ?? 'Select Country';
     final prefix = _selectedCountryFlagEmoji != null
         ? Text(_selectedCountryFlagEmoji!, style: const TextStyle(fontSize: 24))
-        : const Icon(CupertinoIcons.location_solid, color: Color(0xFFE62563), size: 20);
+        : const Icon(CupertinoIcons.location_solid, color: Color(0xFF5A189A), size: 20);
 
     return GestureDetector(
       onTap: () => showCountryPicker(
@@ -643,11 +643,11 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
           inputDecoration: const InputDecoration(
             labelText: 'Search',
             hintText: 'Start typing to search',
-            labelStyle: TextStyle(color: Color(0xFFE62563)),
-            prefixIcon: Icon(Icons.search, color: Color(0xFFE62563)),
-            border: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFE62563))),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFE62563))),
-            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFE62563))),
+            labelStyle: TextStyle(color: Color(0xFF5A189A)),
+            prefixIcon: Icon(Icons.search, color: Color(0xFF5A189A)),
+            border: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF5A189A))),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF5A189A))),
+            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF5A189A))),
           ),
         ),
       ),
@@ -719,7 +719,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
                 : const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(CupertinoIcons.camera_fill, color: Color(0xFFE62563), size: 36),
+                      Icon(CupertinoIcons.camera_fill, color: Color(0xFF5A189A), size: 36),
                       SizedBox(height: 6),
                       Text(
                         'Upload Image',
@@ -755,7 +755,7 @@ class _ApplyAgencyPageState extends State<ApplyAgencyPage> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFFE62563), size: 22),
+          Icon(icon, color: const Color(0xFF5A189A), size: 22),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

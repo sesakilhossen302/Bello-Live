@@ -2,7 +2,7 @@ import 'package:picture_live/ui/streaming/bottomsheets/room_skin.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:picture_live/ui/streaming/bottomsheets/play_music_bottomsheet.dart';
-import 'package:picture_live/core/services/livekit_service.dart';
+import 'package:picture_live/core/services/streaming_service.dart';
 
 import '../../../data/remote/firebase/room_services.dart';
 import '../../live_streaming/bottomsheets/share_bottomsheet.dart';
@@ -65,7 +65,7 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
   }
 
   Future<void> _loadSpeakerState() async {
-    final isMuted = LiveKitService.instance.isSpeakerMuted;
+    final isMuted = StreamingService.instance.isSpeakerMuted;
     if (mounted) {
       setState(() {
         _isSpeakerMuted = isMuted;
@@ -120,7 +120,7 @@ class _AudioToolsBottomSheetState extends State<AudioToolsBottomSheet> {
                       setState(() {
                         _isSpeakerMuted = !_isSpeakerMuted;
                       });
-                      await LiveKitService.instance.setSpeakerMuted(_isSpeakerMuted);
+                      await StreamingService.instance.setSpeakerMuted(_isSpeakerMuted);
                     };
                   } else if (tool.label == 'Coin Bag') {
                     onTapLogic = () {
@@ -326,3 +326,4 @@ void showAudioToolsBottomSheet(
     },
   );
 }
+

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:picture_live/ui/inbox/widget/message_widget.dart';
 import 'package:picture_live/ui/inbox/widget/recorder_widget.dart';
@@ -469,7 +470,7 @@ class _ChatPageState extends State<ChatPage> {
   Widget _buildAppBar(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: const Color(0xFFE62563),
+      color: const Color(0xFF5A189A),
       child: Row(
         children: [
           IconButton(
@@ -499,9 +500,27 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            widget.peerName,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text(
+              widget.peerName,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'delete') {
+                InboxService.deleteConversation(widget.peerId);
+                Navigator.pop(context);
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Text('Delete Conversation', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
         ],
       ),
@@ -554,7 +573,9 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
+            child: GestureDetector(
+              onLongPress: () => _showMessageOptions(msg, isMe),
+              child: Container(
               constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
               decoration: isMediaMessage
                   ? null
@@ -601,6 +622,7 @@ class _ChatPageState extends State<ChatPage> {
                 ],
               ),
             ),
+           ),
           ),
           if (isMe) ...[
             const SizedBox(width: 8),
@@ -635,6 +657,54 @@ class _ChatPageState extends State<ChatPage> {
           ],
         ],
       ),
+    );
+  }
+
+  void _showMessageOptions(ChatMessage msg, bool isMe) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade900,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (msg.type == MessageType.text)
+                  ListTile(
+                    leading: const Icon(Icons.copy, color: Colors.white),
+                    title: const Text('Copy Text', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: msg.text));
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Copied to clipboard')),
+                      );
+                    },
+                  ),
+                if (isMe)
+                  ListTile(
+                    leading: const Icon(Icons.delete, color: Colors.red),
+                    title: const Text('Delete Message', style: TextStyle(color: Colors.red)),
+                    onTap: () {
+                      InboxService.deleteMessage(widget.peerId, msg.id);
+                      Navigator.pop(context);
+                    },
+                  ),
+                if (!isMe && msg.type != MessageType.text)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('No options available', style: TextStyle(color: Colors.white54)),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -749,7 +819,7 @@ class _ChatPageState extends State<ChatPage> {
             onTap: _handleSend,
             child: Container(
               padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(color: Color(0xFFE62563), shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Color(0xFF5A189A), shape: BoxShape.circle),
               child: const Icon(Icons.send, color: Colors.white, size: 18),
             ),
           ),

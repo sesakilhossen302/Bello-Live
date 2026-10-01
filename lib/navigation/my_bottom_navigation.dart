@@ -23,13 +23,33 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFFE2C55), // Solid primary color, completely flat
+      color: Colors.transparent,
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
       child: SafeArea(
         top: false,
         bottom: true,
         maintainBottomViewPadding: true,
-        child: SizedBox(
-          height: 60,
+        child: Container(
+          height: 65,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B0B59), Color(0xFF1A052A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(35),
+            border: Border.all(
+              color: const Color(0xFFFF1E7A).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF1E7A).withValues(alpha: 0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(_navItems.length, (index) {
@@ -50,16 +70,21 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> {
         onTap: () => widget.onItemTapped(index),
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: 54,
-          height: 54,
+          width: 56,
+          height: 56,
           margin: const EdgeInsets.symmetric(horizontal: 5),
           decoration: BoxDecoration(
-            color: Colors.white,
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFD700), Color(0xFFFF8C00), Color(0xFFFF1E7A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 10,
+                color: const Color(0xFFFF1E7A).withValues(alpha: 0.6),
+                blurRadius: 12,
+                spreadRadius: 2,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -67,7 +92,7 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> {
           child: const Center(
             child: Icon(
               Icons.add_rounded,
-              color: Color(0xFFFE2C55),
+              color: Colors.white,
               size: 34,
             ),
           ),
@@ -75,8 +100,8 @@ class _MyBottomNavBarState extends State<MyBottomNavBar> {
       );
     }
 
-    final activeColor = Colors.white;
-    final inactiveColor = Colors.white.withValues(alpha: 0.6);
+    final activeColor = const Color(0xFFFF1E7A); // Glowing Magenta
+    final inactiveColor = Colors.white.withValues(alpha: 0.5);
 
     return Expanded(
       child: GestureDetector(

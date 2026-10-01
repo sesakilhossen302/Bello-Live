@@ -429,4 +429,20 @@ class InboxService {
 
     await _db.ref('user_chats/$uid/$peerId').update({'unreadCount': 0});
   }
+
+  static Future<void> deleteMessage(String peerId, String messageId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    
+    final chatId = getChatId(uid, peerId);
+    await _db.ref('messages/$chatId/$messageId').remove();
+  }
+
+  static Future<void> deleteConversation(String peerId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    
+    await _db.ref('user_chats/$uid/$peerId').remove();
+    // Note: We don't delete 'messages/$chatId' so the other person still sees the chat history.
+  }
 }

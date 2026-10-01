@@ -22,6 +22,8 @@ class _StorePageState extends State<StorePage> {
   bool _isLoading = true;
   int _userDiamonds = 0;
   String? _userPhotoUrl;
+  Set<String> _purchasedItemIds = {};
+  Map<String, String> _activeItems = {};
 
   @override
   void initState() {
@@ -32,22 +34,43 @@ class _StorePageState extends State<StorePage> {
   Future<void> _loadData() async {
     try {
       final items = await StoreService.fetchStoreItems();
+      final bagItems = await StoreService.fetchMyBagItems();
+      
+      Set<String> purchasedItemIds = {};
+      for (var list in bagItems.values) {
+        for (var item in list) {
+          purchasedItemIds.add(item.id);
+        }
+      }
 
       String? photoUrl;
       int balance = 0;
+      Map<String, String> activeItems = {};
+      
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
         final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        photoUrl = doc.data()?['photoUrl'] as String?;
-        final rawBalance = doc.data()?['balance'] ?? doc.data()?['beans'] ?? 0;
+        final userData = doc.data();
+        photoUrl = userData?['photoUrl'] as String?;
+        final rawBalance = userData?['balance'] ?? userData?['beans'] ?? 0;
         if (rawBalance is num) {
           balance = rawBalance.toInt();
         } else {
           balance = int.tryParse(rawBalance.toString()) ?? 0;
         }
+        
+        final addOns = userData?['activeAddOns'] as Map<String, dynamic>? ?? {};
+        final now = DateTime.now();
+        addOns.forEach((cat, itemData) {
+          final expiry = itemData['expiresAt'] as Timestamp?;
+          final url = itemData['imageUrl'] as String?;
+          if (url != null && (expiry == null || expiry.toDate().isAfter(now))) {
+            activeItems[cat] = url;
+          }
+        });
       }
 
-      final allowed = ['frame', 'entry', 'id entry', 'room screen', 'roomskin'];
+      final allowed = ['frame', 'entry', 'identry', 'id entry', 'room screen', 'roomskin'];
       final categories = items.keys.where((c) => allowed.contains(c.toLowerCase().trim())).toList()..sort();
 
       setState(() {
@@ -55,6 +78,8 @@ class _StorePageState extends State<StorePage> {
         _categories = categories;
         _userDiamonds = balance;
         _userPhotoUrl = photoUrl;
+        _purchasedItemIds = purchasedItemIds;
+        _activeItems = activeItems;
         _isLoading = false;
       });
     } catch (e) {
@@ -68,14 +93,14 @@ class _StorePageState extends State<StorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
         child: Column(
           children: [
             _buildAppBar(),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                   : _categories.isEmpty
                       ? const Center(
                           child: Text(
@@ -107,7 +132,7 @@ class _StorePageState extends State<StorePage> {
 
   Widget _buildAppBar() {
     return Container(
-      color: const Color(0xFFE62563),
+      color: const Color(0xFF5A189A),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: Row(
         children: [
@@ -162,7 +187,7 @@ class _StorePageState extends State<StorePage> {
               ),
               child: const Text(
                 'My Bag',
-                style: TextStyle(color: Color(0xFFE62563), fontSize: 13, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Color(0xFF5A189A), fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -191,10 +216,10 @@ class _StorePageState extends State<StorePage> {
         isScrollable: _categories.length > 3,
         indicator: BoxDecoration(
           borderRadius: BorderRadius.circular(25),
-          gradient: const LinearGradient(colors: [Color(0xFFE62563), Color(0xFFFF7043)]),
+          gradient: const LinearGradient(colors: [Color(0xFF5A189A), Color(0xFFFF7043)]),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE62563).withValues(alpha: 0.3),
+              color: const Color(0xFF5A189A).withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -242,10 +267,25 @@ class _StorePageState extends State<StorePage> {
         ),
         itemCount: items.length,
         itemBuilder: (context, index) {
+          final item = items[index];
+          final isPurchased = _purchasedItemIds.contains(item.id);
+          final isActive = _activeItems[item.category] == item.imageUrl;
           return StoreItemCard(
-            item: items[index],
+            item: item,
             userPhotoUrl: _userPhotoUrl,
             onPurchaseComplete: _loadData,
+            isPurchased: isPurchased,
+            isActive: isActive,
+            onEquipToggle: (equip) async {
+              try {
+                await StoreService.toggleActiveItem(item, equip);
+                _loadData();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
           );
         },
       ),
@@ -257,12 +297,18 @@ class StoreItemCard extends StatefulWidget {
   final StoreItemModel item;
   final VoidCallback onPurchaseComplete;
   final String? userPhotoUrl;
+  final bool isPurchased;
+  final bool isActive;
+  final Function(bool) onEquipToggle;
 
   const StoreItemCard({
     super.key,
     required this.item,
     required this.onPurchaseComplete,
     this.userPhotoUrl,
+    this.isPurchased = false,
+    this.isActive = false,
+    required this.onEquipToggle,
   });
 
   @override
@@ -292,6 +338,15 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
   }
 
   void _handlePurchase() async {
+    if (widget.isActive) {
+      widget.onEquipToggle(false);
+      return;
+    }
+    if (widget.isPurchased) {
+      widget.onEquipToggle(true);
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -321,7 +376,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
                                 child: SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(color: Color(0xFFE62563), strokeWidth: 2),
+                                  child: CircularProgressIndicator(color: Color(0xFF5A189A), strokeWidth: 2),
                                 ),
                               ),
                               errorWidget: (context, url, error) =>
@@ -365,7 +420,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Buy', style: TextStyle(color: Color(0xFFE62563), fontWeight: FontWeight.bold)),
+            child: const Text('Buy', style: TextStyle(color: Color(0xFF5A189A), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -380,7 +435,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Successfully purchased ${widget.item.name}!'),
-            backgroundColor: const Color(0xFFE62563),
+            backgroundColor: const Color(0xFF5A189A),
           ),
         );
         widget.onPurchaseComplete();
@@ -430,7 +485,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
                   ),
                   if (_isPressed)
                     BoxShadow(
-                      color: const Color(0xFFE62563).withValues(alpha: 0.25),
+                      color: const Color(0xFF5A189A).withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 0),
                     ),
@@ -448,7 +503,7 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                         child: _isPurchasing
-                            ? const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)))
+                            ? const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)))
                             : MyImageWidget(
                                 imageUrl: widget.item.imageUrl,
                                 fit: BoxFit.contain,
@@ -474,24 +529,45 @@ class _StoreItemCardState extends State<StoreItemCard> with SingleTickerProvider
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(Icons.star_rounded, color: Color(0xFFFFA000), size: 14),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '${widget.item.price} coins/mo',
-                                style: const TextStyle(
-                                  color: Color(0xFFFFA000),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                        if (widget.isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.green),
                             ),
-                          ],
-                        ),
+                            child: const Text('Used', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                          )
+                        else if (widget.isPurchased)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.blue),
+                            ),
+                            child: const Text('Use', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                          )
+                        else
+                          Row(
+                            children: [
+                              const Icon(Icons.star_rounded, color: Color(0xFFFFA000), size: 14),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '${widget.item.price} coins/mo',
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFA000),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),

@@ -19,9 +19,9 @@ class InboxPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF091433),
+      backgroundColor: const Color(0xFF0D1B2A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFE62563),
+        backgroundColor: const Color(0xFF5A189A),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(CupertinoIcons.back, color: Colors.white),
@@ -36,7 +36,7 @@ class InboxPage extends StatelessWidget {
         stream: InboxService.getUserChatsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFE62563)));
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF5A189A)));
           }
 
           final chats = snapshot.data ?? [];
@@ -61,12 +61,12 @@ class InboxPage extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFFE62563).withValues(alpha: 0.1),
+                        color: const Color(0xFF5A189A).withValues(alpha: 0.1),
                       ),
                       child: const Icon(
                         Icons.chat_bubble_outline_rounded,
                         size: 50,
-                        color: Color(0xFFE62563),
+                        color: Color(0xFF5A189A),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -104,7 +104,21 @@ class InboxPage extends StatelessWidget {
               indent: 85,
             ),
             itemBuilder: (context, index) {
-              return _InboxTile(summary: chats[index]);
+              final summary = chats[index];
+              return Dismissible(
+                key: Key(summary.peerId),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: Colors.red,
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) {
+                  InboxService.deleteConversation(summary.peerId);
+                },
+                child: _InboxTile(summary: summary),
+              );
             },
           );
         },
@@ -171,7 +185,7 @@ class _InboxTile extends StatelessWidget {
                   height: 55,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFE62563).withValues(alpha: 0.5), width: 1.5),
+                    border: Border.all(color: const Color(0xFF5A189A).withValues(alpha: 0.5), width: 1.5),
                   ),
                   child: ClipOval(
                     child: photoUrl.isNotEmpty
@@ -223,13 +237,13 @@ class _InboxTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(timeString, style: const TextStyle(color: Color(0xFFE62563), fontSize: 12, fontWeight: FontWeight.w500)),
+              Text(timeString, style: const TextStyle(color: Color(0xFF5A189A), fontSize: 12, fontWeight: FontWeight.w500)),
               const SizedBox(height: 6),
               if (summary.unreadCount > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE62563),
+                    color: const Color(0xFF5A189A),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(

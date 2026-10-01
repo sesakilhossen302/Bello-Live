@@ -30,7 +30,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
 
   final LinearGradient _brandGradient = const LinearGradient(
     colors: [
-      Color(0xFFE62563),
+      Color(0xFF5A189A),
       Color(0xFFB23CFF),
     ],
     begin: Alignment.centerLeft,
@@ -68,10 +68,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           systemNavigationBarIconBrightness: Brightness.dark,
         ),
         child: Scaffold(
-          backgroundColor: const Color(0xFFFE2C55), // Solid primary color
+          backgroundColor: const Color(0xFF5A189A), // Solid primary color
           body: SizedBox.expand(
             child: Container(
-              color: const Color(0xFFFE2C55),
+              color: const Color(0xFF5A189A),
               child: SafeArea(
                 child: BlocConsumer<LoginCubit, LoginState>(
                   listener: (context, state) {
@@ -136,7 +136,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             ],
           ),
           child: Image.asset(
-            'assets/logo/SB Live.png',
+            'assets/logo/pigo live.png',
             width: 140,
             height: 140,
             fit: BoxFit.contain,
@@ -144,7 +144,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         ),
         const SizedBox(height: 24),
         const Text(
-          'SB Live',
+          'Pigo Live',
           style: TextStyle(
             color: Colors.white,
             fontSize: 32,
@@ -201,7 +201,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                     child: SizedBox(
                       width: 26,
                       height: 26,
-                      child: CircularProgressIndicator(color: Color(0xFFFE2C55), strokeWidth: 3.0),
+                      child: CircularProgressIndicator(color: Color(0xFF5A189A), strokeWidth: 3.0),
                     ),
                   )
                 : Row(
@@ -241,7 +241,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFE62563).withValues(alpha: 0.3),
+                  color: const Color(0xFF5A189A).withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -325,7 +325,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFE62563).withValues(alpha: 0.35),
+                            color: const Color(0xFF5A189A).withValues(alpha: 0.35),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -393,7 +393,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        prefixIcon: Icon(icon, color: const Color(0xFFE62563), size: 20),
+        prefixIcon: Icon(icon, color: const Color(0xFF5A189A), size: 20),
         suffixIcon: suffix,
         filled: true,
         fillColor: const Color(0xFFF7F8F9),
@@ -408,7 +408,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE62563), width: 1.5),
+          borderSide: const BorderSide(color: Color(0xFF5A189A), width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

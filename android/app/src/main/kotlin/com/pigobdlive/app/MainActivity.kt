@@ -1,4 +1,4 @@
-package com.sblivebd.app
+package com.pigobdlive.app
 
 import io.flutter.embedding.android.FlutterActivity
 

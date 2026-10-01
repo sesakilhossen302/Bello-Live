@@ -196,9 +196,36 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             // User ID - tap to copy
-                            _SvgaIdBadgeBS(
-                              displayId: data['displayId']?.toString() ?? 'N/A',
-                              context: context,
+                            GestureDetector(
+                              onTap: () {
+                                final text = data['displayId']?.toString() ?? 'N/A';
+                                Clipboard.setData(ClipboardData(text: text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('ID $text copied!')),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black38,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'ID: ${data['displayId']?.toString() ?? 'N/A'}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.copy, color: Colors.white70, size: 16),
+                                  ],
+                                ),
+                              ),
                             ),
                             const SizedBox(width: 12),
                             // Balance/Coins count
@@ -618,121 +645,3 @@ Future<void> _recordProfileVisit(String visitedUserId) async {
   }
 }
 
-// ========== SVGA ID BADGE FOR BOTTOM SHEET ==========
-
-class _SvgaIdBadgeBS extends StatefulWidget {
-  final String displayId;
-  final BuildContext context;
-
-  const _SvgaIdBadgeBS({required this.displayId, required this.context});
-
-  @override
-  State<_SvgaIdBadgeBS> createState() => _SvgaIdBadgeBSState();
-}
-
-class _SvgaIdBadgeBSState extends State<_SvgaIdBadgeBS> with SingleTickerProviderStateMixin {
-  SVGAAnimationController? _controller;
-  MovieEntity? _videoItem;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = SVGAAnimationController(vsync: this);
-    _loadSvga();
-  }
-
-  Future<void> _loadSvga() async {
-    try {
-      final videoItem = await SVGAParser.shared.decodeFromAssets('assets/svga/idbg.svga');
-      if (mounted) {
-        videoItem.audios.clear();
-        setState(() => _videoItem = videoItem);
-        _controller?.videoItem = videoItem;
-        _controller?.repeat();
-      }
-    } catch (e) {
-      debugPrint('Error loading idbg.svga: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: widget.displayId));
-        final overlay = Overlay.of(context);
-        late OverlayEntry overlayEntry;
-        overlayEntry = OverlayEntry(
-          builder: (ctx) => Positioned(
-            top: MediaQuery.of(ctx).size.height * 0.5,
-            left: MediaQuery.of(ctx).size.width * 0.2,
-            width: MediaQuery.of(ctx).size.width * 0.6,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white24, width: 1),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.greenAccent, size: 18),
-                    SizedBox(width: 8),
-                    Text('ID copied!', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-        overlay.insert(overlayEntry);
-        Future.delayed(const Duration(seconds: 2), () {
-          if (overlayEntry.mounted) overlayEntry.remove();
-        });
-      },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 170,
-            height: 46,
-            child: Stack(
-              children: [
-                if (_controller != null && _videoItem != null)
-                  Positioned.fill(
-                    child: SVGAImage(_controller!, fit: BoxFit.fill),
-                  ),
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 28, right: 6),
-                    child: Text(
-                      'ID: ${widget.displayId}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 5),
-          const Icon(Icons.copy_rounded, color: Colors.white70, size: 14),
-        ],
-      ),
-    );
-  }
-}
