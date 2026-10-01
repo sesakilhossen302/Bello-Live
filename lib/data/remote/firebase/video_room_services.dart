@@ -27,11 +27,21 @@ class VideoRoomService {
     final roomId = roomRef.key!;
 
     final userDoc = await _usersCollection.doc(user.uid).get();
-    if (!userDoc.exists) {
-      throw Exception("User profile not found. Cannot create room.");
+    Map<String, dynamic> userData;
+    if (!userDoc.exists || userDoc.data() == null) {
+      userData = {
+        'uid': user.uid,
+        'displayName': user.displayName?.isNotEmpty == true ? user.displayName : 'User_${user.uid.substring(0, 6)}',
+        'photoUrl': user.photoURL,
+        'displayId': user.uid.substring(0, 6),
+        'country': 'Unknown',
+        'gender': 'Not specified',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      await _usersCollection.doc(user.uid).set(userData, SetOptions(merge: true));
+    } else {
+      userData = userDoc.data() as Map<String, dynamic>;
     }
-
-    final userData = userDoc.data() as Map<String, dynamic>;
     final String hostName = userData['displayName'] ?? 'Anonymous';
     final String? hostPicture = userData['photoUrl'];
     final String displayId = userData['displayId'] ?? '';
@@ -177,10 +187,10 @@ class VideoRoomService {
     _connectedRef.onValue.listen((event) async {
       if (event.snapshot.value == true) {
         if (isHost) {
-          await roomRef.child('participantCount').onDisconnect().cancel();
-          await roomRef.onDisconnect().remove();
+          await roomRef.child('isOnline').onDisconnect().set(false);
+          await participantRef.child('isOnline').onDisconnect().set(false);
         } else {
-          await participantRef.onDisconnect().remove();
+          await participantRef.child('isOnline').onDisconnect().set(false);
           await roomRef.child('participantCount').onDisconnect().set(ServerValue.increment(-1));
 
           if (isOnCall) {

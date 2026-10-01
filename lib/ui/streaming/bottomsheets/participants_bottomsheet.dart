@@ -84,8 +84,10 @@ class ParticipantsBottomSheet extends StatelessWidget {
   Widget _buildParticipantTile(BuildContext context, RoomParticipant participant) {
     // Determine the role for the subtitle
     String role = 'Listener';
-    if (participant.seatNo == 0) {
+    if (participant.seatNo == 0 || participant.userId == hostId) {
       role = 'Host';
+    } else if (participant.isAdmin) {
+      role = 'MAC Admin';
     } else if (participant.isCoHost) {
       role = 'Co-host';
     } else if (participant.seatNo > 0 || participant.isApprovedSpeaker) {
@@ -127,14 +129,40 @@ class ParticipantsBottomSheet extends StatelessWidget {
           ],
         ),
       ),
-      title: Text(
-        participant.userName,
-        style: TextStyle(
-          color: isCurrentUser ? Colors.pink : Colors.white,
-          fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.normal,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              participant.userName,
+              style: TextStyle(
+                color: isCurrentUser ? Colors.pink : Colors.white,
+                fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (participant.isAdmin)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'MAC Admin',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
       ),
       subtitle: Text(role, style: const TextStyle(color: Colors.white70)),
       trailing: Row(
@@ -182,7 +210,37 @@ class ParticipantsBottomSheet extends StatelessWidget {
               color: const Color(0xFF2d1b2b),
               padding: EdgeInsets.zero,
               onSelected: (value) async {
-                if (value == 'mute') {
+                if (value == 'invite_to_call') {
+                  try {
+                    await RoomService.sendCallInvite(roomId, participant.userId, 'Host');
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Call invite sent to ${participant.userName}')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                } else if (value == 'toggle_admin') {
+                  try {
+                    await RoomService.setAdmin(roomId, participant.userId, !participant.isAdmin);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(participant.isAdmin ? 'Removed MAC Admin.' : 'Appointed as MAC Admin!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                } else if (value == 'mute') {
                   await RoomService.muteParticipant(roomId, participant.userId, !participant.isMuted);
                 } else if (value == 'kick') {
                   _confirmAction(context, 'Kick', participant.userName, () => RoomService.kickParticipant(roomId, participant.userId));
@@ -223,14 +281,43 @@ class ParticipantsBottomSheet extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                if (!participant.isApprovedSpeaker && !participant.isCoHost)
+                if (!participant.isApprovedSpeaker && !participant.isCoHost) ...[
+                  const PopupMenuItem(
+                    value: 'invite_to_call',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_call, color: Colors.greenAccent, size: 20),
+                        SizedBox(width: 8),
+                        Text('Invite to Call', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
                   const PopupMenuItem(
                     value: 'add_to_call',
                     child: Row(
                       children: [
                         Icon(Icons.call, color: Colors.green, size: 20),
                         SizedBox(width: 8),
-                        Text('Seat on Call', style: TextStyle(color: Colors.white)),
+                        Text('Seat Directly', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ],
+                if (currentUserId == hostId)
+                  PopupMenuItem(
+                    value: 'toggle_admin',
+                    child: Row(
+                      children: [
+                        Icon(
+                          participant.isAdmin ? Icons.admin_panel_settings_outlined : Icons.admin_panel_settings,
+                          color: Colors.purpleAccent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          participant.isAdmin ? 'Remove MAC Admin' : 'Set MAC Admin',
+                          style: const TextStyle(color: Colors.white),
+                        ),
                       ],
                     ),
                   ),

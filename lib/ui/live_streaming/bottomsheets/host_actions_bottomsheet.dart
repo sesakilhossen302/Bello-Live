@@ -64,15 +64,37 @@ class HostActionsBottomSheet extends StatelessWidget {
                 ),
               ),
               const Divider(color: Colors.white24, height: 1),
+              if (!participant.isApprovedSpeaker && !participant.isCoHost)
+                buildActionButton(
+                  'Invite to Call',
+                  Icons.add_call,
+                  () async {
+                    try {
+                      await RoomService.sendCallInvite(roomId, targetUserId, 'Host');
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Call invite sent to $targetUserName')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  },
+                ),
               buildActionButton(
-                participant.isAdmin ? 'Remove Admin' : 'Set Admin',
+                participant.isAdmin ? 'Remove MAC Admin' : 'Set MAC Admin',
                 participant.isAdmin ? Icons.security_outlined : Icons.security,
                 () async {
                   try {
                     await RoomService.setAdmin(roomId, targetUserId, !participant.isAdmin);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(participant.isAdmin ? 'Removed admin.' : 'Set as admin.')),
+                        SnackBar(content: Text(participant.isAdmin ? 'Removed MAC admin.' : 'Set as MAC admin.')),
                       );
                     }
                   } catch (e) {

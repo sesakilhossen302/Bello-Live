@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -46,6 +47,7 @@ class LiveStreamParticipant {
   final bool isLocked;
   final String? gender;
   final bool isModerator;
+  final bool isAdmin;
   final String? idEntryUrl;
 
   LiveStreamParticipant({
@@ -58,6 +60,7 @@ class LiveStreamParticipant {
     this.isLocked = false,
     this.gender,
     this.isModerator = false,
+    this.isAdmin = false,
     this.idEntryUrl,
   });
 
@@ -75,6 +78,7 @@ class LiveStreamParticipant {
       isLocked: data['isLocked'] ?? false,
       gender: data['gender'],
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
+      isAdmin: data['isAdmin'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
     );
   }
@@ -107,6 +111,7 @@ class JoinRequest {
 }
 
 class ChatMessage {
+  final String? id;
   final String userId;
   final String username;
   final String message;
@@ -115,6 +120,7 @@ class ChatMessage {
   final int? giftValue;
 
   ChatMessage({
+    this.id,
     required this.userId,
     required this.username,
     required this.message,
@@ -171,6 +177,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   StreamSubscription? _sentPKInvitesSubscription;
   StreamSubscription? _opponentParticipantsSubscription;
   StreamSubscription? _globalRandomPKInvitesSubscription;
+  StreamSubscription? _callInviteSubscription;
+  bool _isCallInviteDialogShowing = false;
   BuildContext? _currentRandomPKDialogContext;
   final Map<String, Stream<int>> _diamondsStreamCache = {};
 
@@ -181,7 +189,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   int _lastProcessedGiftTime = 0;
 
   // State Variables
-  late Map<String, dynamic> roomData;
+  Map<String, dynamic> roomData = {};
   List<LiveStreamParticipant> _participants = [];
   final List<ChatMessage> _messages = [];
   final List<FloatingEmoji> _floatingEmojis = [];
@@ -348,6 +356,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _sentPKInvitesSubscription?.cancel();
     _opponentParticipantsSubscription?.cancel();
     _globalRandomPKInvitesSubscription?.cancel();
+    _callInviteSubscription?.cancel();
     _pkTimer?.cancel();
 
     _joinAnimationTimer?.cancel();
@@ -933,11 +942,19 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     });
 
     _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
-      if (mounted) {
+      if (!mounted) return;
+      final bool alreadyExists = _messages.any((m) =>
+          (m.id != null && message.id.isNotEmpty && m.id == message.id) ||
+          (m.userId == message.userId &&
+              m.message == message.message &&
+              m.timestamp.difference(message.timestamp).abs().inSeconds < 4));
+
+      if (!alreadyExists) {
         setState(() {
           _messages.insert(
             0,
             ChatMessage(
+              id: message.id,
               userId: message.userId,
               username: message.userName,
               message: message.message,
@@ -952,6 +969,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     StreamingService.instance.dataMessagesStream.listen((data) {
       if (!mounted) return;
       if (data['type'] == 'emoji') {
+        final senderId = data['userId'] as String? ?? '';
+        if (senderId == _auth.currentUser?.uid) return;
         final emoji = data['emoji'] as String? ?? '';
         if (emoji.isNotEmpty) {
           _showFloatingEmoji(emoji, senderName: data['userName'] as String?);
@@ -1214,6 +1233,107 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             }
           });
     }
+
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId != null && !widget.isHost) {
+      _callInviteSubscription =
+          LiveStreamService.getCallInviteStream(widget.roomID, currentUserId)
+              .listen((event) {
+                if (!event.snapshot.exists || event.snapshot.value == null) return;
+                final data = event.snapshot.value;
+                if (data is Map) {
+                  final hostName = (data['hostName'] as String?) ?? 'Host';
+                  _showCallInviteDialog(hostName, currentUserId);
+                }
+              });
+    }
+  }
+
+  void _showCallInviteDialog(String hostName, String myUserId) {
+    if (_isCallInviteDialogShowing || !mounted) return;
+    _isCallInviteDialogShowing = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1D2B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.phone_in_talk, color: Colors.greenAccent, size: 26),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Call Invitation',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '$hostName invited you to join the live call!',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              _isCallInviteDialogShowing = false;
+              await LiveStreamService.rejectCallInvite(widget.roomID, myUserId);
+            },
+            child: const Text('Decline', style: TextStyle(color: Colors.redAccent, fontSize: 15)),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.call, color: Colors.white, size: 18),
+            label: const Text('Accept Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              _isCallInviteDialogShowing = false;
+              try {
+                await LiveStreamService.acceptCallInvite(widget.roomID, myUserId);
+                await StreamingService.instance.setMicrophoneEnabled(true);
+                if (mounted) {
+                  setState(() {
+                    _isJoined = true;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Joined call successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error joining call: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    ).then((_) {
+      _isCallInviteDialogShowing = false;
+    });
   }
 
   void _startPKTimer(DateTime endTime) {
@@ -1976,7 +2096,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ],
           ),
         ),
-        SafeArea(top: false, child: _buildChatInput()),
+        _buildChatInput(),
       ],
     );
   }
@@ -1998,7 +2118,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ],
           ),
         ),
-        SafeArea(top: false, child: _buildChatInput()),
+        _buildChatInput(),
       ],
     );
   }
@@ -2210,13 +2330,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             // Participant Count Badge
             GestureDetector(
               onTap: () {
+                final bool isCurrentAdmin = widget.isHost || _isCurrentModerator || _participants.any((p) => p.userId == _auth.currentUser?.uid && p.isAdmin);
                 showLiveStreamParticipantsBottomSheet(
                   context,
                   participants: _participants.where((p) => !p.isModerator && p.userId != hostId).toList(),
                   currentUserId: _auth.currentUser!.uid,
                   hostId: hostId,
                   roomId: widget.roomID,
-                  isCurrentUserModerator: _isCurrentModerator,
+                  isCurrentUserModerator: isCurrentAdmin,
                 );
               },
               child: Container(
@@ -3747,32 +3868,37 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     const double iconSize = 18.0;
     const double paddingRight = 6.0;
 
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double bottomPadding = mediaQuery.viewInsets.bottom > 0
+        ? 10.0 + mediaQuery.viewInsets.bottom
+        : math.max(26.0, 12.0 + safeBottom);
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        10,
-        8,
-        10,
-        8 + MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.fromLTRB(10, 8, 10, bottomPadding),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              height: 38.0,
-              padding: const EdgeInsets.only(left: 4, right: 4),
+              height: 40.0,
+              padding: const EdgeInsets.only(left: 6, right: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1B2A),
+                color: const Color(0xFF0F172A).withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: const Color(0xFF1E88E5),
-                  width: 1.5,
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.55),
+                  width: 1.2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1E88E5).withValues(alpha: 0.25),
-                    blurRadius: 6,
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                    blurRadius: 8,
                     spreadRadius: 0.5,
                   ),
                 ],
@@ -3783,6 +3909,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     child: TextField(
                       controller: _chatController,
                       focusNode: _chatFocusNode,
+                      textInputAction: TextInputAction.send,
                       style: const TextStyle(color: Colors.white, fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'Message...',
@@ -3794,7 +3921,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10,
-                          vertical: 8,
+                          vertical: 9,
                         ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
@@ -3802,18 +3929,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ),
                   GestureDetector(
                     onTap: _sendMessage,
+                    behavior: HitTestBehavior.opaque,
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 30,
+                      height: 30,
                       margin: const EdgeInsets.only(right: 2),
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF38BDF8), Color(0xFF818CF8)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                       ),
                       child: const Center(
                         child: Icon(
                           Icons.send_rounded,
-                          color: Color(0xFF0D1B2A),
+                          color: Colors.white,
                           size: 15,
                         ),
                       ),
@@ -4202,23 +4334,34 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final messageText = _chatController.text.trim();
     if (messageText.isEmpty) return;
 
+    final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
+    final String currentUserId = _auth.currentUser?.uid ?? '';
+
+    _chatController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    setState(() {
+      _isCommentsHidden = false;
+      _messages.insert(
+        0,
+        ChatMessage(
+          id: msgId,
+          userId: currentUserId,
+          username: _currentUserName,
+          message: messageText,
+          timestamp: DateTime.now(),
+        ),
+      );
+    });
+    _scrollToNewestMessage();
+
     try {
-      await StreamingService.instance.sendChatMessage(messageText);
-      setState(() {
-        _isCommentsHidden = false;
-        _messages.insert(
-          0,
-          ChatMessage(
-            userId: _auth.currentUser!.uid,
-            username: _currentUserName,
-            message: messageText,
-            timestamp: DateTime.now(),
-          ),
-        );
-      });
-      _chatController.clear();
-      _scrollToNewestMessage();
-      FocusManager.instance.primaryFocus?.unfocus();
+      await StreamingService.instance.sendChatMessage(
+        messageText,
+        roomId: widget.roomID,
+        isVideo: true,
+        customId: msgId,
+      );
     } catch (e) {
       debugPrint('Error sending message: $e');
     }
@@ -4229,7 +4372,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildEmojiColumnOverlay() {
     final bool hasJoinCallButton = !widget.isHost && !_isJoined && !_isPKMode;
-    final double bottomOffset = (hasJoinCallButton ? 104.0 : 62.0) + MediaQuery.of(context).padding.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double chatInputBottom = math.max(26.0, 12.0 + safeBottom);
+    final double bottomOffset = (hasJoinCallButton ? 96.0 : 54.0) + chatInputBottom;
 
     return Positioned(
       right: 14,
@@ -4280,8 +4429,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   void _sendEmojiMessage(String emoji) async {
     try {
-      await StreamingService.instance.sendEmoji(emoji);
       _showFloatingEmoji(emoji, senderName: _currentUserName);
+      await StreamingService.instance.sendEmoji(
+        emoji,
+        roomId: widget.roomID,
+        isVideo: true,
+      );
     } catch (e) {
       debugPrint('Error sending emoji message: $e');
     }
@@ -4332,22 +4485,32 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   void _sendJoinMessage() async {
     const messageText = "Just joined the room!";
+    final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
+    final String currentUserId = _auth.currentUser?.uid ?? '';
+
+    if (mounted) {
+      setState(() {
+        _messages.insert(
+          0,
+          ChatMessage(
+            id: msgId,
+            userId: currentUserId,
+            username: _currentUserName,
+            message: messageText,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+      _scrollToNewestMessage();
+    }
+
     try {
-      await StreamingService.instance.sendChatMessage(messageText);
-      if (mounted) {
-        setState(() {
-          _messages.insert(
-            0,
-            ChatMessage(
-              userId: _auth.currentUser!.uid,
-              username: _currentUserName,
-              message: messageText,
-              timestamp: DateTime.now(),
-            ),
-          );
-        });
-        _scrollToNewestMessage();
-      }
+      await StreamingService.instance.sendChatMessage(
+        messageText,
+        roomId: widget.roomID,
+        isVideo: true,
+        customId: msgId,
+      );
     } catch (e) {
       debugPrint('Error sending join message: $e');
     }

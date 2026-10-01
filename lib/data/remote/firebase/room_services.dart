@@ -43,8 +43,20 @@ class RoomService {
     final userRef = _usersCollection.doc(user.uid);
     final userDoc = await userRef.get();
 
-    if (!userDoc.exists) {
-      throw Exception('User profile not found. Cannot create room.');
+    Map<String, dynamic> userData;
+    if (!userDoc.exists || userDoc.data() == null) {
+      userData = {
+        'uid': user.uid,
+        'displayName': user.displayName?.isNotEmpty == true ? user.displayName : 'User_${user.uid.substring(0, 6)}',
+        'photoUrl': user.photoURL,
+        'displayId': user.uid.substring(0, 6),
+        'country': 'Unknown',
+        'gender': 'Not specified',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      await userRef.set(userData, SetOptions(merge: true));
+    } else {
+      userData = userDoc.data() as Map<String, dynamic>;
     }
 
     // Clean up existing room if host already has one
@@ -66,8 +78,6 @@ class RoomService {
 
     final roomRef = _roomsRef.push();
     final roomId = roomRef.key!;
-
-    final userData = userDoc.data() as Map<String, dynamic>;
     final String hostName = userData['displayName'] ?? 'Anonymous';
     final String displayId = userData['displayId'] ?? '';
     final String? hostPicture = userData['photoUrl'];
@@ -172,6 +182,7 @@ class RoomService {
       'joinedAt': ServerValue.timestamp,
       'isOnline': true,
       'isMuted': false,
+      'isAdmin': true,
     });
 
     await _setupPresence(roomId, user.uid, isHost: true);
@@ -424,6 +435,7 @@ class RoomService {
       'isMuted': isCoHost ? false : true,
       'isApprovedSpeaker': isCoHost,
       'isModerator': false,
+      'isAdmin': false,
       if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
       if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
     });
@@ -541,16 +553,14 @@ class RoomService {
 
     try {
       if (isHost) {
-        await _roomsRef.child(roomId).onDisconnect().remove();
-        await _participantsRef.child(roomId).onDisconnect().remove();
-        await _eventsRef.child(roomId).onDisconnect().remove();
-        await _requestsRef.child(roomId).onDisconnect().remove();
-        _participantCountListeners[roomId]?.cancel();
-        _participantCountListeners.remove(roomId);
+        // NOTE: Do NOT remove room or participants on temporary disconnect / minimize!
+        // Broadcast must stay active when app is minimized or backgrounded.
+        // Room will be cleaned up when host explicitly ends stream via deleteRoom().
+        await participantRef.child('isOnline').onDisconnect().set(false);
         await roomRef.child('lastActive').set(ServerValue.timestamp);
         _startForegroundHeartbeat(roomId);
       } else {
-        await participantRef.onDisconnect().remove();
+        await participantRef.child('isOnline').onDisconnect().set(false);
       }
       await participantRef.child('isOnline').set(true);
     } catch (e) {
@@ -1231,6 +1241,55 @@ class RoomService {
       // Automatically promote any hidden speakers
       await promoteHiddenSpeakers(roomId);
     }
+  }
+
+  // ============================================================================
+  // CALL INVITES (Host invites participant to join call / seat)
+  // ============================================================================
+
+  static Future<void> sendCallInvite(
+    String roomId,
+    String targetUserId,
+    String inviterName,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await _requestsRef.child('$roomId/call_invites/$targetUserId').set({
+      'roomId': roomId,
+      'hostId': user.uid,
+      'hostName': inviterName,
+      'targetUserId': targetUserId,
+      'timestamp': ServerValue.timestamp,
+    });
+  }
+
+  static Future<void> cancelCallInvite(
+    String roomId,
+    String targetUserId,
+  ) async {
+    await _requestsRef.child('$roomId/call_invites/$targetUserId').remove();
+  }
+
+  static Future<void> rejectCallInvite(
+    String roomId,
+    String targetUserId,
+  ) async {
+    await _requestsRef.child('$roomId/call_invites/$targetUserId').remove();
+  }
+
+  static Future<void> acceptCallInvite(
+    String roomId,
+    String targetUserId,
+  ) async {
+    await _requestsRef.child('$roomId/call_invites/$targetUserId').remove();
+    await inviteOrRemoveParticipantFromCall(roomId, targetUserId, true);
+  }
+
+  static Stream<DatabaseEvent> getCallInviteStream(
+    String roomId,
+    String userId,
+  ) {
+    return _requestsRef.child('$roomId/call_invites/$userId').onValue;
   }
 
   static Future<void> promoteHiddenSpeakers(String roomId) async {

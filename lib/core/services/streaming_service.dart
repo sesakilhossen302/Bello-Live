@@ -4,16 +4,19 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:agora_token_service/agora_token_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class StreamingChatMessage {
+  final String id;
   final String userId;
   final String userName;
   final String message;
   final DateTime timestamp;
 
   StreamingChatMessage({
+    this.id = '',
     required this.userId,
     required this.userName,
     required this.message,
@@ -36,8 +39,16 @@ class StreamingService {
   String? _currentRoomName;
   String? _currentUserId;
   String? _currentUserName;
+  bool _isVideo = false;
+  bool _isHost = false;
+  bool _isMicOn = false;
+  bool _isCameraOn = false;
   int? _dataStreamId;
   bool _isSpeakerMuted = false;
+  
+  // Realtime Database comment and emoji subscriptions
+  StreamSubscription? _commentsSubscription;
+  StreamSubscription? _quickEmojiSubscription;
   
   // For PK Battles, we might need a separate connection in Agora
   // Agora supports multi-channel via RtcEngineEx.joinChannelEx
@@ -55,9 +66,11 @@ class StreamingService {
   final Map<int, String> _uidToAccount = {};
 
   bool get isSpeakerMuted => _isSpeakerMuted;
+  String? get opponentHostId => _opponentHostId;
   Stream<List<String>> get activeSpeakersStream => _activeSpeakersController.stream;
   Stream<Map<String, dynamic>> get dataMessagesStream => _dataMessagesController.stream;
   Stream<StreamingChatMessage> get chatMessagesStream => _chatMessagesController.stream;
+  Stream<ConnectionState> get connectionStateStream => _connectionStateController.stream;
   Stream<void> get remoteParticipantsChangedStream => _remoteParticipantsChangedController.stream;
 
   Future<void> _initEngine() async {
@@ -82,10 +95,33 @@ class StreamingService {
       channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
     ));
 
+    // Configure high quality audio routing and loudspeaker
+    await _engine!.enableAudio();
+    await _engine!.setAudioProfile(
+      profile: AudioProfileType.audioProfileSpeechStandard,
+      scenario: AudioScenarioType.audioScenarioGameStreaming,
+    );
+    try {
+      await _engine!.setDefaultAudioRouteToSpeakerphone(true);
+    } catch (e) {
+      debugPrint('[Agora] setDefaultAudioRouteToSpeakerphone error: $e');
+    }
+    try {
+      await _engine!.adjustPlaybackSignalVolume(100);
+      await _engine!.adjustRecordingSignalVolume(100);
+    } catch (e) {
+      debugPrint('[Agora] adjust volume error: $e');
+    }
+
     _engine!.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           debugPrint('[Agora] Joined channel: ${connection.channelId}');
+          try {
+            _engine?.setEnableSpeakerphone(true);
+          } catch (e) {
+            debugPrint('[Agora] onJoinChannelSuccess setEnableSpeakerphone error: $e');
+          }
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           _engine?.getUserInfoByUid(remoteUid).then((info) {
@@ -161,12 +197,80 @@ class StreamingService {
     bool isVideo = false,
     bool isHost = false,
   }) async {
-    await _initEngine();
-    if (_engine == null) return;
-
     _currentRoomName = roomName;
     _currentUserId = userId;
     _currentUserName = userName;
+    _isVideo = isVideo;
+    _isHost = isHost;
+    _isMicOn = isHost;
+    _isCameraOn = isHost && isVideo;
+
+    // Reset previous stream ID and subscriptions
+    _dataStreamId = null;
+    await _commentsSubscription?.cancel();
+    _commentsSubscription = null;
+    await _quickEmojiSubscription?.cancel();
+    _quickEmojiSubscription = null;
+
+    // Set up Realtime Database listener for comments
+    final commentsRef = isVideo
+        ? FirebaseDatabase.instance.ref('live_events/$roomName/comments')
+        : FirebaseDatabase.instance.ref('room_events/$roomName/comments');
+
+    _commentsSubscription = commentsRef.onChildAdded.listen((event) {
+      try {
+        if (event.snapshot.value != null) {
+          final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+          final id = data['id']?.toString() ?? event.snapshot.key ?? '';
+          final msgUserId = data['userId']?.toString() ?? '';
+          final msgUserName = data['userName']?.toString() ?? 'User';
+          final message = data['message']?.toString() ?? '';
+
+          DateTime timestamp;
+          final rawTs = data['timestamp'];
+          if (rawTs is int) {
+            timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs);
+          } else if (rawTs is num) {
+            timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs.toInt());
+          } else {
+            timestamp = DateTime.now();
+          }
+
+          if (message.isNotEmpty) {
+            _chatMessagesController.add(
+              StreamingChatMessage(
+                id: id,
+                userId: msgUserId,
+                userName: msgUserName,
+                message: message,
+                timestamp: timestamp,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[StreamingService] Error receiving Firebase comment: $e');
+      }
+    });
+
+    // Set up Realtime Database listener for quick floating emojis
+    final quickEmojiRef = isVideo
+        ? FirebaseDatabase.instance.ref('live_events/$roomName/quick_emoji')
+        : FirebaseDatabase.instance.ref('room_events/$roomName/quick_emoji');
+
+    _quickEmojiSubscription = quickEmojiRef.onValue.listen((event) {
+      try {
+        if (event.snapshot.value != null) {
+          final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+          _dataMessagesController.add(data);
+        }
+      } catch (e) {
+        debugPrint('[StreamingService] Error receiving quick emoji: $e');
+      }
+    });
+
+    await _initEngine();
+    if (_engine == null) return;
 
     await _engine!.setClientRole(role: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience);
     
@@ -195,6 +299,11 @@ class StreamingService {
   }
 
   Future<void> disconnect() async {
+    await _commentsSubscription?.cancel();
+    _commentsSubscription = null;
+    await _quickEmojiSubscription?.cancel();
+    _quickEmojiSubscription = null;
+    _dataStreamId = null;
     await disconnectOpponentPKRoom();
     await _engine?.leaveChannel();
     _currentRoomName = null;
@@ -233,11 +342,85 @@ class StreamingService {
   }
 
   Future<void> setMicrophoneEnabled(bool enabled) async {
-    await _engine?.enableLocalAudio(enabled);
+    _isMicOn = enabled;
+    if (_engine == null) return;
+    try {
+      if (enabled) {
+        // Promote client role to Broadcaster so Agora allows publishing audio track
+        await _engine!.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
+        await _engine!.enableAudio();
+        await _engine!.enableLocalAudio(true);
+        await _engine!.muteLocalAudioStream(false);
+        await _engine!.updateChannelMediaOptions(
+          const ChannelMediaOptions(
+            publishMicrophoneTrack: true,
+            clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          ),
+        );
+      } else {
+        await _engine!.muteLocalAudioStream(true);
+        await _engine!.enableLocalAudio(false);
+        // Only demote to Audience if not publishing camera and not host
+        if (!_isHost && !_isCameraOn) {
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishMicrophoneTrack: false,
+              clientRoleType: ClientRoleType.clientRoleAudience,
+            ),
+          );
+          await _engine!.setClientRole(role: ClientRoleType.clientRoleAudience);
+        } else {
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishMicrophoneTrack: false,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[StreamingService] Error setting microphone enabled: $e');
+    }
   }
 
   Future<void> setCameraEnabled(bool enabled) async {
-    await _engine?.enableLocalVideo(enabled);
+    _isCameraOn = enabled;
+    if (_engine == null) return;
+    try {
+      if (enabled) {
+        await _engine!.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
+        await _engine!.enableVideo();
+        await _engine!.enableLocalVideo(true);
+        await _engine!.startPreview();
+        await _engine!.muteLocalVideoStream(false);
+        await _engine!.updateChannelMediaOptions(
+          const ChannelMediaOptions(
+            publishCameraTrack: true,
+            clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          ),
+        );
+      } else {
+        await _engine!.muteLocalVideoStream(true);
+        await _engine!.enableLocalVideo(false);
+        await _engine!.stopPreview();
+        if (!_isHost && !_isMicOn) {
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishCameraTrack: false,
+              clientRoleType: ClientRoleType.clientRoleAudience,
+            ),
+          );
+          await _engine!.setClientRole(role: ClientRoleType.clientRoleAudience);
+        } else {
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishCameraTrack: false,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[StreamingService] Error setting camera enabled: $e');
+    }
   }
 
   Future<bool> flipCamera() async {
@@ -247,36 +430,103 @@ class StreamingService {
 
   Future<void> setSpeakerMuted(bool muted) async {
     _isSpeakerMuted = muted;
-    // In Agora, to mute the speaker/playback, we can adjust playback signal volume
     await _engine?.adjustPlaybackSignalVolume(muted ? 0 : 100);
+    await _engine?.setEnableSpeakerphone(!muted);
   }
 
   Future<void> publishData(Map<String, dynamic> payload) async {
     if (_engine == null) return;
-    if (_dataStreamId == null) {
-      _dataStreamId = await _engine!.createDataStream(const DataStreamConfig(syncWithAudio: false, ordered: true));
+    try {
+      _dataStreamId ??= await _engine!.createDataStream(const DataStreamConfig(syncWithAudio: false, ordered: true));
+      final bytes = utf8.encode(jsonEncode(payload));
+      await _engine!.sendStreamMessage(streamId: _dataStreamId!, data: Uint8List.fromList(bytes), length: bytes.length);
+    } catch (e) {
+      // Safe to ignore for audience members who cannot create data streams
+      debugPrint('[Agora] publishData ignored: $e');
     }
-    final bytes = utf8.encode(jsonEncode(payload));
-    await _engine!.sendStreamMessage(streamId: _dataStreamId!, data: Uint8List.fromList(bytes), length: bytes.length);
   }
 
-  Future<void> sendChatMessage(String messageText) async {
-    await publishData({
-      'type': 'chat',
-      'userId': _currentUserId ?? '',
-      'userName': _currentUserName ?? '',
-      'message': messageText,
-    });
+  Future<void> sendChatMessage(
+    String messageText, {
+    String? roomId,
+    bool? isVideo,
+    String? customId,
+  }) async {
+    final targetRoom = roomId ?? _currentRoomName;
+    if (targetRoom == null || targetRoom.isEmpty) {
+      debugPrint('[StreamingService] Cannot send chat message: No active room.');
+      return;
+    }
+
+    final targetIsVideo = isVideo ?? _isVideo;
+    final msgId = customId ??
+        FirebaseDatabase.instance.ref().push().key ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+
+    // 1. Post to Firebase Realtime Database so all room participants (broadcasters & audience) receive it
+    try {
+      final commentsRef = targetIsVideo
+          ? FirebaseDatabase.instance.ref('live_events/$targetRoom/comments')
+          : FirebaseDatabase.instance.ref('room_events/$targetRoom/comments');
+
+      await commentsRef.child(msgId).set({
+        'id': msgId,
+        'userId': _currentUserId ?? '',
+        'userName': _currentUserName ?? 'User',
+        'message': messageText,
+        'timestamp': ServerValue.timestamp,
+      });
+    } catch (e) {
+      debugPrint('[StreamingService] Error posting comment to Firebase: $e');
+    }
+
+    // 2. Also attempt Agora DataStream if broadcaster
+    try {
+      await publishData({
+        'type': 'chat',
+        'id': msgId,
+        'userId': _currentUserId ?? '',
+        'userName': _currentUserName ?? 'User',
+        'message': messageText,
+      });
+    } catch (_) {}
   }
 
-  Future<void> sendEmoji(String emoji) async {
-    await publishData({
-      'type': 'emoji',
-      'userId': _currentUserId ?? '',
-      'userName': _currentUserName ?? '',
-      'emoji': emoji,
-      'command': 'EMOJI_ANIM:$emoji',
-    });
+  Future<void> sendEmoji(
+    String emoji, {
+    String? roomId,
+    bool? isVideo,
+  }) async {
+    final targetRoom = roomId ?? _currentRoomName;
+    final targetIsVideo = isVideo ?? _isVideo;
+
+    if (targetRoom != null && targetRoom.isNotEmpty) {
+      try {
+        final quickEmojiRef = targetIsVideo
+            ? FirebaseDatabase.instance.ref('live_events/$targetRoom/quick_emoji')
+            : FirebaseDatabase.instance.ref('room_events/$targetRoom/quick_emoji');
+
+        await quickEmojiRef.set({
+          'type': 'emoji',
+          'userId': _currentUserId ?? '',
+          'userName': _currentUserName ?? 'User',
+          'emoji': emoji,
+          'timestamp': ServerValue.timestamp,
+        });
+      } catch (e) {
+        debugPrint('[StreamingService] Error posting emoji to Firebase: $e');
+      }
+    }
+
+    try {
+      await publishData({
+        'type': 'emoji',
+        'userId': _currentUserId ?? '',
+        'userName': _currentUserName ?? '',
+        'emoji': emoji,
+        'command': 'EMOJI_ANIM:$emoji',
+      });
+    } catch (_) {}
   }
 
   Widget buildVideoView(

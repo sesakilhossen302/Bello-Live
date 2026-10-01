@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:picture_live/core/services/streaming_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/cubits/app_cubit.dart';
 
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
@@ -161,6 +163,7 @@ class RoomParticipant {
 }
 
 class ChatMessage {
+  final String? id;
   final String userId;
   final String username;
   final String message;
@@ -170,6 +173,7 @@ class ChatMessage {
   final bool isJoinMessage;
 
   ChatMessage({
+    this.id,
     required this.userId,
     required this.username,
     required this.message,
@@ -257,6 +261,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   StreamSubscription? _coHostRequestsSubscription;
   StreamSubscription? _emojiSubscription;
   StreamSubscription? _giftNotificationSubscription;
+  StreamSubscription? _callInviteSubscription;
+  bool _isCallInviteDialogShowing = false;
 
   final Map<String, Stream<int>> _balanceStreamCache = {};
 
@@ -266,7 +272,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   int _lastProcessedGiftTime = 0;
 
-  late Map<String, dynamic> roomData;
+  Map<String, dynamic> roomData = {};
   List<RoomParticipant> _participants = [];
   final List<ChatMessage> _messages = [];
   List<SpeakerRequest> _speakerRequests = [];
@@ -372,6 +378,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _emojiTimer?.cancel();
     _coHostElapsedTimer?.cancel();
     _giftNotificationSubscription?.cancel();
+    _callInviteSubscription?.cancel();
+    WakelockPlus.disable();
 
     _chatFocusNode.removeListener(_updateChatExpansion);
     _chatFocusNode.dispose();
@@ -398,6 +406,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   }
 
   Future<void> _initialize() async {
+    WakelockPlus.enable();
     try {
       final roomDoc = await RoomService.getRoomInfo(widget.roomID);
       if (!roomDoc.exists) {
@@ -763,11 +772,19 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     });
 
     _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
-      if (mounted) {
+      if (!mounted) return;
+      final bool alreadyExists = _messages.any((m) =>
+          (m.id != null && message.id.isNotEmpty && m.id == message.id) ||
+          (m.userId == message.userId &&
+              m.message == message.message &&
+              m.timestamp.difference(message.timestamp).abs().inSeconds < 4));
+
+      if (!alreadyExists) {
         setState(() {
           _messages.insert(
             0,
             ChatMessage(
+              id: message.id,
               userId: message.userId,
               username: message.userName,
               message: message.message,
@@ -782,6 +799,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     StreamingService.instance.dataMessagesStream.listen((data) {
       if (!mounted) return;
       if (data['type'] == 'emoji') {
+        final senderId = data['userId'] as String? ?? '';
+        if (senderId == _auth.currentUser?.uid) return;
         final emoji = data['emoji'] as String? ?? '';
         if (emoji.isNotEmpty) {
           _showFloatingEmoji(emoji, senderName: data['userName'] as String?);
@@ -1097,6 +1116,103 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             if (mounted) setState(() => _coHostRequests = requests);
           });
     }
+
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId != null && !widget.isHost) {
+      _callInviteSubscription =
+          RoomService.getCallInviteStream(widget.roomID, currentUserId).listen((event) {
+            if (!event.snapshot.exists || event.snapshot.value == null) return;
+            final data = event.snapshot.value;
+            if (data is Map) {
+              final hostName = (data['hostName'] as String?) ?? 'Host';
+              _showCallInviteDialog(hostName, currentUserId);
+            }
+          });
+    }
+  }
+
+  void _showCallInviteDialog(String hostName, String myUserId) {
+    if (_isCallInviteDialogShowing || !mounted) return;
+    _isCallInviteDialogShowing = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1D2B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.phone_in_talk, color: Colors.greenAccent, size: 26),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Seat Call Invitation',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '$hostName invited you to take a seat on the call!',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              _isCallInviteDialogShowing = false;
+              await RoomService.rejectCallInvite(widget.roomID, myUserId);
+            },
+            child: const Text('Decline', style: TextStyle(color: Colors.redAccent, fontSize: 15)),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.mic, color: Colors.white, size: 18),
+            label: const Text('Accept & Speak', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              _isCallInviteDialogShowing = false;
+              try {
+                await RoomService.acceptCallInvite(widget.roomID, myUserId);
+                await StreamingService.instance.setMicrophoneEnabled(true);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Joined seat call successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error joining seat: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    ).then((_) {
+      _isCallInviteDialogShowing = false;
+    });
   }
 
   void _showEmoji({
@@ -2996,6 +3112,28 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                       ),
                     ),
                   ),
+                  if (participant.isAdmin)
+                    Positioned(
+                      top: -4,
+                      left: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'ADMIN',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (participant.isMuted)
                     Positioned(
                       bottom: -2,
@@ -3877,13 +4015,17 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     const double iconSize = 18.0;
     const double paddingRight = 6.0;
 
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double bottomPadding = mediaQuery.viewInsets.bottom > 0
+        ? 10.0 + mediaQuery.viewInsets.bottom
+        : math.max(26.0, 12.0 + safeBottom);
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        10,
-        8,
-        10,
-        8 + MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.fromLTRB(10, 8, 10, bottomPadding),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -3891,19 +4033,19 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              height: 38.0,
-              padding: const EdgeInsets.only(left: 4, right: 4),
+              height: 40.0,
+              padding: const EdgeInsets.only(left: 6, right: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1B2A),
+                color: const Color(0xFF0F172A).withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: const Color(0xFF1E88E5),
-                  width: 1.5,
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.55),
+                  width: 1.2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1E88E5).withValues(alpha: 0.25),
-                    blurRadius: 6,
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                    blurRadius: 8,
                     spreadRadius: 0.5,
                   ),
                 ],
@@ -3914,6 +4056,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     child: TextField(
                       controller: _chatController,
                       focusNode: _chatFocusNode,
+                      textInputAction: TextInputAction.send,
                       style: const TextStyle(color: Colors.white, fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'Message...',
@@ -3925,7 +4068,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10,
-                          vertical: 8,
+                          vertical: 9,
                         ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
@@ -3933,18 +4076,23 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   ),
                   GestureDetector(
                     onTap: _sendMessage,
+                    behavior: HitTestBehavior.opaque,
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 30,
+                      height: 30,
                       margin: const EdgeInsets.only(right: 2),
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF38BDF8), Color(0xFF818CF8)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                       ),
                       child: const Center(
                         child: Icon(
                           Icons.send_rounded,
-                          color: Color(0xFF0D1B2A),
+                          color: Colors.white,
                           size: 15,
                         ),
                       ),
@@ -4150,7 +4298,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     if (messageText.isEmpty) return;
     
     // Check if the current user is chat muted
-    final String currentUserId = _auth.currentUser!.uid;
+    final String currentUserId = _auth.currentUser?.uid ?? '';
     RoomParticipant? currentUserParticipant;
     try {
       currentUserParticipant = _participants.firstWhere((p) => p.userId == currentUserId);
@@ -4163,23 +4311,32 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       return;
     }
 
+    final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
+    _chatController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    setState(() {
+      _isCommentsHidden = false;
+      _messages.insert(
+        0,
+        ChatMessage(
+          id: msgId,
+          userId: currentUserId,
+          username: _currentUserName,
+          message: messageText,
+          timestamp: DateTime.now(),
+        ),
+      );
+    });
+    _scrollToNewestMessage();
+
     try {
-      await StreamingService.instance.sendChatMessage(messageText);
-      setState(() {
-        _isCommentsHidden = false;
-        _messages.insert(
-          0,
-          ChatMessage(
-            userId: _auth.currentUser!.uid,
-            username: _currentUserName,
-            message: messageText,
-            timestamp: DateTime.now(),
-          ),
-        );
-      });
-      _chatController.clear();
-      _scrollToNewestMessage();
-      FocusManager.instance.primaryFocus?.unfocus();
+      await StreamingService.instance.sendChatMessage(
+        messageText,
+        roomId: widget.roomID,
+        isVideo: false,
+        customId: msgId,
+      );
     } catch (e) {
       debugPrint('Error sending message: $e');
     }
@@ -4187,22 +4344,33 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   void _sendJoinMessage() async {
     const messageText = "Just joined the room!";
+    final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
+    final String currentUserId = _auth.currentUser?.uid ?? '';
+
+    if (mounted) {
+      setState(() {
+        _messages.insert(
+          0,
+          ChatMessage(
+            id: msgId,
+            userId: currentUserId,
+            username: _currentUserName,
+            message: messageText,
+            timestamp: DateTime.now(),
+            isJoinMessage: true,
+          ),
+        );
+      });
+      _scrollToNewestMessage();
+    }
+
     try {
-      await StreamingService.instance.sendChatMessage(messageText);
-      if (mounted) {
-        setState(() {
-          _messages.insert(
-            0,
-            ChatMessage(
-              userId: _auth.currentUser!.uid,
-              username: _currentUserName,
-              message: messageText,
-              timestamp: DateTime.now(),
-            ),
-          );
-        });
-        _scrollToNewestMessage();
-      }
+      await StreamingService.instance.sendChatMessage(
+        messageText,
+        roomId: widget.roomID,
+        isVideo: false,
+        customId: msgId,
+      );
     } catch (e) {
       debugPrint('Error sending join message: $e');
     }
@@ -4324,7 +4492,13 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     }
   }
   Widget _buildEmojiColumnOverlay() {
-    final double bottomOffset = 64.0 + MediaQuery.of(context).padding.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double chatInputBottom = math.max(26.0, 12.0 + safeBottom);
+    final double bottomOffset = 54.0 + chatInputBottom;
 
     return Positioned(
       right: 12,
@@ -4375,8 +4549,12 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   void _sendEmojiMessage(String emoji) async {
     try {
-      await StreamingService.instance.sendEmoji(emoji);
       _showFloatingEmoji(emoji, senderName: _currentUserName);
+      await StreamingService.instance.sendEmoji(
+        emoji,
+        roomId: widget.roomID,
+        isVideo: false,
+      );
     } catch (e) {
       debugPrint('Error sending emoji message: $e');
     }

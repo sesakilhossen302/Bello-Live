@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -433,8 +434,15 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
   }
 
   Widget _buildBottomSection() {
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double bottomPadding = math.max(12.0, 8.0 + safeBottom);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.3),
         border: Border(
