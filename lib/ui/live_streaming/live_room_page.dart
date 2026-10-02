@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter_svga/flutter_svga.dart';
 import 'package:picture_live/core/services/streaming_service.dart';
 import 'package:collection/collection.dart';
@@ -27,9 +28,9 @@ import '../profile/profile_page.dart';
 import '../streaming/audio_room_page.dart';
 import 'bottomsheets/invite_pk_bottomsheet.dart';
 import 'bottomsheets/profile_info_bottomsheet.dart';
-import 'bottomsheets/live_tools_bottomsheet.dart';
-import 'bottomsheets/participants_bottomsheet.dart';
-import 'bottomsheets/requests_bottomsheet.dart';
+import 'bottomsheets/call_and_views_bottomsheet.dart';
+import 'bottomsheets/emoji_bottomsheet.dart';
+import '../../ui/streaming/bottomsheets/rocket_config_bottomsheet.dart';
 
 import '../../ui/streaming/bottomsheets/play_music_bottomsheet.dart';
 import 'bottomsheets/video_gifts_bottomsheet.dart';
@@ -206,6 +207,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   String _roomNotice = "";
   bool _isRoomEnded = false;
   bool _isCurrentModerator = false;
+  bool _isRightMenuExpanded = false;
+  bool _isSpeakerMuted = false;
 
   // --- Join Animation Variables ---
   final Duration welcomeTime = const Duration(milliseconds: 3500);
@@ -291,6 +294,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     super.initState();
     _isJoined = widget.isHost;
     _musicPlayerManager = MusicPlayerManager();
+    _isSpeakerMuted = StreamingService.instance.isSpeakerMuted;
 
     // Initialize Animation Controller
     _joinAnimationController = AnimationController(
@@ -1061,8 +1065,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           final isNowJoined = myParticipant.isOnSeat;
 
           if (isNowJoined && !_isJoined) {
-            debugPrint("Join request approved! Starting local audio stream.");
+            debugPrint("Join request approved! Starting local audio & video stream.");
             StreamingService.instance.setMicrophoneEnabled(true);
+            Permission.camera.request().then((status) {
+              if (status.isGranted) {
+                StreamingService.instance.setCameraEnabled(true);
+                LiveStreamService.toggleCameraState(widget.roomID, true);
+              }
+            });
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Host accepted your request! You are now live on call.'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           } else if (!isNowJoined && _isJoined) {
             debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
             StreamingService.instance.setMicrophoneEnabled(false);
@@ -1164,24 +1183,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     });
 
-    if (widget.isHost) {
-      _joinRequestsSubscription =
-          LiveStreamService.getJoinRequestsStream(widget.roomID).listen((
-            event,
-          ) {
-            if (!event.snapshot.exists) {
-              if (mounted) setState(() => _joinRequests = []);
-              return;
-            }
-            final requestsMap = Map<dynamic, dynamic>.from(
-              event.snapshot.value as Map,
-            );
-            final requests = requestsMap.entries
-                .map((entry) => JoinRequest.fromRTDB(entry.key, entry.value))
-                .toList();
-            if (mounted) setState(() => _joinRequests = requests);
-          });
+    _joinRequestsSubscription =
+        LiveStreamService.getJoinRequestsStream(widget.roomID).listen((
+          event,
+        ) {
+          if (!event.snapshot.exists) {
+            if (mounted) setState(() => _joinRequests = []);
+            return;
+          }
+          final requestsMap = Map<dynamic, dynamic>.from(
+            event.snapshot.value as Map,
+          );
+          final requests = requestsMap.entries
+              .map((entry) => JoinRequest.fromRTDB(entry.key, entry.value))
+              .toList();
+          if (mounted) setState(() => _joinRequests = requests);
+        });
 
+    if (widget.isHost) {
       _pkInvitesSubscription =
           LiveStreamService.getPKInvitesStream(widget.roomID).listen((invites) {
             debugPrint('Received PK invites: $invites');
@@ -2066,7 +2085,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   _buildFullScreenGift(),
                   _buildGiftOverlay(),
 
-                  if (_isInitialized && !_isChatExpanded) _buildEmojiColumnOverlay(),
+                  if (_isInitialized && !_isChatExpanded) _buildRightToolbar(),
                   if (_isInitialized) _buildFloatingEmojis(),
                   if (_isInitialized) FloatingYoutubePlayer(roomId: widget.roomID, isHost: widget.isHost),
                 ],
@@ -2314,93 +2333,48 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
 
-            const SizedBox(width: 8),
-            // Participant Avatars Stack
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 70),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: _buildParticipantAvatars(guestParticipants),
-              ),
-            ),
+            const Spacer(),
 
-            const SizedBox(width: 6),
-
-            // Participant Count Badge
-            GestureDetector(
-              onTap: () {
-                final bool isCurrentAdmin = widget.isHost || _isCurrentModerator || _participants.any((p) => p.userId == _auth.currentUser?.uid && p.isAdmin);
-                showLiveStreamParticipantsBottomSheet(
-                  context,
-                  participants: _participants.where((p) => !p.isModerator && p.userId != hostId).toList(),
-                  currentUserId: _auth.currentUser!.uid,
-                  hostId: hostId,
-                  roomId: widget.roomID,
-                  isCurrentUserModerator: isCurrentAdmin,
-                );
+            // Top-right Speaker Mute/Unmute Button (Image 1 & 2)
+            _buildCircleActionButton(
+              size: 38,
+              onTap: () async {
+                final newMute = !_isSpeakerMuted;
+                setState(() => _isSpeakerMuted = newMute);
+                await StreamingService.instance.setSpeakerMuted(newMute);
               },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      CupertinoIcons.person_2_fill,
-                      color: Colors.pink,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      (guestParticipants.isNotEmpty
-                              ? guestParticipants.length
-                              : (_participantCount > 1 ? _participantCount - 1 : 0))
-                          .toString(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+              child: Icon(
+                _isSpeakerMuted
+                    ? CupertinoIcons.speaker_slash_fill
+                    : CupertinoIcons.speaker_2_fill,
+                color: Colors.white,
+                size: 18,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
 
             if (_isCurrentModerator) ...[
-              IconButton(
-                icon: const Icon(
+              _buildCircleActionButton(
+                size: 38,
+                onTap: _showModeratorCloseDialog,
+                child: const Icon(
                   Icons.cancel_presentation_rounded,
-                  size: 24,
                   color: Colors.redAccent,
+                  size: 19,
                 ),
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(),
-                onPressed: _showModeratorCloseDialog,
-                tooltip: 'Close Live (Moderator)',
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
             ],
 
-            // Exit Button - FIXED AT RIGHT
-            IconButton(
-              icon: const Icon(
-                Icons.exit_to_app_rounded,
-                size: 24,
-                color: Colors.grey,
+            // Top-right Exit Button (Image 1 & 2)
+            _buildCircleActionButton(
+              size: 38,
+              onTap: _showExitConfirmationDialog,
+              child: const Icon(
+                Icons.power_settings_new,
+                color: Colors.white,
+                size: 20,
               ),
-              padding: const EdgeInsets.all(8),
-              constraints: const BoxConstraints(),
-              onPressed: _showExitConfirmationDialog,
-              tooltip: 'Exit Room',
             ),
           ],
         ),
@@ -2469,125 +2443,61 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final String hostId = roomData['hostId'] ?? '';
     if (hostId.isEmpty) return const SizedBox.shrink();
 
+    final guestParticipants = _participants
+        .where((p) => p.userId != hostId && !p.isModerator)
+        .toList();
+    final int viewerCount = guestParticipants.isNotEmpty
+        ? guestParticipants.length
+        : (_participantCount > 1 ? _participantCount - 1 : 0);
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16.0, 0, 8.0, 8.0),
+      padding: const EdgeInsets.fromLTRB(14.0, 2.0, 14.0, 6.0),
       child: Row(
         children: [
-          // Duration timer chip for host
-          if (widget.isHost) ...[buildDurationChip(), const SizedBox(width: 8)],
           StreamBuilder<int>(
             stream: _diamondsStreamCache.putIfAbsent(
               hostId,
               () => ProfileService.getUserDiamondsStream(hostId),
             ),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return Row(
-                  children: [
-                    _buildStatChip(
-                      Icons.diamond_outlined,
-                      "...",
-                      Colors.grey.shade700,
-                    ),
-                  ],
-                );
-              }
-
               final int dailyDiamonds = snapshot.data ?? 0;
+              final int starCount = dailyDiamonds ~/ 100000;
 
-              return GestureDetector(
-                onTap: () {
-                  showFansRankingBottomSheet(context, hostId);
-                },
-                child: Row(
-                  children: [
-                    _buildStatChip(
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Diamond Chip
+                  GestureDetector(
+                    onTap: () => showFansRankingBottomSheet(context, hostId),
+                    child: _buildStatChip(
                       Icons.diamond_outlined,
                       '$dailyDiamonds',
-                      Colors.cyan.shade300,
+                      Colors.cyanAccent,
                     ),
-                    if (dailyDiamonds >= 100000) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.star, color: Colors.amber, size: 14),
-                      const SizedBox(width: 2),
-                      Text(
-                        '${dailyDiamonds ~/ 100000}',
-                        style: const TextStyle(
-                          color: Colors.amber,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Star Chip
+                  _buildStatChip(
+                    Icons.star,
+                    '$starCount',
+                    Colors.amber,
+                  ),
+                  const SizedBox(width: 8),
+                ],
               );
             },
           ),
-          const SizedBox(width: 8),
+
+          // View / Viewer count chip -> Opens Image 3 bottomsheet on Tab 0 (VIEWS)
           GestureDetector(
-            onTap: () {
-              setState(() {
-                _isDiamondLocked = !_isDiamondLocked;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _isDiamondLocked ? Icons.lock : Icons.lock_outline,
-                color: Colors.white,
-                size: 14,
-              ),
+            onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
+            child: _buildStatChip(
+              Icons.remove_red_eye_rounded,
+              '$viewerCount',
+              Colors.white70,
             ),
           ),
-          if (widget.isHost) ...[
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () async {
-                final bool isCurrentlyLocked = roomData['isLocked'] == true;
-                final bool newLockState = !isCurrentlyLocked;
-
-                try {
-                  await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
-                  if (mounted) {
-                    setState(() {
-                      roomData['isLocked'] = newLockState;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(newLockState ? 'Room is locked!' : 'Room is unlocked!'),
-                        backgroundColor: newLockState ? Colors.redAccent : Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-              },
-              child: Builder(
-                builder: (context) {
-                  final bool isRoomLocked = roomData['isLocked'] == true;
-
-                  return _buildStatChip(
-                    isRoomLocked ? Icons.lock : Icons.lock_open,
-                    isRoomLocked ? 'Locked' : 'Lock',
-                    isRoomLocked ? Colors.redAccent : Colors.greenAccent,
-                  );
-                },
-              ),
-            ),
-          ],
-          const Spacer(),
         ],
       ),
     );
@@ -3849,24 +3759,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildChatInput() {
-    LiveStreamParticipant? currentUserParticipant;
-    if (_isJoined) {
-      try {
-        currentUserParticipant = _participants.firstWhere(
-          (p) => p.userId == _auth.currentUser!.uid,
-        );
-      } catch (e) {
-        currentUserParticipant = null;
-      }
-    }
-    final bool isCurrentlyMuted =
-        _localMuteOverride ?? (currentUserParticipant?.isMuted ?? true);
-    final bool isCurrentlyCameraOn = currentUserParticipant?.isCameraOn ?? false;
-    final int totalRequests = _joinRequests.length;
-
-    const double buttonSize = 34.0;
-    const double iconSize = 18.0;
-    const double paddingRight = 6.0;
+    const double buttonSize = 40.0;
+    const double paddingRight = 8.0;
 
     final mediaQuery = MediaQuery.of(context);
     final double safeBottom = math.max(
@@ -3878,30 +3772,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         : math.max(26.0, 12.0 + safeBottom);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(10, 8, 10, bottomPadding),
+      padding: EdgeInsets.fromLTRB(12, 8, 12, bottomPadding),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Input pill (Image 1 & 2)
           Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              height: 40.0,
-              padding: const EdgeInsets.only(left: 6, right: 4),
+            child: Container(
+              height: 42.0,
+              padding: const EdgeInsets.only(left: 14, right: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+                color: Colors.black.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.55),
-                  width: 1.2,
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 1.0,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    spreadRadius: 0.5,
-                  ),
-                ],
               ),
               child: Row(
                 children: [
@@ -3910,19 +3796,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       controller: _chatController,
                       focusNode: _chatFocusNode,
                       textInputAction: TextInputAction.send,
-                      style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'Message...',
+                        hintText: 'Say hi',
                         hintStyle: TextStyle(
                           color: Colors.white.withValues(alpha: 0.65),
-                          fontSize: 13,
+                          fontSize: 13.5,
                         ),
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
@@ -3931,22 +3814,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     onTap: _sendMessage,
                     behavior: HitTestBehavior.opaque,
                     child: Container(
-                      width: 30,
-                      height: 30,
+                      width: 32,
+                      height: 32,
                       margin: const EdgeInsets.only(right: 2),
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF38BDF8), Color(0xFF818CF8)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: Colors.transparent,
                       ),
                       child: const Center(
                         child: Icon(
                           Icons.send_rounded,
                           color: Colors.white,
-                          size: 15,
+                          size: 18,
                         ),
                       ),
                     ),
@@ -3955,8 +3834,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
+
           if (!_isChatExpanded) ...[
+            // 1. Gift Button (Image 1 & 2)
             Padding(
               padding: const EdgeInsets.only(right: paddingRight),
               child: GestureDetector(
@@ -3987,325 +3868,138 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   height: buttonSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF881337), Color(0xFF4C0519)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    border: Border.all(
+                      color: const Color(0xFFFF2D55).withValues(alpha: 0.6),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    CupertinoIcons.gift_fill,
-                    color: Colors.white,
-                    size: 16,
+                  child: const Center(
+                    child: Icon(
+                      CupertinoIcons.gift_fill,
+                      color: Color(0xFFFFD54F),
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
             ),
+
+            // 2. Call Button (Image 3 Popup: VIEWS, WAITING, ADMINS, LIVE)
             Padding(
               padding: const EdgeInsets.only(right: paddingRight),
               child: GestureDetector(
                 onTap: () {
                   FocusManager.instance.primaryFocus?.unfocus();
-                  showLiveToolsBottomSheet(
-                    context,
-                    isHost: widget.isHost,
-                    currentRoomId: widget.roomID,
-                    hostId: roomData['hostId'] ?? '',
-                    hostName: roomData['hostName'] ?? 'Host',
-                    pendingInvites: _pendingInvites,
-                    musicManager: _musicPlayerManager,
-                  );
+                  _openCallAndViewsBottomSheet(initialTab: widget.isHost ? 1 : 0);
                 },
-                child: Container(
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.2),
-                  ),
-                  child: const Icon(
-                    Icons.more_horiz,
-                    color: Colors.white,
-                    size: iconSize,
-                  ),
-                ),
-              ),
-            ),
-            if (_isJoined) ...[
-
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () async {
-                    final newMuteState = !isCurrentlyMuted;
-                    setState(() {
-                      _localMuteOverride = newMuteState;
-                    });
-                    try {
-                      await StreamingService.instance.setMicrophoneEnabled(!newMuteState);
-                      await LiveStreamService.toggleMuteState(
-                        widget.roomID,
-                        newMuteState,
-                      );
-                    } catch (e) {
-                      debugPrint('Error toggling mute state: $e');
-                    }
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
-                    child: Icon(
-                      isCurrentlyMuted
-                          ? CupertinoIcons.mic_off
-                          : CupertinoIcons.mic_fill,
-                      color: isCurrentlyMuted ? Colors.white : Colors.pink,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () async {
-                    final newCameraState = !isCurrentlyCameraOn;
-                    if (newCameraState) {
-                      final status = await Permission.camera.request();
-                      if (!status.isGranted) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Camera permission is required to turn on video.'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                    }
-                    StreamingService.instance.setCameraEnabled(newCameraState);
-                    if (!newCameraState) {
-                      _isFrontCamera = true;
-                    }
-                    LiveStreamService.toggleCameraState(
-                      widget.roomID,
-                      newCameraState,
-                    );
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
-                    child: Icon(
-                      isCurrentlyCameraOn
-                          ? Icons.videocam
-                          : Icons.videocam_off,
-                      color: isCurrentlyCameraOn ? Colors.white : Colors.pink,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
-              if (isCurrentlyCameraOn)
-                Padding(
-                  padding: const EdgeInsets.only(right: paddingRight),
-                  child: GestureDetector(
-                    onTap: () async {
-                      if (_isSwitchingCamera) return;
-                      setState(() {
-                        _isSwitchingCamera = true;
-                      });
-                      try {
-                        final isFront = await StreamingService.instance.flipCamera();
-                        if (mounted) {
-                          setState(() {
-                            _isFrontCamera = isFront;
-                          });
-                        }
-                      } catch (e) {
-                        debugPrint("Error flipping camera: $e");
-                      } finally {
-                        if (mounted) {
-                          setState(() {
-                            _isSwitchingCamera = false;
-                          });
-                        }
-                      }
-                    },
-                    child: Container(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
                       width: buttonSize,
                       height: buttonSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.black.withValues(alpha: 0.2),
-                      ),
-                      child: _isSwitchingCamera
-                          ? const Center(
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            )
-                          : Icon(
-                              Icons.flip_camera_ios,
-                              color: _isFrontCamera ? Colors.white : Colors.amberAccent,
-                              size: iconSize,
-                            ),
-                    ),
-                  ),
-                ),
-            ],
-            if (widget.isHost) ...[
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    if (_isPKMode) {
-                      // Option to end PK
-                      _showEndPKConfirmation();
-                    } else {
-                      showInvitePKBottomSheet(
-                        context,
-                        pendingInvites: _pendingInvites,
-                        currentRoomId: widget.roomID,
-                      );
-                    }
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _isPKMode
-                          ? Colors.red.withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.2),
-                      border: _isPKMode
-                          ? Border.all(color: Colors.red, width: 1.5)
-                          : null,
-                    ),
-                    child: Icon(
-                      _isPKMode ? Icons.stop_circle : Icons.bolt,
-                      color: _isPKMode ? Colors.red : Colors.orange,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () {
-                    final hostId = roomData['hostId'] ?? '';
-                    final currentGuestCount = _participants
-                        .where((p) => p.userId != hostId && p.isOnSeat)
-                        .length;
-                    showLiveStreamJoinRequestsBottomSheet(
-                      context: context,
-                      joinRequests: _joinRequests,
-                      roomID: widget.roomID,
-                      currentGuestCount: currentGuestCount,
-                    );
-                  },
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: buttonSize,
-                        height: buttonSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: totalRequests > 0
-                              ? Colors.pink.withValues(alpha: 0.2)
-                              : Colors.black.withValues(alpha: 0.2),
-                          border: totalRequests > 0
-                              ? Border.all(
-                                  color: Colors.pink.withValues(alpha: 0.5),
-                                  width: 1,
-                                )
-                              : null,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF881337), Color(0xFF4C0519)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        border: Border.all(
+                          color: const Color(0xFFFF2D55).withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
                         child: Icon(
                           Icons.call,
-                          color: totalRequests > 0 ? Colors.pink : Colors.white,
-                          size: iconSize,
+                          color: Colors.white,
+                          size: 20,
                         ),
                       ),
-                      if (totalRequests > 0)
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.pink,
-                            ),
-                            child: Text(
-                              totalRequests.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
+                    ),
+                    if (widget.isHost && _joinRequests.isNotEmpty)
+                      Positioned(
+                        top: -3,
+                        right: -3,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFFE91E63),
+                          ),
+                          child: Text(
+                            _joinRequests.length.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                    ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 3. Heart / Like Reaction Button (Image 1 & 2)
+            GestureDetector(
+              onTap: () {
+                _sendEmojiMessage('❤️');
+              },
+              child: Container(
+                width: buttonSize,
+                height: buttonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF881337), Color(0xFF4C0519)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(
+                    color: const Color(0xFFFF2D55).withValues(alpha: 0.6),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    CupertinoIcons.heart_fill,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
               ),
-            ],
-            if (_isJoined && !widget.isHost)
-              Padding(
-                padding: const EdgeInsets.only(right: paddingRight),
-                child: GestureDetector(
-                  onTap: () async {
-                    if (currentUserParticipant?.isLocked == true) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'You are locked and cannot change seats.',
-                            ),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                      return;
-                    }
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    try {
-                      StreamingService.instance.setMicrophoneEnabled(false);
-                      StreamingService.instance.setCameraEnabled(false);
-                      await LiveStreamService.leaveSeat(widget.roomID);
-                    } catch (e) {
-                      debugPrint("Error leaving call: $e");
-                    }
-                  },
-                  child: Container(
-                    width: buttonSize,
-                    height: buttonSize,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.red,
-                    ),
-                    child: const Icon(
-                      Icons.call_end,
-                      color: Colors.white,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-              ),
+            ),
           ],
+
           if (_isChatExpanded)
             Padding(
               padding: const EdgeInsets.only(left: 6),
@@ -4370,60 +4064,599 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   bool _isFrontCamera = true;
   bool _isSwitchingCamera = false;
 
-  Widget _buildEmojiColumnOverlay() {
-    final bool hasJoinCallButton = !widget.isHost && !_isJoined && !_isPKMode;
+  // -------------------------------------------------------------
+  // RIGHT-SIDE FLOATING TOOLBAR (Image 1 Collapsed & Image 2 Expanded)
+  // -------------------------------------------------------------
+  Widget _buildRightToolbar() {
+    LiveStreamParticipant? currentUserParticipant;
+    if (_isJoined) {
+      try {
+        currentUserParticipant = _participants.firstWhere(
+          (p) => p.userId == _auth.currentUser!.uid,
+        );
+      } catch (e) {
+        currentUserParticipant = null;
+      }
+    }
+    final bool isCurrentlyMuted =
+        _localMuteOverride ?? (currentUserParticipant?.isMuted ?? true);
+    final bool isCurrentlyCameraOn =
+        currentUserParticipant?.isCameraOn ?? false;
+    final int totalRequests = _joinRequests.length;
+    final bool isRoomLocked = roomData['isLocked'] == true;
+
     final mediaQuery = MediaQuery.of(context);
     final double safeBottom = math.max(
       mediaQuery.padding.bottom,
       mediaQuery.viewPadding.bottom,
     );
-    final double chatInputBottom = math.max(26.0, 12.0 + safeBottom);
-    final double bottomOffset = (hasJoinCallButton ? 96.0 : 54.0) + chatInputBottom;
+    final double bottomOffset = math.max(26.0, 12.0 + safeBottom) + 54.0;
 
     return Positioned(
-      right: 14,
+      right: 12,
       bottom: bottomOffset,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _buildEmojiButton('❤️'),
-          const SizedBox(height: 10),
-          _buildEmojiButton('👍'),
-          const SizedBox(height: 10),
-          _buildEmojiButton('😂'),
+          if (!_isRightMenuExpanded) ...[
+            // ---------------------------------------------------------
+            // 1. COLLAPSED TOOLBAR (Image 1)
+            // ---------------------------------------------------------
+            // PK Badge Button
+            _buildPKBadgeButton(size: 42),
+
+            // Share Button
+            _buildCircleActionButton(
+              size: 40,
+              onTap: () {
+                _shareLiveStream();
+              },
+              child: const Icon(
+                Icons.share,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+
+            // Lock / Unlock Button
+            _buildCircleActionButton(
+              size: 40,
+              onTap: () async {
+                if (!widget.isHost) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Only host can lock the room.'),
+                      duration: Duration(seconds: 1),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                final newLockState = !isRoomLocked;
+                try {
+                  await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
+                  if (mounted) {
+                    setState(() {
+                      roomData['isLocked'] = newLockState;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(newLockState ? 'Room is locked!' : 'Room is unlocked!'),
+                        backgroundColor: newLockState ? Colors.redAccent : Colors.green,
+                        duration: const Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  debugPrint("Error toggling room lock: $e");
+                }
+              },
+              child: Icon(
+                isRoomLocked ? Icons.lock : Icons.lock_outline,
+                color: isRoomLocked ? Colors.amber : Colors.white,
+                size: 19,
+              ),
+            ),
+
+            // Settings (Gear) Button -> Expands to Image 2!
+            _buildCircleActionButton(
+              size: 40,
+              onTap: () {
+                setState(() {
+                  _isRightMenuExpanded = true;
+                });
+              },
+              child: const Icon(
+                Icons.settings,
+                color: Colors.white,
+                size: 21,
+              ),
+            ),
+          ] else ...[
+            // ---------------------------------------------------------
+            // 2. EXPANDED TOOLBAR (Image 2)
+            // ---------------------------------------------------------
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.70,
+              ),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. PK Button
+                    _buildPKBadgeButton(size: 38),
+
+                    // 2. Emoji / Sticker Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        showVideoLiveEmojiBottomSheet(context, widget.roomID);
+                      },
+                      child: const Icon(
+                        Icons.sentiment_satisfied_alt_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+
+                    // 3. Notice / Rules / Doc Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        _showNoticeDialog();
+                      },
+                      child: const Icon(
+                        Icons.article_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+
+                    // 4. Heart / Ranking Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        final hostId = roomData['hostId'] ?? '';
+                        if (hostId.isNotEmpty) {
+                          showFansRankingBottomSheet(context, hostId);
+                        }
+                      },
+                      child: const Icon(
+                        Icons.favorite,
+                        color: Colors.pinkAccent,
+                        size: 20,
+                      ),
+                    ),
+
+                    // 5. Call Button -> Opens Image 3 bottomsheet on WAITING tab!
+                    _buildCircleActionButton(
+                      size: 38,
+                      badge: totalRequests > 0
+                          ? Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFFE91E63),
+                              ),
+                              child: Text(
+                                totalRequests.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : null,
+                      onTap: () {
+                        _openCallAndViewsBottomSheet(initialTab: 1);
+                      },
+                      child: const Icon(
+                        Icons.call,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 6. Rocket / Store Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        showRocketConfigBottomSheet(
+                          context,
+                          roomId: widget.roomID,
+                          hostId: roomData['hostId'] ?? '',
+                          isAudioRoom: false,
+                        );
+                      },
+                      child: const Icon(
+                        Icons.card_giftcard,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 7. Lock Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () async {
+                        if (!widget.isHost) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Only host can lock the room.'),
+                              duration: Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
+                        final newLockState = !isRoomLocked;
+                        try {
+                          await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
+                          if (mounted) {
+                            setState(() {
+                              roomData['isLocked'] = newLockState;
+                            });
+                          }
+                        } catch (e) {
+                          debugPrint("Error locking room: $e");
+                        }
+                      },
+                      child: Icon(
+                        isRoomLocked ? Icons.lock : Icons.lock_outline,
+                        color: isRoomLocked ? Colors.amber : Colors.white,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 8. Mic Button (toggles mute)
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () async {
+                        final newMuteState = !isCurrentlyMuted;
+                        setState(() {
+                          _localMuteOverride = newMuteState;
+                        });
+                        try {
+                          await StreamingService.instance.setMicrophoneEnabled(!newMuteState);
+                          await LiveStreamService.toggleMuteState(
+                            widget.roomID,
+                            newMuteState,
+                          );
+                        } catch (e) {
+                          debugPrint('Error toggling mute: $e');
+                        }
+                      },
+                      child: Icon(
+                        isCurrentlyMuted ? CupertinoIcons.mic_off : CupertinoIcons.mic_fill,
+                        color: isCurrentlyMuted ? Colors.white70 : Colors.greenAccent,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 9. Camera Button (toggles video)
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () async {
+                        final newCameraState = !isCurrentlyCameraOn;
+                        if (newCameraState) {
+                          final status = await Permission.camera.request();
+                          if (!status.isGranted) return;
+                        }
+                        StreamingService.instance.setCameraEnabled(newCameraState);
+                        if (!newCameraState) _isFrontCamera = true;
+                        LiveStreamService.toggleCameraState(widget.roomID, newCameraState);
+                      },
+                      child: Icon(
+                        isCurrentlyCameraOn ? Icons.videocam : Icons.videocam_off,
+                        color: isCurrentlyCameraOn ? Colors.white : Colors.redAccent,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 10. Camera Flip Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () async {
+                        if (_isSwitchingCamera) return;
+                        setState(() => _isSwitchingCamera = true);
+                        try {
+                          final isFront = await StreamingService.instance.flipCamera();
+                          if (mounted) setState(() => _isFrontCamera = isFront);
+                        } catch (e) {
+                          debugPrint("Error flipping camera: $e");
+                        } finally {
+                          if (mounted) setState(() => _isSwitchingCamera = false);
+                        }
+                      },
+                      child: const Icon(
+                        Icons.flip_camera_ios,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+
+                    // 11. Beauty / Magic Wand Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Beauty effects active'),
+                            duration: Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 12. Music Button
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        showPlayMusicBottomSheet(
+                          context,
+                          musicManager: _musicPlayerManager,
+                          isHost: widget.isHost,
+                        );
+                      },
+                      child: const Icon(
+                        Icons.library_music_outlined,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                    ),
+
+                    // 13. Settings (Gear) Button -> Collapses back to Image 1!
+                    _buildCircleActionButton(
+                      size: 38,
+                      onTap: () {
+                        setState(() {
+                          _isRightMenuExpanded = false;
+                        });
+                      },
+                      child: const Icon(
+                        Icons.settings,
+                        color: Colors.amber,
+                        size: 21,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildEmojiButton(String emoji) {
-    return GestureDetector(
-      onTap: () => _sendEmojiMessage(emoji),
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C384E).withValues(alpha: 0.85),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.15),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+  Widget _buildCircleActionButton({
+    required Widget child,
+    required VoidCallback onTap,
+    double size = 40.0,
+    LinearGradient? gradient,
+    Border? border,
+    Widget? badge,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: gradient ??
+                    const LinearGradient(
+                      colors: [Color(0xFF881337), Color(0xFF4C0519)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                border: border ??
+                    Border.all(
+                      color: const Color(0xFFFF2D55).withValues(alpha: 0.5),
+                      width: 1.2,
+                    ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(child: child),
             ),
+            if (badge != null)
+              Positioned(
+                top: -3,
+                right: -3,
+                child: badge,
+              ),
           ],
         ),
-        child: Center(
-          child: Text(
-            emoji,
-            style: const TextStyle(fontSize: 18),
+      ),
+    );
+  }
+
+  Widget _buildPKBadgeButton({double size = 42.0}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: GestureDetector(
+        onTap: () {
+          FocusManager.instance.primaryFocus?.unfocus();
+          if (_isPKMode) {
+            _showEndPKConfirmation();
+          } else {
+            showInvitePKBottomSheet(
+              context,
+              pendingInvites: _pendingInvites,
+              currentRoomId: widget.roomID,
+            );
+          }
+        },
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFB300), Color(0xFFFF007F)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Text(
+              'PK',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+                fontStyle: FontStyle.italic,
+                letterSpacing: 0.8,
+              ),
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  void _shareLiveStream() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final String hostName = roomData['hostName'] ?? 'Testing account';
+    final String roomId = widget.roomID;
+    const String packageName = 'com.pigobdlive.app';
+
+    // Official Google Play Store link for com.pigobdlive.app with room referrer
+    final String shareLink =
+        'https://play.google.com/store/apps/details?id=$packageName&referrer=roomId%3D$roomId';
+
+    final String shareMessage = '$hostName\n$shareLink';
+
+    // ignore: deprecated_member_use
+    Share.share(
+      shareMessage,
+      subject: '$hostName - Pigo Live',
+    );
+  }
+
+  void _openCallAndViewsBottomSheet({int initialTab = 0}) {
+    final hostId = roomData['hostId'] ?? '';
+    final isCurrentAdmin = widget.isHost ||
+        _isCurrentModerator ||
+        _participants.any(
+          (p) =>
+              p.userId == _auth.currentUser?.uid &&
+              (p.isAdmin || p.isModerator),
+        );
+
+    showLiveRoomCallAndViewsBottomSheet(
+      context: context,
+      participants: _participants,
+      joinRequests: _joinRequests,
+      currentUserId: _auth.currentUser?.uid ?? '',
+      hostId: hostId,
+      roomId: widget.roomID,
+      isHost: widget.isHost,
+      isCurrentUserModerator: isCurrentAdmin,
+      initialTab: initialTab,
+    );
+  }
+
+  void _showNoticeDialog() {
+    final noticeController = TextEditingController(text: _roomNotice);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2d1b2b),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Room Notice',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: widget.isHost
+              ? TextField(
+                  controller: noticeController,
+                  autofocus: true,
+                  maxLines: 3,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Enter room notice...",
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFE91E63)),
+                    ),
+                  ),
+                )
+              : Text(
+                  _roomNotice.isNotEmpty ? _roomNotice : "No notice has been set for this room.",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Close', style: TextStyle(color: Colors.white70)),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            if (widget.isHost)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE91E63),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Save Notice', style: TextStyle(color: Colors.white)),
+                onPressed: () async {
+                  final notice = noticeController.text.trim();
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await LiveStreamService.setRoomNotice(widget.roomID, notice);
+                    if (mounted) {
+                      setState(() {
+                        _roomNotice = notice;
+                      });
+                    }
+                  } catch (e) {
+                    debugPrint("Error setting notice: $e");
+                  }
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -4598,6 +4831,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildJoinCallOverlay() {
+    return const SizedBox.shrink();
+  }
+
+  Widget _oldBuildJoinCallOverlay() {
     if (widget.isHost || _isJoined) return const SizedBox.shrink();
 
     return Positioned(

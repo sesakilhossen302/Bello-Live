@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// import 'package:flutter/services.dart'; // No longer needed for Clipboard if we strictly use Share.share
 import 'package:share_plus/share_plus.dart'; // REQUIRED: Add 'share_plus' to pubspec.yaml
 import '../../../data/remote/firebase/inbox_services.dart';
 
@@ -200,18 +199,17 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
 
   // --- CHANGED LOGIC HERE: Opens Native Share Sheet ---
   void _handleExternalShare() {
-    final String typeStr = widget.roomType.name;
+    final String hostName = widget.hostName;
+    final String roomId = widget.roomId;
+    const String packageName = 'com.pigobdlive.app';
 
-    // 1. Generate Link using the new Firebase Hosting site
-    final String link =
-        "https://picture-live-links.web.app/room/${widget.roomId}?type=$typeStr";
+    final String playStoreLink =
+        'https://play.google.com/store/apps/details?id=$packageName&referrer=roomId%3D$roomId';
 
-    // 2. Create Message with the new app name
-    final String message = "Join my $typeStr room on ProLive! \n$link";
+    final String message = "$hostName\n$playStoreLink";
 
-    // 3. Trigger Native Share Sheet (WhatsApp, Telegram, etc.)
     // ignore: deprecated_member_use
-    Share.share(message, subject: "Join ProLive Room");
+    Share.share(message, subject: '$hostName - Pigo Live');
   }
 
   @override
