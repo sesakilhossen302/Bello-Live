@@ -197,6 +197,8 @@ class StreamingService {
     bool isVideo = false,
     bool isHost = false,
   }) async {
+    final bool isAlreadyJoined = (_currentRoomName == roomName && _currentUserId == userId);
+
     _currentRoomName = roomName;
     _currentUserId = userId;
     _currentUserName = userName;
@@ -282,20 +284,24 @@ class StreamingService {
       await _engine!.disableVideo();
     }
 
-    String token = await _generateToken(roomName, userId);
+    if (!isAlreadyJoined) {
+      String token = await _generateToken(roomName, userId);
 
-    await _engine!.joinChannelWithUserAccount(
-      token: token,
-      channelId: roomName,
-      userAccount: userId,
-      options: ChannelMediaOptions(
-        autoSubscribeVideo: true,
-        autoSubscribeAudio: true,
-        publishCameraTrack: isHost && isVideo,
-        publishMicrophoneTrack: isHost,
-        clientRoleType: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience,
-      ),
-    );
+      await _engine!.joinChannelWithUserAccount(
+        token: token,
+        channelId: roomName,
+        userAccount: userId,
+        options: ChannelMediaOptions(
+          autoSubscribeVideo: true,
+          autoSubscribeAudio: true,
+          publishCameraTrack: isHost && isVideo,
+          publishMicrophoneTrack: isHost,
+          clientRoleType: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience,
+        ),
+      );
+    } else {
+      debugPrint('[StreamingService] Resumed active Agora session for room $roomName');
+    }
   }
 
   Future<void> disconnect() async {

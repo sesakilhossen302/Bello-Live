@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import '../../../data/remote/firebase/room_services.dart';
-import '../../streaming/audio_room_page.dart'; // To get RoomParticipant
+import '../../../data/remote/firebase/live_streaming_services.dart';
+import '../live_room_page.dart'; // To get LiveStreamParticipant
 
 class HostActionsBottomSheet extends StatelessWidget {
   final String targetUserId;
@@ -18,17 +18,17 @@ class HostActionsBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Helper to create action buttons
-    Widget buildActionButton(String title, IconData icon, VoidCallback onPressed) {
+    Widget buildActionButton(String title, IconData icon, VoidCallback onPressed, {Color? color}) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
         child: ElevatedButton.icon(
-          icon: Icon(icon, color: Colors.white),
-          label: Text(title, style: const TextStyle(color: Colors.white)),
+          icon: Icon(icon, color: color ?? Colors.white, size: 20),
+          label: Text(title, style: TextStyle(color: color ?? Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white.withValues(alpha: 0.1),
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            alignment: Alignment.center,
+            minimumSize: const Size(double.infinity, 48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
           ),
           onPressed: onPressed,
@@ -37,19 +37,29 @@ class HostActionsBottomSheet extends StatelessWidget {
     }
 
     return StreamBuilder<DatabaseEvent>(
-      stream: RoomService.getParticipantStream(roomId, targetUserId),
+      stream: LiveStreamService.getParticipantStream(roomId, targetUserId),
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.snapshot.exists) {
-          return const SafeArea(
-            child: SizedBox(
-              height: 200,
-              child: Center(child: CircularProgressIndicator(color: Colors.pink)),
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Manage $targetUserName',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('User is not currently in the room', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
             ),
           );
         }
 
         final data = snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
-        final participant = RoomParticipant.fromRTDB(snapshot.data!.snapshot.key!, data);
+        final participant = LiveStreamParticipant.fromRTDB(snapshot.data!.snapshot.key!, data);
 
         return SafeArea(
           child: Column(
@@ -57,20 +67,59 @@ class HostActionsBottomSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'Manage $targetUserName',
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 12.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.manage_accounts, color: Colors.pinkAccent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Manage $targetUserName',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Divider(color: Colors.white24, height: 1),
-              if (!participant.isApprovedSpeaker && !participant.isCoHost)
+              const SizedBox(height: 8),
+
+              // Make Admin / Remove Admin
+              buildActionButton(
+                participant.isAdmin ? 'Remove Admin Role' : 'Make Room Admin',
+                participant.isAdmin ? Icons.shield_outlined : Icons.shield,
+                () async {
+                  try {
+                    await LiveStreamService.setAdmin(roomId, targetUserId, !participant.isAdmin);
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(participant.isAdmin ? 'Removed admin role from $targetUserName' : 'Assigned admin role to $targetUserName'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                color: participant.isAdmin ? Colors.orangeAccent : Colors.cyanAccent,
+              ),
+
+              // Invite to Call (if not on seat)
+              if (!participant.isOnSeat)
                 buildActionButton(
                   'Invite to Call',
                   Icons.add_call,
                   () async {
                     try {
-                      await RoomService.sendCallInvite(roomId, targetUserId, 'Host');
+                      await LiveStreamService.sendCallInvite(roomId, targetUserId, 'Host');
                       if (context.mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -86,15 +135,41 @@ class HostActionsBottomSheet extends StatelessWidget {
                     }
                   },
                 ),
+
+              // Mute / Unmute Mic (if on seat)
+              if (participant.isOnSeat)
+                buildActionButton(
+                  participant.isMuted ? 'Unmute Mic' : 'Mute Mic',
+                  participant.isMuted ? Icons.mic : Icons.mic_off,
+                  () async {
+                    try {
+                      await LiveStreamService.muteParticipant(roomId, targetUserId, !participant.isMuted);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(participant.isMuted ? 'Mic unmuted' : 'Mic muted')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  },
+                ),
+
+              // Kick Out
               buildActionButton(
-                participant.isAdmin ? 'Remove MAC Admin' : 'Set MAC Admin',
-                participant.isAdmin ? Icons.security_outlined : Icons.security,
+                'Kick Out of Room',
+                Icons.exit_to_app,
                 () async {
                   try {
-                    await RoomService.setAdmin(roomId, targetUserId, !participant.isAdmin);
+                    await LiveStreamService.kickParticipant(roomId, targetUserId);
                     if (context.mounted) {
+                      Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(participant.isAdmin ? 'Removed MAC admin.' : 'Set as MAC admin.')),
+                        SnackBar(content: Text('$targetUserName has been kicked out.')),
                       );
                     }
                   } catch (e) {
@@ -105,64 +180,8 @@ class HostActionsBottomSheet extends StatelessWidget {
                     }
                   }
                 },
+                color: Colors.redAccent,
               ),
-              buildActionButton(
-                participant.isMuted ? 'Unmute' : 'Mute',
-                participant.isMuted ? Icons.mic : Icons.mic_off,
-                () async {
-                  try {
-                    await RoomService.muteParticipant(roomId, targetUserId, !participant.isMuted);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(participant.isMuted ? 'Unmuted.' : 'Muted.')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                      );
-                    }
-                  }
-                },
-              ),
-              buildActionButton(
-                participant.isChatMuted ? 'Unmute Chat' : 'Chat Mute',
-                participant.isChatMuted ? Icons.speaker_notes : Icons.no_sim,
-                () async {
-                  try {
-                    await RoomService.chatMuteParticipant(roomId, targetUserId, !participant.isChatMuted);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(participant.isChatMuted ? 'Chat unmuted.' : 'Chat muted.')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                      );
-                    }
-                  }
-                },
-              ),
-              buildActionButton('Kick Out', Icons.exit_to_app, () async {
-                try {
-                  await RoomService.kickParticipant(roomId, targetUserId);
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Kicked out.')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-              }),
               const SizedBox(height: 16),
             ],
           ),
@@ -182,6 +201,9 @@ void showHostActionsBottomSheet(
   showModalBottomSheet(
     context: context,
     backgroundColor: const Color(0xFF2d1b2b),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (context) {
       return HostActionsBottomSheet(targetUserId: targetUserId, targetUserName: targetUserName, roomId: roomId);
     },

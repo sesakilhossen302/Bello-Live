@@ -1,0 +1,49 @@
+Pigo Live – Development Requirements
+
+1. Host/User ID Minimize Issue
+
+* Host room minimize করলে ব্রড/লাইভ স্ক্রিনের layout ভেঙে যায় এবং ব্রড/ভিডিও display সমস্যা করে।
+* একইভাবে User ID minimize করলেও ব্রড layout নষ্ট হয়ে যায়।
+* Minimize করার পরেও ব্রড ও User ID-এর UI responsive এবং stable রাখতে হবে।
+
+2. User ID – End Call Option
+
+* User ID-এর call interface-এ বর্তমানে End Call option নেই।
+* User ID-এর জন্য proper End Call button/option যুক্ত করতে হবে।
+* End Call করলে call session সঠিকভাবে terminate হতে হবে।
+
+3. User Call – Audio/Video Broadcast Options
+
+* User call করার সময় ব্রড/লাইভ স্ক্রিনে Audio Call এবং Video Call নির্বাচন করার option থাকতে হবে।
+* Call type অনুযায়ী সঠিক interface ও functionality কাজ করতে হবে।
+* Audio/Video call switching এবং connection behaviour properly handle করতে হবে।
+
+4. Entry Animation
+
+* Live room-এ নতুন user/host entry করার সময় একটি premium entry animation যুক্ত করতে হবে।
+* Animation smooth, lightweight এবং overall live-room UI-এর সঙ্গে consistent হতে হবে।
+* প্রয়োজন অনুযায়ী বিভিন্ন entry animation support করার ব্যবস্থা রাখতে হবে।
+
+5. PK Update
+
+* PK System update করতে হবে।
+* PK start, participant joining, score/coin update, timer এবং PK result-এর functionality যাচাই ও প্রয়োজন অনুযায়ী update করতে হবে।
+* Real-time PK data synchronization নিশ্চিত করতে হবে।
+
+6. User ID – Make Admin Option
+
+* User ID-এর জন্য Make Admin option যুক্ত করতে হবে।
+* Host/authorized user যেন নির্দিষ্ট User ID-কে admin হিসেবে assign করতে পারে।
+* Admin role অনুযায়ী permissions সঠিকভাবে apply করতে হবে।
+* প্রয়োজন হলে Remove Admin option-ও রাখতে হবে।
+
+7. Video Broadcast – Viewers Line Issue
+
+* Video broadcast/live screen-এ বর্তমানে Viewers Line সঠিকভাবে show হচ্ছে না।
+* Viewers count/list/line properly display করতে হবে।
+* Real-time viewer update নিশ্চিত করতে হবে।
+* Different screen sizes ও minimize/maximize অবস্থাতেও viewers section responsive রাখতে হবে।
+
+Overall Requirement
+
+সবগুলো feature implement করার সময় existing live-room functionality যেন নষ্ট না হয় এবং Android/iOS-এর বিভিন্ন screen size অনুযায়ী responsive, smooth ও premium UI/UX নিশ্চিত করতে হবে।

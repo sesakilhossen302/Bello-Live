@@ -34,6 +34,41 @@ class _ActiveFrameWidgetState extends State<ActiveFrameWidget> {
         final data = snapshot.data!.data() as Map<String, dynamic>?;
         if (data == null) return const SizedBox.shrink();
 
+        // Check for VIP / VVIP badge first
+        final vipStr = (data['vip'] ?? data['vipType'] ?? '').toString().toLowerCase();
+        final pkgStr = (data['activePackage'] ?? data['package'] ?? '').toString().toLowerCase();
+        final bool isVvip = data['isVvip'] == true ||
+            vipStr.contains('vvip') ||
+            pkgStr.contains('vvip') ||
+            pkgStr.contains('royal') ||
+            pkgStr.contains('king');
+        final bool isVip = isVvip ||
+            data['isVip'] == true ||
+            vipStr.contains('vip') ||
+            pkgStr.contains('vip') ||
+            pkgStr.contains('queen') ||
+            pkgStr.contains('crown');
+
+        if (isVvip) {
+          return SizedBox(
+            width: widget.size * 1.35,
+            height: widget.size * 1.35,
+            child: Image.asset(
+              'assets/images/VVIP PNG.png',
+              fit: BoxFit.contain,
+            ),
+          );
+        } else if (isVip) {
+          return SizedBox(
+            width: widget.size * 1.35,
+            height: widget.size * 1.35,
+            child: Image.asset(
+              'assets/images/VIP PNG.png',
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+
         final activeAddOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
         String? validFrameUrl;
         final frameData = activeAddOns['Frame'] as Map<String, dynamic>?;

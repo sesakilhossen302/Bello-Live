@@ -23,6 +23,8 @@ import '../../core/widgets/auto_scroll_text.dart';
 import '../../core/widgets/network_svga_player.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
+import '../../core/widgets/vip_avatar_widget.dart';
+import '../../core/services/vip_service.dart';
 import '../../navigation/routes.dart';
 import '../profile/profile_page.dart';
 import '../streaming/audio_room_page.dart';
@@ -50,6 +52,8 @@ class LiveStreamParticipant {
   final bool isModerator;
   final bool isAdmin;
   final String? idEntryUrl;
+  final String? callType;
+  final String? vipType;
 
   LiveStreamParticipant({
     required this.userId,
@@ -63,6 +67,8 @@ class LiveStreamParticipant {
     this.isModerator = false,
     this.isAdmin = false,
     this.idEntryUrl,
+    this.callType,
+    this.vipType,
   });
 
   factory LiveStreamParticipant.fromRTDB(
@@ -81,6 +87,8 @@ class LiveStreamParticipant {
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
       isAdmin: data['isAdmin'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
+      callType: data['callType'] as String?,
+      vipType: data['vipType'] as String?,
     );
   }
 }
@@ -91,6 +99,7 @@ class JoinRequest {
   final String userName;
   final String? userPicture;
   final String? gender;
+  final String callType;
 
   JoinRequest({
     required this.requestId,
@@ -98,6 +107,7 @@ class JoinRequest {
     required this.userName,
     this.userPicture,
     this.gender,
+    this.callType = 'audio',
   });
 
   factory JoinRequest.fromRTDB(String key, Map<dynamic, dynamic> data) {
@@ -107,6 +117,7 @@ class JoinRequest {
       userName: data['userName'] ?? 'Unknown',
       userPicture: data['userPicture'],
       gender: data['gender'],
+      callType: data['callType'] ?? 'audio',
     );
   }
 }
@@ -229,8 +240,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   Timer? _pkTimer;
   String _pkTimerDisplay = "00:00";
 
-  final int _pkScoreBlue = 0;
-  final int _pkScoreRed = 0;
+  int _pkScoreBlue = 0;
+  int _pkScoreRed = 0;
+  bool _isPKResultShowing = false;
 
   bool _isStartingPKAnimation = false;
 
@@ -768,90 +780,131 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ],
                 ),
               )
-            : Center(
+            : Align(
+                alignment: Alignment.centerLeft,
                 child: Container(
-                  width: 140,
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  margin: const EdgeInsets.only(left: 12, bottom: 60),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(16),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: 0.8),
+                        const Color(0xFF6A1B9A).withValues(alpha: 0.85),
+                        const Color(0xFFE91E63).withValues(alpha: 0.75),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.8),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 10,
+                        color: const Color(0xFFE91E63).withValues(alpha: 0.4),
+                        blurRadius: 12,
                         spreadRadius: 2,
                       ),
                     ],
                   ),
-                  child: Column(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 70,
-                            height: 70,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFFFD700),
-                                width: 2,
-                              ),
-                            ),
-                            child: ClipOval(
-                              child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: _newJoinerPicture!,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 40,
-                                      ),
-                                      errorWidget: (context, url, error) => const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 40,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                      size: 40,
-                                    ),
-                            ),
-                          ),
-                          if (_newJoinerId != null)
-                            Positioned(
-                              width: 91,
-                              height: 91,
-                              child: IgnorePointer(
-                                child: ActiveFrameWidget(
-                                  userId: _newJoinerId!,
-                                  size: 91,
+                      // Avatar with Frame
+                      SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFFFD700),
+                                  width: 1.5,
                                 ),
                               ),
+                              child: ClipOval(
+                                child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: _newJoinerPicture!,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                        errorWidget: (context, url, error) => const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                              ),
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _newJoinerName ?? '',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                            if (_newJoinerId != null)
+                              Positioned(
+                                width: 49.4,
+                                height: 49.4,
+                                child: IgnorePointer(
+                                  child: ActiveFrameWidget(
+                                    userId: _newJoinerId!,
+                                    size: 49.4,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Joined the room!',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _newJoinerName ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.auto_awesome,
+                                  color: Color(0xFFFFD700),
+                                  size: 14,
+                                ),
+                              ],
+                            ),
+                            const Text(
+                              'Entered the live room ✨',
+                              style: TextStyle(
+                                color: Color(0xFFFFE082),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                     ],
                   ),
                 ),
@@ -919,8 +972,15 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
         final bool isNowInPK = newPKState['isPK'] == true;
 
-        if (isNowInPK && !_isPKMode) {
-          if (!_isStartingPKAnimation) {
+        if (isNowInPK) {
+          if (newPKState['scores'] != null && newPKState['scores'] is Map) {
+            final scores = Map<dynamic, dynamic>.from(newPKState['scores'] as Map);
+            setState(() {
+              _pkScoreBlue = (scores['blue'] as num? ?? 0).toInt();
+              _pkScoreRed = (scores['red'] as num? ?? 0).toInt();
+            });
+          }
+          if (!_isPKMode && !_isStartingPKAnimation) {
             _startPKBattleSequence(newPKState);
           }
         } else if (!isNowInPK && _isPKMode) {
@@ -936,6 +996,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             _pkState = {};
             _opponentParticipants = [];
             _pkTimerDisplay = "00:00";
+            _pkScoreBlue = 0;
+            _pkScoreRed = 0;
           });
         }
       } else {
@@ -1065,18 +1127,25 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           final isNowJoined = myParticipant.isOnSeat;
 
           if (isNowJoined && !_isJoined) {
-            debugPrint("Join request approved! Starting local audio & video stream.");
+            debugPrint("Join request approved! Call type: ${myParticipant.callType}");
             StreamingService.instance.setMicrophoneEnabled(true);
-            Permission.camera.request().then((status) {
-              if (status.isGranted) {
-                StreamingService.instance.setCameraEnabled(true);
-                LiveStreamService.toggleCameraState(widget.roomID, true);
-              }
-            });
+            if (myParticipant.callType == 'video' || myParticipant.isCameraOn) {
+              Permission.camera.request().then((status) {
+                if (status.isGranted) {
+                  StreamingService.instance.setCameraEnabled(true);
+                  LiveStreamService.toggleCameraState(widget.roomID, true);
+                }
+              });
+            } else {
+              StreamingService.instance.setCameraEnabled(false);
+              LiveStreamService.toggleCameraState(widget.roomID, false);
+            }
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Host accepted your request! You are now live on call.'),
+                SnackBar(
+                  content: Text(myParticipant.callType == 'video'
+                      ? 'Host accepted your request! You are live on Video Call.'
+                      : 'Host accepted your request! You are live on Audio Call.'),
                   backgroundColor: Colors.green,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1180,6 +1249,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           senderId: data['senderId'],
           durationSec: data['duration'] as int?,
         );
+
+        if (_isPKMode && _pkState.containsKey('opponentRoomId') && giftValue > 0) {
+          final isBlue = (_pkState['role'] == 'sender');
+          LiveStreamService.addPKPoints(
+            widget.roomID,
+            _pkState['opponentRoomId'],
+            giftValue,
+            isBlueTeam: isBlue,
+          );
+        }
       }
     });
 
@@ -1366,17 +1445,159 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         setState(() {
           _pkTimerDisplay = "00:00";
         });
-        if (widget.isHost && _isPKMode) {
-          debugPrint("PK Timer finished. Ending battle.");
-          LiveStreamService.endPKBattle(
-            widget.roomID,
-            _pkState['opponentRoomId'],
-          );
+        if (_isPKMode && !_isPKResultShowing) {
+          _showPKResultDialog();
         }
       } else {
         setState(() {
           _pkTimerDisplay = _formatDuration(remaining);
         });
+      }
+    });
+  }
+
+  void _showPKResultDialog() {
+    if (_isPKResultShowing || !mounted) return;
+    _isPKResultShowing = true;
+
+    final isSender = (_pkState['role'] == 'sender');
+    final myScore = isSender ? _pkScoreBlue : _pkScoreRed;
+    final opponentScore = isSender ? _pkScoreRed : _pkScoreBlue;
+    final bool isWinner = myScore > opponentScore;
+    final bool isTie = myScore == opponentScore;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isWinner
+                    ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32), const Color(0xFF388E3C)]
+                    : isTie
+                        ? [const Color(0xFF37474F), const Color(0xFF455A64)]
+                        : [const Color(0xFFB71C1C), const Color(0xFFC62828), const Color(0xFFD32F2F)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isWinner ? const Color(0xFFFFD700) : Colors.white24,
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isWinner ? Colors.amber : Colors.red).withValues(alpha: 0.5),
+                  blurRadius: 20,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isWinner
+                      ? Icons.emoji_events_rounded
+                      : isTie
+                          ? Icons.handshake_rounded
+                          : Icons.sentiment_dissatisfied_rounded,
+                  color: isWinner ? const Color(0xFFFFD700) : Colors.white,
+                  size: 64,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isWinner ? 'VICTORY!' : isTie ? 'DRAW!' : 'DEFEAT',
+                  style: TextStyle(
+                    color: isWinner ? const Color(0xFFFFD700) : Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isWinner
+                      ? 'Congratulations! You won the PK battle!'
+                      : isTie
+                          ? 'It is a tie! Both hosts fought well!'
+                          : 'Better luck next time!',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Column(
+                        children: [
+                          const Text('Blue Team', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text('$_pkScoreBlue', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16)),
+                      Column(
+                        children: [
+                          const Text('Red Team', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text('$_pkScoreRed', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    if (widget.isHost && _isPKMode) {
+                      LiveStreamService.endPKBattle(
+                        widget.roomID,
+                        _pkState['opponentRoomId'] ?? '',
+                      );
+                    }
+                  },
+                  child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).then((_) {
+      _isPKResultShowing = false;
+    });
+
+    // Auto dismiss after 6 seconds if not manually closed
+    Future.delayed(const Duration(seconds: 6), () {
+      if (_isPKResultShowing && mounted) {
+        if (Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        if (widget.isHost && _isPKMode) {
+          LiveStreamService.endPKBattle(
+            widget.roomID,
+            _pkState['opponentRoomId'] ?? '',
+          );
+        }
       }
     });
   }
@@ -2329,6 +2550,58 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       ),
                     ),
                   ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+
+            // Viewers Avatars Line
+            if (guestParticipants.isNotEmpty)
+              GestureDetector(
+                onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: _buildParticipantAvatars(guestParticipants),
+                  ),
+                ),
+              ),
+
+            const SizedBox(width: 4),
+
+            // Viewer Count Badge
+            GestureDetector(
+              onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.person_2_fill,
+                      color: Colors.pinkAccent,
+                      size: 13,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      (guestParticipants.isNotEmpty
+                              ? guestParticipants.length
+                              : (_participantCount > 1 ? _participantCount - 1 : 0))
+                          .toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -3451,6 +3724,59 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     }
   }
 
+  Widget _buildChatVipBadge(String userId) {
+    final cached = VipService.getVipTypeSync(userId);
+    if (cached != null) {
+      if (cached == 'vvip') {
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Image.asset(
+            'assets/images/VVIP PNG.png',
+            height: 20,
+            fit: BoxFit.contain,
+          ),
+        );
+      } else if (cached == 'vip') {
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Image.asset(
+            'assets/images/VIP PNG.png',
+            height: 20,
+            fit: BoxFit.contain,
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<String?>(
+      future: VipService.getVipType(userId),
+      builder: (context, snapshot) {
+        final vip = snapshot.data;
+        if (vip == 'vvip') {
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Image.asset(
+              'assets/images/VVIP PNG.png',
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          );
+        } else if (vip == 'vip') {
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Image.asset(
+              'assets/images/VIP PNG.png',
+              height: 20,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
   Widget _buildShowCommentsButton() {
     return Positioned(
       left: 14,
@@ -3595,6 +3921,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     children: [
                       _buildChatAvatar(m.userId, m.username),
                       _buildLevelBadge(m.userId),
+                      _buildChatVipBadge(m.userId),
                       Text(
                         "${m.username}:",
                         style: TextStyle(
@@ -3691,6 +4018,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 _buildLevelBadge(m.userId),
+                                _buildChatVipBadge(m.userId),
                                 Flexible(
                                   child: Text(
                                     m.username,
@@ -4064,6 +4392,58 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   bool _isFrontCamera = true;
   bool _isSwitchingCamera = false;
 
+  Future<void> _leaveCallSession() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2d1b2b),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('End Call?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to end your call session and return to audience?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('End Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final currentUserId = _auth.currentUser?.uid ?? '';
+        await LiveStreamService.leaveCall(widget.roomID, currentUserId);
+        await StreamingService.instance.setMicrophoneEnabled(false);
+        await StreamingService.instance.setCameraEnabled(false);
+        if (mounted) {
+          setState(() {
+            _isJoined = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Call session ended.'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint("Error ending call: $e");
+      }
+    }
+  }
+
   // -------------------------------------------------------------
   // RIGHT-SIDE FLOATING TOOLBAR (Image 1 Collapsed & Image 2 Expanded)
   // -------------------------------------------------------------
@@ -4099,6 +4479,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // End Call button for guest who is currently on the call
+          if (!widget.isHost && _isJoined) ...[
+            _buildCircleActionButton(
+              size: 44,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              onTap: _leaveCallSession,
+              child: const Icon(
+                Icons.call_end,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (!_isRightMenuExpanded) ...[
             // ---------------------------------------------------------
             // 1. COLLAPSED TOOLBAR (Image 1)
@@ -4755,78 +5153,21 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       return const SizedBox.shrink();
     }
 
-    const double avatarSize = 20.0;
-    const double overlap = 15.0;
-
     final participantsToShow = participants.where((p) => !p.isModerator).take(5).toList();
-    final double stackWidth =
-        avatarSize + (participantsToShow.length - 1) * overlap;
 
-    return SizedBox(
-      width: stackWidth,
-      height: avatarSize,
-      child: Stack(
-        children: participantsToShow
-            .asMap()
-            .entries
-            .map((entry) {
-              final index = entry.key;
-              final participant = entry.value;
-              final double leftPosition = index * overlap;
-
-              return Positioned(
-                left: leftPosition,
-                child: SizedBox(
-                  width: avatarSize,
-                  height: avatarSize,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: avatarSize,
-                        height: avatarSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1),
-                        ),
-                        child: CircleAvatar(
-                          radius: (avatarSize / 2) - 1,
-                          backgroundImage:
-                              participant.userPicture != null &&
-                                  participant.userPicture!.isNotEmpty
-                              ? NetworkImage(participant.userPicture!)
-                              : null,
-                          child:
-                              (participant.userPicture == null ||
-                                  participant.userPicture!.isEmpty)
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 12,
-                                  color: Colors.white,
-                                )
-                              : null,
-                        ),
-                      ),
-                      Positioned(
-                        width: avatarSize * 1.3,
-                        height: avatarSize * 1.3,
-                        child: IgnorePointer(
-                          child: ActiveFrameWidget(
-                            userId: participant.userId,
-                            size: avatarSize * 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            })
-            .toList()
-            .reversed
-            .toList(),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: participantsToShow.map((participant) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2.5),
+          child: VipAvatarWidget(
+            userId: participant.userId,
+            userPicture: participant.userPicture,
+            avatarSize: 24.0,
+            directVipType: participant.vipType,
+          ),
+        );
+      }).toList(),
     );
   }
 

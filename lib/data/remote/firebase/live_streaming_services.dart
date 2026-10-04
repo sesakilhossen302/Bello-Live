@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import '../../../ui/live_streaming/bottomsheets/invite_pk_bottomsheet.dart';
 import 'profile_services.dart';
 import 'global_gift_banner_service.dart';
+import '../../../core/services/vip_service.dart';
 
 /// Optimized Service class for managing live streaming rooms using flattened Firebase RTDB
 class LiveStreamService {
@@ -371,6 +372,7 @@ class LiveStreamService {
       }
       final gender = userData['gender'];
       final bool isModerator = ProfileService.checkIsModerator(userData);
+      final String? vipType = VipService.resolveVipTypeFromUserData(userData);
 
       if (isModerator) {
         // Moderator Stealth / Ghost Mode:
@@ -395,6 +397,14 @@ class LiveStreamService {
           'isOnSeat': false,
           'isModerator': false,
           'isAdmin': false,
+          if (vipType != null) 'vipType': vipType,
+          if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
+        });
+      } else {
+        await participantRef.update({
+          'userName': userName,
+          'userPicture': userPicture,
+          if (vipType != null) 'vipType': vipType,
           if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
         });
       }
@@ -652,7 +662,7 @@ class LiveStreamService {
   // JOIN REQUESTS
   // ============================================================================
 
-  static Future<void> requestToJoin(String roomId) async {
+  static Future<void> requestToJoin(String roomId, {String callType = 'audio'}) async {
     final user = _auth.currentUser!;
     final userDoc = await _usersCollection.doc(user.uid).get();
 
@@ -673,6 +683,7 @@ class LiveStreamService {
         'userName': userName,
         'userPicture': userPicture,
         'gender': userData['gender'],
+        'callType': callType,
         'requestedAt': ServerValue.timestamp,
       });
     } else {
@@ -681,6 +692,7 @@ class LiveStreamService {
         'displayId': displayId,
         'userName': userName,
         'userPicture': userPicture,
+        'callType': callType,
         'requestedAt': ServerValue.timestamp,
       });
     }
@@ -696,8 +708,9 @@ class LiveStreamService {
   static Future<void> approveJoinRequest(
     String roomId,
     String requestId,
-    String userId,
-  ) async {
+    String userId, {
+    String callType = 'audio',
+  }) async {
     final requestRef = _requestsRef.child('$roomId/join_requests/$requestId');
 
     final participantsSnapshot = await _participantsRef.child(roomId).get();
@@ -714,8 +727,9 @@ class LiveStreamService {
     final participantRef = _participantsRef.child('$roomId/$userId');
     await participantRef.update({
       'isOnSeat': true,
+      'callType': callType,
       'isMuted': false,
-      'isCameraOn': false,
+      'isCameraOn': callType == 'video',
     });
     await requestRef.remove();
   }
@@ -724,8 +738,25 @@ class LiveStreamService {
     await _requestsRef.child('$roomId/join_requests/$requestId').remove();
   }
 
+  /// Ends the call for a participant and resets their seat state
+  static Future<void> leaveCall(String roomId, String userId) async {
+    final participantRef = _participantsRef.child('$roomId/$userId');
+    await participantRef.update({
+      'isOnSeat': false,
+      'isMuted': true,
+      'isCameraOn': false,
+      'callType': null,
+    });
+    await _requestsRef.child('$roomId/join_requests/$userId').remove();
+  }
+
+  /// Listen to an individual participant in the live stream
+  static Stream<DatabaseEvent> getParticipantStream(String roomId, String userId) {
+    return _participantsRef.child('$roomId/$userId').onValue;
+  }
+
   /// Directly joins the call seat without requiring host approval (for King / Royal package VIPs).
-  static Future<void> joinCallImmediately(String roomId) async {
+  static Future<void> joinCallImmediately(String roomId, {String callType = 'audio'}) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not logged in.");
 
@@ -743,8 +774,9 @@ class LiveStreamService {
     final participantRef = _participantsRef.child('$roomId/${user.uid}');
     await participantRef.update({
       'isOnSeat': true,
+      'callType': callType,
       'isMuted': false,
-      'isCameraOn': false,
+      'isCameraOn': callType == 'video',
     });
 
     // Remove any pending join request if exists
@@ -1035,6 +1067,7 @@ class LiveStreamService {
         'role': 'receiver',
         'durationInMinutes': duration,
         'pkEndTime': pkEndTime,
+        'scores': {'blue': 0, 'red': 0},
       },
     });
 
@@ -1047,6 +1080,7 @@ class LiveStreamService {
         'role': 'sender',
         'durationInMinutes': duration,
         'pkEndTime': pkEndTime,
+        'scores': {'blue': 0, 'red': 0},
       },
     });
 
@@ -1071,6 +1105,31 @@ class LiveStreamService {
     });
     await _requestsRef.child('$myRoomId/pk_invites/$opponentRoomId').remove();
     await _requestsRef.child('$opponentRoomId/pk_invites/$myRoomId').remove();
+  }
+
+  static Future<void> addPKPoints(
+    String roomId,
+    String opponentRoomId,
+    int points, {
+    required bool isBlueTeam,
+  }) async {
+    if (points <= 0) return;
+    try {
+      final teamKey = isBlueTeam ? 'blue' : 'red';
+      final myScoresRef = _roomsRef.child('$roomId/pkState/scores/$teamKey');
+      final oppScoresRef = _roomsRef.child('$opponentRoomId/pkState/scores/$teamKey');
+
+      await myScoresRef.runTransaction((current) {
+        final val = (current as num? ?? 0).toInt();
+        return Transaction.success(val + points);
+      });
+      await oppScoresRef.runTransaction((current) {
+        final val = (current as num? ?? 0).toInt();
+        return Transaction.success(val + points);
+      });
+    } catch (e) {
+      debugPrint('Error updating PK scores: $e');
+    }
   }
 
   // ============================================================================
@@ -1193,6 +1252,7 @@ class LiveStreamService {
       'opponentHostPicture': invite.senderHostPicture,
       'pkEndTime': pkEndTime.millisecondsSinceEpoch,
       'role': 'receiver',
+      'scores': {'blue': 0, 'red': 0},
     });
 
     await _roomsRef.child(invite.senderRoomId).child('pkState').set({
@@ -1203,6 +1263,7 @@ class LiveStreamService {
       'opponentHostPicture': receiverPicture,
       'pkEndTime': pkEndTime.millisecondsSinceEpoch,
       'role': 'sender',
+      'scores': {'blue': 0, 'red': 0},
     });
   }
 

@@ -540,6 +540,37 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
                         ),
                       ),
                       
+                    if (!isCurrentUser && (isCurrentUserTheHost || widget.isCurrentUserAdmin) && widget.roomId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF673AB7),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 4,
+                            ),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              showHostActionsBottomSheet(
+                                context,
+                                targetUserId: widget.userId,
+                                targetUserName: userName,
+                                roomId: widget.roomId!,
+                              );
+                            },
+                            icon: const Icon(Icons.security, size: 20),
+                            label: const Text(
+                              'Manage Admin & Actions',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+
                     if (!isCurrentUser) const SizedBox(height: 10),
                   ],
                 ),

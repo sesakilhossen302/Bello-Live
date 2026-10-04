@@ -541,13 +541,59 @@ class _LiveRoomCallAndViewsBottomSheetState
                     fontSize: 14,
                   ),
                 ),
-                subtitle: Text(
-                  isMe ? 'Your request (Waiting for host approval)' : 'Wants to join call',
-                  style: TextStyle(
-                    color: isMe ? const Color(0xFFE91E63) : Colors.grey.shade600,
-                    fontSize: 12,
-                    fontWeight: isMe ? FontWeight.w600 : FontWeight.normal,
-                  ),
+                subtitle: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: request.callType == 'video'
+                            ? Colors.pink.shade50
+                            : Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: request.callType == 'video'
+                              ? Colors.pink.shade200
+                              : Colors.green.shade200,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            request.callType == 'video' ? Icons.videocam : Icons.mic,
+                            size: 12,
+                            color: request.callType == 'video'
+                                ? Colors.pink.shade700
+                                : Colors.green.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            request.callType == 'video' ? 'Video' : 'Audio',
+                            style: TextStyle(
+                              color: request.callType == 'video'
+                                  ? Colors.pink.shade700
+                                  : Colors.green.shade700,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        isMe ? 'Waiting approval' : 'Wants to join',
+                        style: TextStyle(
+                          color: isMe ? const Color(0xFFE91E63) : Colors.grey.shade600,
+                          fontSize: 11,
+                          fontWeight: isMe ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 trailing: _canManage
                     ? Row(
@@ -828,32 +874,52 @@ class _LiveRoomCallAndViewsBottomSheetState
                     ),
                   ),
                 )
-              : _canManage
-                  ? PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: Colors.grey),
-                      onSelected: (value) async {
-                        if (value == 'kick') {
-                          await LiveStreamService.kickParticipant(widget.roomId, participant.userId);
-                        } else if (value == 'mute') {
-                          await LiveStreamService.muteParticipant(
-                            widget.roomId,
-                            participant.userId,
-                            !participant.isMuted,
+              : (participant.userId == widget.currentUserId)
+                  ? ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.call_end, size: 16),
+                      label: const Text('End Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () async {
+                        await LiveStreamService.leaveCall(widget.roomId, widget.currentUserId);
+                        if (mounted) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('You left the call session.')),
                           );
                         }
                       },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'mute',
-                          child: Text(participant.isMuted ? 'Unmute Mic' : 'Mute Mic'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'kick',
-                          child: Text('Remove from Call', style: TextStyle(color: Colors.redAccent)),
-                        ),
-                      ],
                     )
-                  : null,
+                  : _canManage
+                      ? PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, color: Colors.grey),
+                          onSelected: (value) async {
+                            if (value == 'kick') {
+                              await LiveStreamService.kickParticipant(widget.roomId, participant.userId);
+                            } else if (value == 'mute') {
+                              await LiveStreamService.muteParticipant(
+                                widget.roomId,
+                                participant.userId,
+                                !participant.isMuted,
+                              );
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'mute',
+                              child: Text(participant.isMuted ? 'Unmute Mic' : 'Mute Mic'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'kick',
+                              child: Text('Remove from Call', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        )
+                      : null,
         );
       },
     );
@@ -863,14 +929,122 @@ class _LiveRoomCallAndViewsBottomSheetState
   // ACTION HANDLERS
   // -------------------------------------------------------------
   Future<void> _handleSendJoinRequest() async {
+    final callType = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E2C),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Select Call Type',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Choose how you want to join the call',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => Navigator.pop(ctx, 'audio'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(color: Colors.green.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3)),
+                        ],
+                      ),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.mic, color: Colors.white, size: 36),
+                          SizedBox(height: 10),
+                          Text('Audio Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          SizedBox(height: 4),
+                          Text('Voice Only', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => Navigator.pop(ctx, 'video'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE91E63), Color(0xFFFF4081)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(color: Colors.pink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3)),
+                        ],
+                      ),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.videocam, color: Colors.white, size: 36),
+                          SizedBox(height: 10),
+                          Text('Video Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          SizedBox(height: 4),
+                          Text('Camera & Mic', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+
+    if (callType == null) return;
+
     setState(() => _isRequestingToJoin = true);
     try {
-      await LiveStreamService.requestToJoin(widget.roomId);
+      await LiveStreamService.requestToJoin(widget.roomId, callType: callType);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Join request sent to the host!'),
-            backgroundColor: Color(0xFFE91E63),
+          SnackBar(
+            content: Text('${callType == 'video' ? 'Video' : 'Audio'} join request sent to the host!'),
+            backgroundColor: const Color(0xFFE91E63),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -911,7 +1085,12 @@ class _LiveRoomCallAndViewsBottomSheetState
       return;
     }
 
-    LiveStreamService.approveJoinRequest(widget.roomId, request.requestId, request.userId);
+    LiveStreamService.approveJoinRequest(
+      widget.roomId,
+      request.requestId,
+      request.userId,
+      callType: request.callType,
+    );
     setState(() {
       _approvedCount++;
     });
