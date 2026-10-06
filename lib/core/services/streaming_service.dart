@@ -299,8 +299,10 @@ class StreamingService {
     _currentUserName = userName;
     _isVideo = isVideo;
     _isHost = isHost;
-    _isMicOn = isHost;
-    _isCameraOn = isHost && isVideo;
+    if (!isAlreadyJoined) {
+      _isMicOn = isHost;
+      _isCameraOn = isHost && isVideo;
+    }
 
     // Reset previous stream ID
     _dataStreamId = null;
@@ -377,7 +379,9 @@ class StreamingService {
     await _initEngine();
     if (_engine == null) return;
 
-    await _engine!.setClientRole(role: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience);
+    if (!isAlreadyJoined) {
+      await _engine!.setClientRole(role: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience);
+    }
     
     if (isVideo) {
       await _engine!.enableVideo();

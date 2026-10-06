@@ -168,7 +168,7 @@ class LiveStreamPage extends StatefulWidget {
 }
 
 class _LiveStreamPageState extends State<LiveStreamPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late MusicPlayerManager _musicPlayerManager;
 
   final TextEditingController _chatController = TextEditingController();
@@ -304,6 +304,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _isJoined = widget.isHost;
     _musicPlayerManager = MusicPlayerManager();
     _isSpeakerMuted = StreamingService.instance.isSpeakerMuted;
@@ -475,7 +476,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     durationTimer?.cancel();
     _currentDuration.dispose();
 
-    if (!_isMinimizing) {
+    WidgetsBinding.instance.removeObserver(this);
+
+    final bool isMinimizingNow = _isMinimizing ||
+        (context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
+
+    if (!isMinimizingNow) {
       if (widget.isHost) {
         if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
           LiveStreamService.endPKBattle(
@@ -490,9 +496,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         }
         LiveStreamService.deleteRoom(widget.roomID);
       } else {
-        if (_isJoined) {
-          LiveStreamService.leaveRoom(widget.roomID);
-        }
+        LiveStreamService.leaveRoom(widget.roomID);
       }
       StreamingService.instance.disconnect();
     }
@@ -502,6 +506,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       overlays: SystemUiOverlay.values,
     );
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      LiveStreamService.pausePresence(widget.roomID, widget.isHost);
+    } else if (state == AppLifecycleState.resumed) {
+      final uid = _auth.currentUser?.uid;
+      if (uid != null) {
+        LiveStreamService.resumePresence(widget.roomID, uid, isHost: widget.isHost);
+      }
+    }
   }
 
   Future<void> _initialize() async {
@@ -601,6 +617,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       });
     }
 
+    final bool isResuming = (StreamingService.instance.currentRoomName == widget.roomID);
+
     await StreamingService.instance.connectRoom(
       roomName: widget.roomID,
       userId: currentUser.uid,
@@ -615,7 +633,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       await LiveStreamService.toggleCameraState(widget.roomID, true);
     } else {
       await LiveStreamService.joinRoom(widget.roomID);
-      if (!_isCurrentModerator) {
+      if (!_isCurrentModerator && !isResuming) {
         _sendJoinMessage();
         
         final userDoc = await ProfileService.getUserProfile(currentUser.uid);
@@ -1165,9 +1183,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           );
 
           // Only treat as kicked if the user was PREVIOUSLY confirmed in _participants
+          // and we are not currently minimizing/minimized
           final bool wasAlreadyInRoom = _participants.any((p) => p.userId == currentUser.uid);
+          final bool isMinimizingNow = _isMinimizing ||
+              (mounted && context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
 
-          if (wasAlreadyInRoom && myParticipant.userId.isEmpty && !widget.isHost && !_isCurrentModerator) {
+          if (wasAlreadyInRoom && myParticipant.userId.isEmpty && !widget.isHost && !_isCurrentModerator && !isMinimizingNow && !_isRoomEnded) {
             // We were kicked!
             if (mounted) {
               _handleKicked();

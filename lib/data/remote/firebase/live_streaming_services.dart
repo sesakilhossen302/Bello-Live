@@ -402,6 +402,7 @@ class LiveStreamService {
         });
       } else {
         await participantRef.update({
+          'isOnline': true,
           'userName': userName,
           'userPicture': userPicture,
           if (vipType != null) 'vipType': vipType,
@@ -512,9 +513,9 @@ class LiveStreamService {
       final user = _auth.currentUser;
       if (user == null) return;
 
+      final participantRef = _participantsRef.child('$roomId/${user.uid}');
+      await participantRef.child('isOnline').onDisconnect().cancel();
       if (isHost) {
-        final participantRef = _participantsRef.child('$roomId/${user.uid}');
-        await participantRef.child('isOnline').onDisconnect().cancel();
         _heartbeatTimers[roomId]?.cancel();
         _heartbeatTimers[roomId] = null;
       }

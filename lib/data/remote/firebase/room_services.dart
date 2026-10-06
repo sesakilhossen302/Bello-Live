@@ -423,22 +423,32 @@ class RoomService {
       }
     }
 
-    await participantRef.set({
-      'userId': user.uid,
-      'displayId': displayId,
-      'userName': userName,
-      'userPicture': userPicture,
-      'isCoHost': isCoHost,
-      'seatNo': -1,
-      'joinedAt': ServerValue.timestamp,
-      'isOnline': true,
-      'isMuted': isCoHost ? false : true,
-      'isApprovedSpeaker': isCoHost,
-      'isModerator': false,
-      'isAdmin': false,
-      if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
-      if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
-    });
+    final participantSnapshot = await participantRef.get();
+    if (!participantSnapshot.exists) {
+      await participantRef.set({
+        'userId': user.uid,
+        'displayId': displayId,
+        'userName': userName,
+        'userPicture': userPicture,
+        'isCoHost': isCoHost,
+        'seatNo': -1,
+        'joinedAt': ServerValue.timestamp,
+        'isOnline': true,
+        'isMuted': isCoHost ? false : true,
+        'isApprovedSpeaker': isCoHost,
+        'isModerator': false,
+        'isAdmin': false,
+        if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
+        if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
+      });
+    } else {
+      await participantRef.update({
+        'isOnline': true,
+        'userName': userName,
+        'userPicture': userPicture,
+        if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
+      });
+    }
 
     await _setupPresence(roomId, user.uid, isHost: false);
     await _usersCollection.doc(user.uid).update({'currentRoomId': roomId});
@@ -580,6 +590,53 @@ class RoomService {
         timer.cancel();
       }
     });
+  }
+
+  static Future<void> pausePresence(String roomId, bool isHost) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+
+      final participantRef = _participantsRef.child('$roomId/${user.uid}');
+      await participantRef.child('isOnline').onDisconnect().cancel();
+      if (isHost) {
+        _heartbeatTimers[roomId]?.cancel();
+        _heartbeatTimers[roomId] = null;
+      }
+    } catch (e) {
+      debugPrint('Error pausing presence in audio room: $e');
+    }
+  }
+
+  static Future<void> resumePresence(
+    String roomId,
+    String userId, {
+    required bool isHost,
+  }) async {
+    try {
+      final roomRef = _roomsRef.child(roomId);
+      final participantRef = _participantsRef.child('$roomId/$userId');
+      final roomSnapshot = await roomRef.get();
+      if (!roomSnapshot.exists) return;
+
+      if (isHost) {
+        await participantRef.child('isOnline').onDisconnect().set(false);
+        await roomRef.child('lastActive').set(ServerValue.timestamp);
+        _startForegroundHeartbeat(roomId);
+        await participantRef.child('isOnline').set(true);
+      } else {
+        final participantSnapshot = await participantRef.get();
+        if (!participantSnapshot.exists) {
+          await joinRoom(roomId);
+        } else {
+          await participantRef.child('isOnline').onDisconnect().set(false);
+          await participantRef.child('isOnline').set(true);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error resuming presence in audio room: $e');
+      rethrow;
+    }
   }
 
   // ============================================================================

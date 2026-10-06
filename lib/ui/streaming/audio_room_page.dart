@@ -242,7 +242,7 @@ class AudioRoomPage extends StatefulWidget {
 }
 
 class _AudioRoomPageState extends State<AudioRoomPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late MusicPlayerManager _musicPlayerManager;
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
@@ -318,6 +318,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     AudioRoomPage.currentRoomId = widget.roomID;
 
     _joinAnimationController = AnimationController(
@@ -480,10 +481,15 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     durationTimer?.cancel();
     _currentDuration.dispose();
 
+    WidgetsBinding.instance.removeObserver(this);
+
     _joinAnimationController.dispose();
     _musicPlayerManager.dispose();
 
-    if (!_isMinimizing) {
+    final bool isMinimizingNow = _isMinimizing ||
+        (context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
+
+    if (!isMinimizingNow) {
       if (widget.isHost) {
         RoomService.deleteRoom(widget.roomID);
       } else {
@@ -492,6 +498,18 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       StreamingService.instance.disconnect();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      RoomService.pausePresence(widget.roomID, widget.isHost);
+    } else if (state == AppLifecycleState.resumed) {
+      final uid = _auth.currentUser?.uid;
+      if (uid != null) {
+        RoomService.resumePresence(widget.roomID, uid, isHost: widget.isHost);
+      }
+    }
   }
 
   Future<void> _initialize() async {
@@ -600,6 +618,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       });
     }
 
+    final bool isResuming = (StreamingService.instance.currentRoomName == widget.roomID);
+
     await StreamingService.instance.connectRoom(
       roomName: widget.roomID,
       userId: currentUser.uid,
@@ -612,7 +632,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
     if (!widget.isHost) {
       await RoomService.joinRoom(widget.roomID);
-      if (!_isCurrentModerator) {
+      if (!_isCurrentModerator && !isResuming) {
         _sendJoinMessage();
         
         final userDoc = await ProfileService.getUserProfile(currentUser.uid);
@@ -981,7 +1001,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               ),
             );
 
-            if (oldCurrentUser.userId.isNotEmpty && newCurrentUser.userId.isEmpty && !widget.isHost && !_isCurrentModerator) {
+            final bool isMinimizingNow = _isMinimizing ||
+                (mounted && context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
+
+            if (oldCurrentUser.userId.isNotEmpty && newCurrentUser.userId.isEmpty && !widget.isHost && !_isCurrentModerator && !isMinimizingNow && !_isRoomEnded) {
               // We were kicked!
               if (mounted) {
                 _handleKicked();
