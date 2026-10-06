@@ -385,7 +385,10 @@ class StreamingService {
     
     if (isVideo) {
       await _engine!.enableVideo();
-      if (isHost) await _engine!.startPreview();
+      if (isHost && (!isAlreadyJoined || _isCameraOn)) {
+        await _engine!.enableLocalVideo(true);
+        await _engine!.startPreview();
+      }
     } else {
       await _engine!.enableAudio();
       await _engine!.disableVideo();
@@ -534,6 +537,35 @@ class StreamingService {
       }
     } catch (e) {
       debugPrint('[StreamingService] Error setting camera enabled: $e');
+    }
+  }
+
+  Future<void> pauseCameraForMinimize() async {
+    if (_engine == null || !_isVideo) return;
+    try {
+      await _engine!.stopPreview();
+      await _engine!.enableLocalVideo(false);
+      await _engine!.muteLocalVideoStream(true);
+      debugPrint('[StreamingService] Camera paused for minimize');
+    } catch (e) {
+      debugPrint('[StreamingService] pauseCameraForMinimize error: $e');
+    }
+  }
+
+  Future<void> resumeCameraFromMinimize({required bool isHost}) async {
+    if (_engine == null || !_isVideo) return;
+    try {
+      if ((isHost || _isCameraOn) && _isCameraOn) {
+        await _engine!.enableVideo();
+        await _engine!.enableLocalVideo(true);
+        await _engine!.muteLocalVideoStream(false);
+        if (isHost) {
+          await _engine!.startPreview();
+        }
+        debugPrint('[StreamingService] Camera resumed from minimize');
+      }
+    } catch (e) {
+      debugPrint('[StreamingService] resumeCameraFromMinimize error: $e');
     }
   }
 

@@ -499,6 +499,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         LiveStreamService.leaveRoom(widget.roomID);
       }
       StreamingService.instance.disconnect();
+    } else {
+      StreamingService.instance.pauseCameraForMinimize();
     }
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(
@@ -511,8 +513,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      StreamingService.instance.pauseCameraForMinimize();
       LiveStreamService.pausePresence(widget.roomID, widget.isHost);
     } else if (state == AppLifecycleState.resumed) {
+      StreamingService.instance.resumeCameraFromMinimize(isHost: widget.isHost);
       final uid = _auth.currentUser?.uid;
       if (uid != null) {
         LiveStreamService.resumePresence(widget.roomID, uid, isHost: widget.isHost);
@@ -630,7 +634,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _syncMessagesFromHistory();
 
     if (widget.isHost) {
-      await LiveStreamService.toggleCameraState(widget.roomID, true);
+      if (!isResuming) {
+        await LiveStreamService.toggleCameraState(widget.roomID, true);
+      }
+      await StreamingService.instance.resumeCameraFromMinimize(isHost: true);
     } else {
       await LiveStreamService.joinRoom(widget.roomID);
       if (!_isCurrentModerator && !isResuming) {
@@ -2111,6 +2118,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   label: 'Minimize',
                   onTap: () {
                     _isMinimizing = true;
+                    StreamingService.instance.pauseCameraForMinimize();
                     context.read<AppCubit>().minimizeRoom(
                       MinimizedRoomData(
                         roomId: widget.roomID,
