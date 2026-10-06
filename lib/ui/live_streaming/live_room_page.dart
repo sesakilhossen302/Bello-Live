@@ -712,12 +712,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     }
 
+    if (widget.isHost && durationTimer == null) {
+      startDurationTracking();
+    }
+
     setState(() => _isInitialized = true);
   }
 
   void startDurationTracking() {
-    final startTimestamp = roomData['createdAt'] as int?;
-    if (startTimestamp == null) return;
+    final rawCreatedAt = roomData['createdAt'];
+    final int startTimestamp = (rawCreatedAt is num)
+        ? rawCreatedAt.toInt()
+        : DateTime.now().millisecondsSinceEpoch;
+
+    durationTimer?.cancel();
+    final initialElapsed = math.max(0, DateTime.now().millisecondsSinceEpoch - startTimestamp);
+    _currentDuration.value = Duration(milliseconds: initialElapsed);
 
     durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
@@ -726,7 +736,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
 
       final now = DateTime.now().millisecondsSinceEpoch;
-      final elapsed = now - startTimestamp;
+      final elapsed = math.max(0, now - startTimestamp);
 
       // Update the value directly. NO setState()!
       _currentDuration.value = Duration(milliseconds: elapsed);
@@ -2830,6 +2840,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       padding: const EdgeInsets.fromLTRB(14.0, 2.0, 14.0, 6.0),
       child: Row(
         children: [
+          // Duration timer chip for host
+          if (widget.isHost) ...[
+            buildDurationChip(),
+            const SizedBox(width: 8),
+          ],
           StreamBuilder<int>(
             stream: _diamondsStreamCache.putIfAbsent(
               hostId,
