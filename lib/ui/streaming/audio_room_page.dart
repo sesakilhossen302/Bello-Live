@@ -349,9 +349,98 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _chatFocusNode.addListener(_updateChatExpansion);
     _chatController.addListener(_updateChatExpansion);
 
+    // Initialize chat stream and restore previous comments from history
+    _initChat();
+
     _musicPlayerManager = MusicPlayerManager();
 
     _initialize();
+  }
+
+  void _initChat() {
+    // 1. Immediately restore messages from StreamingService history if available
+    _syncMessagesFromHistory();
+
+    // 2. Set up listener for real-time messages from stream
+    _messageSubscription?.cancel();
+    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
+      if (!mounted) return;
+      _addChatMessageToUI(
+        ChatMessage(
+          id: message.id,
+          userId: message.userId,
+          username: message.userName,
+          message: message.message,
+          timestamp: message.timestamp,
+          isGiftMessage: message.isGiftMessage,
+          giftValue: message.giftValue,
+          isJoinMessage: message.isJoinMessage,
+        ),
+      );
+    });
+
+    // 3. Query Firebase Realtime Database in background to ensure all previous comments are loaded
+    StreamingService.instance
+        .fetchPastComments(widget.roomID, isVideo: false)
+        .then((_) {
+      if (mounted) {
+        _syncMessagesFromHistory();
+      }
+    });
+  }
+
+  void _syncMessagesFromHistory() {
+    final history = StreamingService.instance.messageHistory;
+    if (history.isEmpty) return;
+
+    bool hasNew = false;
+    for (final m in history) {
+      final bool alreadyExists = _messages.any((existing) =>
+          (existing.id != null && m.id.isNotEmpty && existing.id == m.id) ||
+          (existing.userId == m.userId &&
+              existing.message == m.message &&
+              existing.timestamp.difference(m.timestamp).abs().inSeconds < 4));
+
+      if (!alreadyExists) {
+        _messages.add(
+          ChatMessage(
+            id: m.id,
+            userId: m.userId,
+            username: m.userName,
+            message: m.message,
+            timestamp: m.timestamp,
+            isGiftMessage: m.isGiftMessage,
+            giftValue: m.giftValue,
+            isJoinMessage: m.isJoinMessage,
+          ),
+        );
+        hasNew = true;
+      }
+    }
+
+    if (hasNew) {
+      // Sort descending (newest at index 0) for reverse ListView
+      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      if (mounted) {
+        setState(() {});
+        _scrollToNewestMessage();
+      }
+    }
+  }
+
+  void _addChatMessageToUI(ChatMessage newMsg) {
+    final bool alreadyExists = _messages.any((m) =>
+        (m.id != null && newMsg.id != null && m.id == newMsg.id) ||
+        (m.userId == newMsg.userId &&
+            m.message == newMsg.message &&
+            m.timestamp.difference(newMsg.timestamp).abs().inSeconds < 4));
+
+    if (!alreadyExists) {
+      setState(() {
+        _messages.insert(0, newMsg);
+      });
+      _scrollToNewestMessage();
+    }
   }
 
   void _updateChatExpansion() {
@@ -519,6 +608,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       isVideo: false,
       isHost: widget.isHost,
     );
+    _syncMessagesFromHistory();
 
     if (!widget.isHost) {
       await RoomService.joinRoom(widget.roomID);
@@ -771,30 +861,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
       }
     });
 
-    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
-      if (!mounted) return;
-      final bool alreadyExists = _messages.any((m) =>
-          (m.id != null && message.id.isNotEmpty && m.id == message.id) ||
-          (m.userId == message.userId &&
-              m.message == message.message &&
-              m.timestamp.difference(message.timestamp).abs().inSeconds < 4));
-
-      if (!alreadyExists) {
-        setState(() {
-          _messages.insert(
-            0,
-            ChatMessage(
-              id: message.id,
-              userId: message.userId,
-              username: message.userName,
-              message: message.message,
-              timestamp: message.timestamp,
-            ),
-          );
-        });
-        _scrollToNewestMessage();
-      }
-    });
+    _syncMessagesFromHistory();
 
     StreamingService.instance.dataMessagesStream.listen((data) {
       if (!mounted) return;
@@ -1025,11 +1092,20 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               giftMessageText = '$senderName sent $giftValue diamonds';
             }
 
-            _messages.insert(
-              0,
-              ChatMessage(
+            final giftChatMsg = ChatMessage(
+              userId: data['senderId'] ?? '',
+              username: senderName,
+              message: giftMessageText,
+              timestamp: DateTime.now(),
+              isGiftMessage: true,
+              giftValue: giftValue,
+            );
+            _messages.insert(0, giftChatMsg);
+            StreamingService.instance.addChatMessage(
+              StreamingChatMessage(
+                id: 'gift_${DateTime.now().millisecondsSinceEpoch}_${data['senderId']}',
                 userId: data['senderId'] ?? '',
-                username: senderName,
+                userName: senderName,
                 message: giftMessageText,
                 timestamp: DateTime.now(),
                 isGiftMessage: true,

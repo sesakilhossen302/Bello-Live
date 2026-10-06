@@ -14,6 +14,9 @@ class StreamingChatMessage {
   final String userName;
   final String message;
   final DateTime timestamp;
+  final bool isGiftMessage;
+  final int? giftValue;
+  final bool isJoinMessage;
 
   StreamingChatMessage({
     this.id = '',
@@ -21,6 +24,9 @@ class StreamingChatMessage {
     required this.userName,
     required this.message,
     required this.timestamp,
+    this.isGiftMessage = false,
+    this.giftValue,
+    this.isJoinMessage = false,
   });
 }
 
@@ -67,11 +73,96 @@ class StreamingService {
 
   bool get isSpeakerMuted => _isSpeakerMuted;
   String? get opponentHostId => _opponentHostId;
+  String? get currentRoomName => _currentRoomName;
   Stream<List<String>> get activeSpeakersStream => _activeSpeakersController.stream;
   Stream<Map<String, dynamic>> get dataMessagesStream => _dataMessagesController.stream;
   Stream<StreamingChatMessage> get chatMessagesStream => _chatMessagesController.stream;
   Stream<ConnectionState> get connectionStateStream => _connectionStateController.stream;
   Stream<void> get remoteParticipantsChangedStream => _remoteParticipantsChangedController.stream;
+
+  final List<StreamingChatMessage> _messageHistory = [];
+  List<StreamingChatMessage> get messageHistory => List.unmodifiable(_messageHistory);
+
+  void addChatMessage(StreamingChatMessage msg) {
+    final bool alreadyExists = _messageHistory.any((m) =>
+        (m.id.isNotEmpty && msg.id.isNotEmpty && m.id == msg.id) ||
+        (m.userId == msg.userId &&
+            m.message == msg.message &&
+            m.timestamp.difference(msg.timestamp).abs().inSeconds < 4));
+
+    if (!alreadyExists) {
+      _messageHistory.add(msg);
+      if (_messageHistory.length > 200) {
+        _messageHistory.removeAt(0);
+      }
+      _chatMessagesController.add(msg);
+    }
+  }
+
+  Future<List<StreamingChatMessage>> fetchPastComments(String roomName, {bool isVideo = false}) async {
+    try {
+      final commentsRef = isVideo
+          ? FirebaseDatabase.instance.ref('live_events/$roomName/comments')
+          : FirebaseDatabase.instance.ref('room_events/$roomName/comments');
+
+      final snapshot = await commentsRef.limitToLast(100).get();
+      if (snapshot.exists && snapshot.value != null) {
+        final List<StreamingChatMessage> loaded = [];
+        final Map<dynamic, dynamic> map = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        map.forEach((key, val) {
+          if (val is Map) {
+            final data = Map<String, dynamic>.from(val);
+            final id = data['id']?.toString() ?? key.toString();
+            final msgUserId = data['userId']?.toString() ?? '';
+            final msgUserName = data['userName']?.toString() ?? 'User';
+            final message = data['message']?.toString() ?? '';
+
+            DateTime timestamp;
+            final rawTs = data['timestamp'];
+            if (rawTs is int) {
+              timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs);
+            } else if (rawTs is num) {
+              timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs.toInt());
+            } else {
+              timestamp = DateTime.now();
+            }
+
+            if (message.isNotEmpty) {
+              loaded.add(
+                StreamingChatMessage(
+                  id: id,
+                  userId: msgUserId,
+                  userName: msgUserName,
+                  message: message,
+                  timestamp: timestamp,
+                ),
+              );
+            }
+          }
+        });
+
+        loaded.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+        for (final msg in loaded) {
+          final bool exists = _messageHistory.any((m) =>
+              (m.id.isNotEmpty && msg.id.isNotEmpty && m.id == msg.id) ||
+              (m.userId == msg.userId &&
+                  m.message == msg.message &&
+                  m.timestamp.difference(msg.timestamp).abs().inSeconds < 4));
+          if (!exists) {
+            _messageHistory.add(msg);
+          }
+        }
+
+        if (_messageHistory.length > 200) {
+          _messageHistory.removeRange(0, _messageHistory.length - 200);
+        }
+      }
+    } catch (e) {
+      debugPrint('[StreamingService] Error fetching past comments: $e');
+    }
+    return List.unmodifiable(_messageHistory);
+  }
 
   Future<void> _initEngine() async {
     if (_isInitialized) return;
@@ -154,7 +245,7 @@ class StreamingService {
             _dataMessagesController.add(json);
 
             if (json.containsKey('type') && json['type'] == 'chat') {
-              _chatMessagesController.add(
+              addChatMessage(
                 StreamingChatMessage(
                   userId: json['userId'] ?? '',
                   userName: json['userName'] ?? 'User',
@@ -199,6 +290,10 @@ class StreamingService {
   }) async {
     final bool isAlreadyJoined = (_currentRoomName == roomName && _currentUserId == userId);
 
+    if (_currentRoomName != roomName) {
+      _messageHistory.clear();
+    }
+
     _currentRoomName = roomName;
     _currentUserId = userId;
     _currentUserName = userName;
@@ -207,69 +302,77 @@ class StreamingService {
     _isMicOn = isHost;
     _isCameraOn = isHost && isVideo;
 
-    // Reset previous stream ID and subscriptions
+    // Reset previous stream ID
     _dataStreamId = null;
-    await _commentsSubscription?.cancel();
-    _commentsSubscription = null;
-    await _quickEmojiSubscription?.cancel();
-    _quickEmojiSubscription = null;
 
-    // Set up Realtime Database listener for comments
-    final commentsRef = isVideo
-        ? FirebaseDatabase.instance.ref('live_events/$roomName/comments')
-        : FirebaseDatabase.instance.ref('room_events/$roomName/comments');
+    if (_commentsSubscription == null || !isAlreadyJoined) {
+      await _commentsSubscription?.cancel();
+      _commentsSubscription = null;
 
-    _commentsSubscription = commentsRef.onChildAdded.listen((event) {
-      try {
-        if (event.snapshot.value != null) {
-          final data = Map<String, dynamic>.from(event.snapshot.value as Map);
-          final id = data['id']?.toString() ?? event.snapshot.key ?? '';
-          final msgUserId = data['userId']?.toString() ?? '';
-          final msgUserName = data['userName']?.toString() ?? 'User';
-          final message = data['message']?.toString() ?? '';
+      // Set up Realtime Database listener for comments
+      final commentsRef = isVideo
+          ? FirebaseDatabase.instance.ref('live_events/$roomName/comments')
+          : FirebaseDatabase.instance.ref('room_events/$roomName/comments');
 
-          DateTime timestamp;
-          final rawTs = data['timestamp'];
-          if (rawTs is int) {
-            timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs);
-          } else if (rawTs is num) {
-            timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs.toInt());
-          } else {
-            timestamp = DateTime.now();
+      _commentsSubscription = commentsRef.onChildAdded.listen((event) {
+        try {
+          if (event.snapshot.value != null) {
+            final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+            final id = data['id']?.toString() ?? event.snapshot.key ?? '';
+            final msgUserId = data['userId']?.toString() ?? '';
+            final msgUserName = data['userName']?.toString() ?? 'User';
+            final message = data['message']?.toString() ?? '';
+
+            DateTime timestamp;
+            final rawTs = data['timestamp'];
+            if (rawTs is int) {
+              timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs);
+            } else if (rawTs is num) {
+              timestamp = DateTime.fromMillisecondsSinceEpoch(rawTs.toInt());
+            } else {
+              timestamp = DateTime.now();
+            }
+
+            if (message.isNotEmpty) {
+              addChatMessage(
+                StreamingChatMessage(
+                  id: id,
+                  userId: msgUserId,
+                  userName: msgUserName,
+                  message: message,
+                  timestamp: timestamp,
+                ),
+              );
+            }
           }
+        } catch (e) {
+          debugPrint('[StreamingService] Error receiving Firebase comment: $e');
+        }
+      });
+    }
 
-          if (message.isNotEmpty) {
-            _chatMessagesController.add(
-              StreamingChatMessage(
-                id: id,
-                userId: msgUserId,
-                userName: msgUserName,
-                message: message,
-                timestamp: timestamp,
-              ),
-            );
+    if (_quickEmojiSubscription == null || !isAlreadyJoined) {
+      await _quickEmojiSubscription?.cancel();
+      _quickEmojiSubscription = null;
+
+      // Set up Realtime Database listener for quick floating emojis
+      final quickEmojiRef = isVideo
+          ? FirebaseDatabase.instance.ref('live_events/$roomName/quick_emoji')
+          : FirebaseDatabase.instance.ref('room_events/$roomName/quick_emoji');
+
+      _quickEmojiSubscription = quickEmojiRef.onValue.listen((event) {
+        try {
+          if (event.snapshot.value != null) {
+            final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+            _dataMessagesController.add(data);
           }
+        } catch (e) {
+          debugPrint('[StreamingService] Error receiving quick emoji: $e');
         }
-      } catch (e) {
-        debugPrint('[StreamingService] Error receiving Firebase comment: $e');
-      }
-    });
+      });
+    }
 
-    // Set up Realtime Database listener for quick floating emojis
-    final quickEmojiRef = isVideo
-        ? FirebaseDatabase.instance.ref('live_events/$roomName/quick_emoji')
-        : FirebaseDatabase.instance.ref('room_events/$roomName/quick_emoji');
-
-    _quickEmojiSubscription = quickEmojiRef.onValue.listen((event) {
-      try {
-        if (event.snapshot.value != null) {
-          final data = Map<String, dynamic>.from(event.snapshot.value as Map);
-          _dataMessagesController.add(data);
-        }
-      } catch (e) {
-        debugPrint('[StreamingService] Error receiving quick emoji: $e');
-      }
-    });
+    unawaited(fetchPastComments(roomName, isVideo: isVideo));
 
     await _initEngine();
     if (_engine == null) return;
@@ -314,6 +417,7 @@ class StreamingService {
     await _engine?.leaveChannel();
     _currentRoomName = null;
     _uidToAccount.clear();
+    _messageHistory.clear();
   }
 
   Future<void> connectOpponentPKRoom({
@@ -482,6 +586,16 @@ class StreamingService {
         'message': messageText,
         'timestamp': ServerValue.timestamp,
       });
+
+      addChatMessage(
+        StreamingChatMessage(
+          id: msgId,
+          userId: _currentUserId ?? '',
+          userName: _currentUserName ?? 'User',
+          message: messageText,
+          timestamp: DateTime.now(),
+        ),
+      );
     } catch (e) {
       debugPrint('[StreamingService] Error posting comment to Firebase: $e');
     }
