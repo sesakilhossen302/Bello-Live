@@ -517,7 +517,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       StreamingService.instance.pauseCameraForMinimize();
       LiveStreamService.pausePresence(widget.roomID, widget.isHost);
     } else if (state == AppLifecycleState.resumed) {
-      StreamingService.instance.resumeCameraFromMinimize(isHost: widget.isHost);
+      if (StreamingService.instance.isCameraOn) {
+        StreamingService.instance.resumeCameraFromMinimize(isHost: widget.isHost);
+      }
       final uid = _auth.currentUser?.uid;
       if (uid != null) {
         LiveStreamService.resumePresence(widget.roomID, uid, isHost: widget.isHost);
@@ -637,8 +639,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (widget.isHost) {
       if (!isResuming) {
         await LiveStreamService.toggleCameraState(widget.roomID, true);
+        await StreamingService.instance.setCameraEnabled(true);
+      } else {
+        if (StreamingService.instance.isCameraOn) {
+          await StreamingService.instance.resumeCameraFromMinimize(isHost: true);
+        }
       }
-      await StreamingService.instance.resumeCameraFromMinimize(isHost: true);
     } else {
       await LiveStreamService.joinRoom(widget.roomID);
       if (!_isCurrentModerator && !isResuming) {
@@ -3207,13 +3213,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildParticipantVideo(LiveStreamParticipant participant, {bool isFullScreen = false}) {
+    final bool isCameraActive = (widget.isHost && participant.userId == _auth.currentUser?.uid)
+        ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
+        : participant.isCameraOn;
+
     Widget videoWidget = Stack(
       children: [
-        if (participant.isCameraOn)
+        if (isCameraActive)
           Positioned.fill(
             child: _SafeParticipantVideoWidget(participant: participant),
           ),
-        if (!participant.isCameraOn)
+        if (!isCameraActive)
           Positioned.fill(
             child: Container(
               color: Colors.grey.shade900,
@@ -3705,7 +3715,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   // FIXED: Host video for PK with BoxFit.cover for no black bars
   Widget _buildHostVideoForPK(LiveStreamParticipant host) {
-    if (host.isCameraOn) {
+    final bool isCameraActive = (widget.isHost && host.userId == _auth.currentUser?.uid)
+        ? (host.isCameraOn || StreamingService.instance.isCameraOn)
+        : host.isCameraOn;
+    if (isCameraActive) {
       return _SafeParticipantVideoWidget(participant: host);
     }
     return Container(

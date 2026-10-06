@@ -71,6 +71,8 @@ class StreamingService {
   // Mapping from integer UID to String userAccount
   final Map<int, String> _uidToAccount = {};
 
+  bool get isCameraOn => _isCameraOn;
+  bool get isMicOn => _isMicOn;
   bool get isSpeakerMuted => _isSpeakerMuted;
   String? get opponentHostId => _opponentHostId;
   String? get currentRoomName => _currentRoomName;
@@ -385,11 +387,14 @@ class StreamingService {
     
     if (isVideo) {
       await _engine!.enableVideo();
-      if (isHost && (!isAlreadyJoined || _isCameraOn)) {
+      if (isHost) {
+        _isCameraOn = true;
         await _engine!.enableLocalVideo(true);
         await _engine!.startPreview();
+        await _engine!.muteLocalVideoStream(false);
       }
     } else {
+      _isCameraOn = false;
       await _engine!.enableAudio();
       await _engine!.disableVideo();
     }
@@ -421,8 +426,18 @@ class StreamingService {
     _quickEmojiSubscription = null;
     _dataStreamId = null;
     await disconnectOpponentPKRoom();
+    try {
+      await _engine?.stopPreview();
+      await _engine?.enableLocalVideo(false);
+    } catch (_) {}
     await _engine?.leaveChannel();
     _currentRoomName = null;
+    _currentUserId = null;
+    _currentUserName = null;
+    _isCameraOn = false;
+    _isMicOn = false;
+    _isVideo = false;
+    _isHost = false;
     _uidToAccount.clear();
     _messageHistory.clear();
   }
@@ -555,12 +570,18 @@ class StreamingService {
   Future<void> resumeCameraFromMinimize({required bool isHost}) async {
     if (_engine == null || !_isVideo) return;
     try {
-      if ((isHost || _isCameraOn) && _isCameraOn) {
+      if (_isCameraOn) {
         await _engine!.enableVideo();
         await _engine!.enableLocalVideo(true);
         await _engine!.muteLocalVideoStream(false);
         if (isHost) {
           await _engine!.startPreview();
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishCameraTrack: true,
+              clientRoleType: ClientRoleType.clientRoleBroadcaster,
+            ),
+          );
         }
         debugPrint('[StreamingService] Camera resumed from minimize');
       }
