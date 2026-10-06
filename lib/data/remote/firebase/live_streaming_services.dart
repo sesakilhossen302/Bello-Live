@@ -164,6 +164,7 @@ class LiveStreamService {
       'packageBadgeUrl': packageBadgeUrl,
       'backgroundUrl': roomBackgroundUrl,
       'backgroundUpdatedAt': ServerValue.timestamp,
+      'isCommentsEnabled': true,
     });
 
     // 2. Flattened Participant Data
@@ -245,8 +246,15 @@ class LiveStreamService {
     required int endTimestamp,
   }) async {
     try {
-      final duration = endTimestamp - startTimestamp;
-      final durationMinutes = (duration / 1000 / 60).round();
+      final durationMs = endTimestamp - startTimestamp;
+      final durationSeconds = (durationMs / 1000).round();
+      final durationMinutes = (durationMs / 1000 / 60).round();
+      final hours = durationSeconds ~/ 3600;
+      final minutes = (durationSeconds % 3600) ~/ 60;
+      final seconds = durationSeconds % 60;
+      final durationFormatted = hours > 0
+          ? '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}'
+          : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
       final sessionDate = DateTime.fromMillisecondsSinceEpoch(startTimestamp);
       final dateKey =
           '${sessionDate.year}-${sessionDate.month.toString().padLeft(2, '0')}-${sessionDate.day.toString().padLeft(2, '0')}';
@@ -266,6 +274,8 @@ class LiveStreamService {
               'startTime': Timestamp.fromMillisecondsSinceEpoch(startTimestamp),
               'endTime': Timestamp.fromMillisecondsSinceEpoch(endTimestamp),
               'durationMinutes': durationMinutes,
+              'durationSeconds': durationSeconds,
+              'durationFormatted': durationFormatted,
             },
           ]),
           'lastUpdated': FieldValue.serverTimestamp(),
@@ -281,6 +291,8 @@ class LiveStreamService {
               'startTime': Timestamp.fromMillisecondsSinceEpoch(startTimestamp),
               'endTime': Timestamp.fromMillisecondsSinceEpoch(endTimestamp),
               'durationMinutes': durationMinutes,
+              'durationSeconds': durationSeconds,
+              'durationFormatted': durationFormatted,
             },
           ],
           'createdAt': FieldValue.serverTimestamp(),
@@ -657,6 +669,33 @@ class LiveStreamService {
     final user = _auth.currentUser!;
     await _participantsRef.child('$roomId/${user.uid}').update({
       'isCameraOn': isCameraOn,
+    });
+  }
+
+  static Future<void> toggleCommentsEnabled(String roomId, bool enabled) async {
+    await _roomsRef.child('$roomId/isCommentsEnabled').set(enabled);
+  }
+
+  static Stream<DatabaseEvent> getCommentsEnabledStream(String roomId) {
+    return _roomsRef.child('$roomId/isCommentsEnabled').onValue;
+  }
+
+  static Future<void> setCoHost(String roomId, String userId, bool isCoHost) async {
+    await _participantsRef.child('$roomId/$userId').update({
+      'isCoHost': isCoHost,
+    });
+  }
+
+  static Future<void> transferHost(String roomId, String newHostId, String newHostName, String? newHostPicture) async {
+    await _roomsRef.child(roomId).update({
+      'hostId': newHostId,
+      'hostName': newHostName,
+      if (newHostPicture != null) 'hostPicture': newHostPicture,
+    });
+    // Update participant records
+    await _participantsRef.child('$roomId/$newHostId').update({
+      'isAdmin': true,
+      'isCoHost': false,
     });
   }
 

@@ -466,9 +466,11 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
                             onPressed: () async {
                               try {
                                 if (widget.isCoHost) {
-                                  await RoomService.removeCoHost(widget.roomId!, widget.userId);
+                                  try { await RoomService.removeCoHost(widget.roomId!, widget.userId); } catch (_) {}
+                                  try { await LiveStreamService.setCoHost(widget.roomId!, widget.userId, false); } catch (_) {}
                                 } else {
-                                  await RoomService.promoteToCoHost(widget.roomId!, widget.userId);
+                                  try { await RoomService.promoteToCoHost(widget.roomId!, widget.userId); } catch (_) {}
+                                  try { await LiveStreamService.setCoHost(widget.roomId!, widget.userId, true); } catch (_) {}
                                 }
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
@@ -570,8 +572,33 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
                           ),
                         ),
                       ),
+                    if (isCurrentUser)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.pinkAccent.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 4,
+                            ),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              context.push(Routes.editProfile.path);
+                            },
+                            icon: const Icon(Icons.edit, size: 20),
+                            label: const Text(
+                              'Edit Profile',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
 
-                    if (!isCurrentUser) const SizedBox(height: 10),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),

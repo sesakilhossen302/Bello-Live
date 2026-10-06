@@ -82,10 +82,10 @@ class _LiveStreamJoinRequestsBottomSheetState extends State<LiveStreamJoinReques
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: () {
-              if (widget.currentGuestCount + _approvedCount >= 11) {
+              if (widget.currentGuestCount + _approvedCount >= 12) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Maximum 12 people (including host) can join the call.'),
+                    content: Text('Maximum 13 people (including host) can join the call.'),
                     backgroundColor: Colors.red,
                   ),
                 );

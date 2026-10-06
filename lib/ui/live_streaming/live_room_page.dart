@@ -52,6 +52,7 @@ class LiveStreamParticipant {
   final String? gender;
   final bool isModerator;
   final bool isAdmin;
+  final bool isCoHost;
   final String? idEntryUrl;
   final String? callType;
   final String? vipType;
@@ -67,6 +68,7 @@ class LiveStreamParticipant {
     this.gender,
     this.isModerator = false,
     this.isAdmin = false,
+    this.isCoHost = false,
     this.idEntryUrl,
     this.callType,
     this.vipType,
@@ -87,6 +89,7 @@ class LiveStreamParticipant {
       gender: data['gender'],
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
       isAdmin: data['isAdmin'] == true,
+      isCoHost: data['isCoHost'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
       callType: data['callType'] as String?,
       vipType: data['vipType'] as String?,
@@ -191,6 +194,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   StreamSubscription? _opponentParticipantsSubscription;
   StreamSubscription? _globalRandomPKInvitesSubscription;
   StreamSubscription? _callInviteSubscription;
+  StreamSubscription? _commentsEnabledSubscription;
+  bool _isCommentsEnabled = true;
   bool _isCallInviteDialogShowing = false;
   BuildContext? _currentRandomPKDialogContext;
   final Map<String, Stream<int>> _diamondsStreamCache = {};
@@ -462,6 +467,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _opponentParticipantsSubscription?.cancel();
     _globalRandomPKInvitesSubscription?.cancel();
     _callInviteSubscription?.cancel();
+    _commentsEnabledSubscription?.cancel();
     _pkTimer?.cancel();
 
     _joinAnimationTimer?.cancel();
@@ -1400,6 +1406,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               _participants = newParticipants;
               _isJoined = isNowJoined;
               _localMuteOverride = null;
+            });
+          }
+        });
+
+    _commentsEnabledSubscription =
+        LiveStreamService.getCommentsEnabledStream(widget.roomID).listen((event) {
+          if (!mounted || !event.snapshot.exists || event.snapshot.value == null) return;
+          final enabled = event.snapshot.value as bool? ?? true;
+          if (_isCommentsEnabled != enabled) {
+            setState(() {
+              _isCommentsEnabled = enabled;
             });
           }
         });
@@ -2819,7 +2836,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               GestureDetector(
                 onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 140),
+                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.45),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
@@ -3279,6 +3296,64 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
             ),
           ),
+
+        // Diamond Count Chip (BD Broad Call Style)
+        Positioned(
+          left: 4,
+          top: 4,
+          child: StreamBuilder<int>(
+            stream: _diamondsStreamCache.putIfAbsent(
+              participant.userId,
+              () => ProfileService.getUserDiamondsStream(participant.userId),
+            ),
+            builder: (context, snapshot) {
+              final diamonds = snapshot.data ?? 0;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.cyanAccent.withValues(alpha: 0.6),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.diamond,
+                      color: Colors.cyanAccent,
+                      size: 10,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      diamonds.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (diamonds >= 100000) ...[
+                      const SizedBox(width: 3),
+                      const Icon(Icons.star, color: Colors.orange, size: 9),
+                      Text(
+                        '${diamonds ~/ 100000}',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+
         // User Name Label
         Positioned(
           left: 4,
@@ -3504,7 +3579,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       );
     }
 
-    final allParticipants = [host, ...guests.take(11)]; // Max 12
+    final allParticipants = [host, ...guests.take(12)]; // Host + 12 guests = 13 total slots!
     final count = allParticipants.length;
 
     if (count == 1) {
@@ -3564,8 +3639,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       Widget bottomRow3_2 = count >= 11 ? _buildParticipantVideo(allParticipants[10]) : const SizedBox.shrink();
       Widget bottomRow3_3 = count >= 12 ? _buildParticipantVideo(allParticipants[11]) : const SizedBox.shrink();
 
+      Widget bottomRow4_1 = count >= 13 ? _buildParticipantVideo(allParticipants[12]) : const SizedBox.shrink();
+
       bool hasFourthRow = count > 6;
       bool hasFifthRow = count > 9;
+      bool hasSixthRow = count > 12;
 
       gridLayout = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3627,6 +3705,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 ],
               ),
             ),
+          if (hasSixthRow)
+            Expanded(
+              flex: 1,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 1, child: bottomRow4_1),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
+                ],
+              ),
+            ),
         ],
       );
     }
@@ -3656,7 +3746,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       child: Align(
         alignment: Alignment.topCenter,
         child: AspectRatio(
-          aspectRatio: count > 6 ? (3 / 4) : 1.0,
+          aspectRatio: count > 12 ? (9 / 16) : (count > 6 ? (3 / 4) : 1.0),
           child: gridLayout,
         ),
       ),
@@ -4182,36 +4272,48 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           final m = _messages[index];
 
           if (m.message == "Just joined the room!") {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildChatAvatar(m.userId, m.username),
-                      _buildLevelBadge(m.userId),
-                      _buildChatVipBadge(m.userId),
-                      Text(
-                        "${m.username}:",
-                        style: TextStyle(
-                          color: Colors.pink.shade300,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+            return GestureDetector(
+              onTap: () {
+                if (m.userId.isNotEmpty) {
+                  showProfileInfoBottomSheet(
+                    context,
+                    userId: m.userId,
+                    hostId: roomData['hostId'] ?? '',
+                    roomId: widget.roomID,
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _buildChatAvatar(m.userId, m.username),
+                        _buildLevelBadge(m.userId),
+                        _buildChatVipBadge(m.userId),
+                        Text(
+                          "${m.username}:",
+                          style: TextStyle(
+                            color: Colors.pink.shade300,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const Text(
-                    "Just joined the room!",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      ],
                     ),
-                  ),
-                ],
+                    const Text(
+                      "Just joined the room!",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -4246,72 +4348,74 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             padding: const EdgeInsets.only(bottom: 8),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: const LinearGradient(
-                    colors: [Colors.pinkAccent, Colors.purpleAccent, Colors.cyanAccent],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                padding: const EdgeInsets.all(1.5),
+              child: GestureDetector(
+                onTap: () {
+                  if (m.userId.isNotEmpty) {
+                    showProfileInfoBottomSheet(
+                      context,
+                      userId: m.userId,
+                      hostId: roomData['hostId'] ?? '',
+                      roomId: widget.roomID,
+                    );
+                  }
+                },
                 child: Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0A1128),
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [Colors.pinkAccent, Colors.purpleAccent, Colors.cyanAccent],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          showProfileInfoBottomSheet(
-                            context,
-                            userId: m.userId,
-                            hostId: roomData['hostId'] ?? '',
-                            roomId: widget.roomID,
-                          );
-                        },
-                        child: Padding(
+                  padding: const EdgeInsets.all(1.5),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A1128),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: _buildChatAvatar(m.userId, m.username),
                         ),
-                      ),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildLevelBadge(m.userId),
-                                _buildChatVipBadge(m.userId),
-                                Flexible(
-                                  child: Text(
-                                    m.username,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildLevelBadge(m.userId),
+                                  _buildChatVipBadge(m.userId),
+                                  Flexible(
+                                    child: Text(
+                                      m.username,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              m.message,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                            ),
-                          ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                m.message,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -4394,10 +4498,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     child: TextField(
                       controller: _chatController,
                       focusNode: _chatFocusNode,
+                      enabled: _isCommentsEnabled || widget.isHost || _isCurrentModerator,
                       textInputAction: TextInputAction.send,
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'Say hi',
+                        hintText: (_isCommentsEnabled || widget.isHost || _isCurrentModerator)
+                            ? 'Say hi'
+                            : 'Comments are disabled by host',
                         hintStyle: TextStyle(
                           color: Colors.white.withValues(alpha: 0.65),
                           fontSize: 13.5,
@@ -4624,6 +4731,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   void _sendMessage() async {
+    if (!_isCommentsEnabled && !widget.isHost && !_isCurrentModerator) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Comments are disabled by host'),
+            backgroundColor: Colors.redAccent,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
     final messageText = _chatController.text.trim();
     if (messageText.isEmpty) return;
 
@@ -5438,7 +5557,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       return const SizedBox.shrink();
     }
 
-    final participantsToShow = participants.where((p) => !p.isModerator).take(5).toList();
+    final participantsToShow = participants.where((p) => !p.isModerator).toList();
 
     return Row(
       mainAxisSize: MainAxisSize.min,

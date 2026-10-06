@@ -112,6 +112,77 @@ class HostActionsBottomSheet extends StatelessWidget {
                 color: participant.isAdmin ? Colors.orangeAccent : Colors.cyanAccent,
               ),
 
+              // Make / Remove Co-Host
+              buildActionButton(
+                participant.isCoHost ? 'Remove Co-Host' : 'Make Co-Host',
+                participant.isCoHost ? Icons.star_border : Icons.star,
+                () async {
+                  try {
+                    await LiveStreamService.setCoHost(roomId, targetUserId, !participant.isCoHost);
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(participant.isCoHost ? 'Removed co-host role from $targetUserName' : 'Assigned co-host role to $targetUserName'),
+                          backgroundColor: Colors.purpleAccent,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                color: Colors.purpleAccent,
+              ),
+
+              // Transfer Host Role
+              buildActionButton(
+                'Transfer Host to $targetUserName',
+                Icons.swap_horiz,
+                () async {
+                  try {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: const Color(0xFF2C132B),
+                        title: const Text('Transfer Host', style: TextStyle(color: Colors.white)),
+                        content: Text('Are you sure you want to transfer host role to $targetUserName?', style: const TextStyle(color: Colors.white70)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Transfer', style: TextStyle(color: Colors.pinkAccent)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await LiveStreamService.transferHost(roomId, targetUserId, targetUserName, participant.userPicture);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Transferred host to $targetUserName'), backgroundColor: Colors.green),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                color: Colors.amberAccent,
+              ),
+
               // Invite to Call (if not on seat)
               if (!participant.isOnSeat)
                 buildActionButton(

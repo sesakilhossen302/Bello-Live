@@ -224,8 +224,15 @@ class RoomService {
     required int endTimestamp,
   }) async {
     try {
-      final duration = endTimestamp - startTimestamp;
-      final durationMinutes = (duration / 1000 / 60).round();
+      final durationMs = endTimestamp - startTimestamp;
+      final durationSeconds = (durationMs / 1000).round();
+      final durationMinutes = (durationMs / 1000 / 60).round();
+      final hours = durationSeconds ~/ 3600;
+      final minutes = (durationSeconds % 3600) ~/ 60;
+      final seconds = durationSeconds % 60;
+      final durationFormatted = hours > 0
+          ? '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}'
+          : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 
       final sessionDate = DateTime.fromMillisecondsSinceEpoch(startTimestamp);
       final dateKey =
@@ -247,6 +254,8 @@ class RoomService {
               'startTime': Timestamp.fromMillisecondsSinceEpoch(startTimestamp),
               'endTime': Timestamp.fromMillisecondsSinceEpoch(endTimestamp),
               'durationMinutes': durationMinutes,
+              'durationSeconds': durationSeconds,
+              'durationFormatted': durationFormatted,
             },
           ]),
           'lastUpdated': FieldValue.serverTimestamp(),
@@ -262,6 +271,8 @@ class RoomService {
               'startTime': Timestamp.fromMillisecondsSinceEpoch(startTimestamp),
               'endTime': Timestamp.fromMillisecondsSinceEpoch(endTimestamp),
               'durationMinutes': durationMinutes,
+              'durationSeconds': durationSeconds,
+              'durationFormatted': durationFormatted,
             },
           ],
           'createdAt': FieldValue.serverTimestamp(),

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../../../data/remote/firebase/live_streaming_services.dart';
 import '../../streaming/bottomsheets/play_music_bottomsheet.dart';
 import '../../streaming/blocked_users_page.dart';
@@ -74,7 +75,11 @@ final List<_ToolItem> _hostTools = [
     icon: Icons.block,
     iconBgColor: Colors.grey.shade700,
   ),
-
+  _ToolItem(
+    label: 'Comments',
+    icon: Icons.chat_bubble_outline,
+    iconBgColor: Colors.blue.shade600,
+  ),
 ];
 
 final List<_ToolItem> _guestTools = [
@@ -270,6 +275,29 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                           ),
                         ),
                       );
+                    };
+                  } else if (tool.label == 'Comments') {
+                    onTapLogic = () async {
+                      try {
+                        final snap = await FirebaseDatabase.instance
+                            .ref('live_streams/${widget.currentRoomId}/isCommentsEnabled')
+                            .get();
+                        final bool currentlyEnabled = (snap.value as bool?) ?? true;
+                        final bool newState = !currentlyEnabled;
+                        await LiveStreamService.toggleCommentsEnabled(widget.currentRoomId, newState);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(newState ? 'Comments enabled' : 'Comments disabled by host'),
+                              backgroundColor: newState ? Colors.green : Colors.redAccent,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        debugPrint('Error toggling comments: $e');
+                      }
                     };
                   } else {
                     onTapLogic = () {

@@ -1075,10 +1075,10 @@ class _LiveRoomCallAndViewsBottomSheetState
         .where((p) => p.userId != widget.hostId && p.isOnSeat)
         .length;
 
-    if (seatedCount + _approvedCount >= 11) {
+    if (seatedCount + _approvedCount >= 12) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 12 people (including host) can join the call.'),
+          content: Text('Maximum 13 people (including host) can join the call.'),
           backgroundColor: Colors.red,
         ),
       );

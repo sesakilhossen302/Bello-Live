@@ -861,17 +861,17 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildRechargeDiamondsCard(context),
           const SizedBox(height: 6),
 
-          // GROUP 1: Account, Live History, Withdraw, Block List (Each has distinct color)
+          // GROUP 1: Edit Profile, Live History, Withdraw, Block List (Each has distinct color)
           _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.person_crop_circle_badge_checkmark,
-            title: 'Account',
+            icon: CupertinoIcons.pencil_circle_fill,
+            title: 'Edit Profile',
             onTap: () => context.push(Routes.editProfile.path),
             gradient: const [Color(0xFF6A11CB), Color(0xFF2575FC)],
           )),
           _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.square_arrow_right,
+            icon: CupertinoIcons.time,
             title: 'Live History',
-            onTap: () => context.push(Routes.earnings.path),
+            onTap: () => context.push(Routes.history.path),
             gradient: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
           )),
           _buildMulticolorMenuItem(_PinkMenuItemData(

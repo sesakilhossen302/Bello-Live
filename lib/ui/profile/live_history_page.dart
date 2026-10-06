@@ -32,6 +32,29 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
     return '$hours hrs $mins mins';
   }
 
+  String _formatSessionTimeCount(Map<String, dynamic> session) {
+    if (session['durationFormatted'] != null && (session['durationFormatted'] as String).isNotEmpty) {
+      return session['durationFormatted'] as String;
+    }
+    final int? durationSecs = session['durationSeconds'] as int?;
+    if (durationSecs != null && durationSecs > 0) {
+      final hours = durationSecs ~/ 3600;
+      final minutes = (durationSecs % 3600) ~/ 60;
+      final seconds = durationSecs % 60;
+      if (hours > 0) {
+        return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      }
+      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    final durationMins = session['durationMinutes'] as int? ?? 0;
+    final hours = durationMins ~/ 60;
+    final mins = durationMins % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:00';
+    }
+    return '${mins.toString().padLeft(2, '0')}:00';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -347,18 +370,31 @@ class _LiveHistoryPageState extends State<LiveHistoryPage> {
                                             ),
                                           ),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFF5A189A).withValues(alpha: 0.1),
+                                              color: const Color(0xFF5A189A).withValues(alpha: 0.2),
                                               borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.4), width: 0.8),
                                             ),
-                                            child: Text(
-                                              '$duration mins',
-                                              style: const TextStyle(
-                                                color: Color(0xFF5A189A),
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  CupertinoIcons.time,
+                                                  size: 13,
+                                                  color: Color(0xFFFFD700),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _formatSessionTimeCount(session),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
