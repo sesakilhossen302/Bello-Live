@@ -46,21 +46,17 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A052A),
+      backgroundColor: const Color(0xFF090614),
       body: SafeArea(
         child: Column(
           children: [
             // Header Section
             Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3B0B59), Color(0xFF1A052A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF090614),
                 border: Border(
                   bottom: BorderSide(
-                    color: const Color(0xFFFF1E7A).withValues(alpha: 0.2),
+                    color: Color(0xFF1E1430),
                     width: 1,
                   ),
                 ),
@@ -68,31 +64,114 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(
-                      CupertinoIcons.back,
-                      color: Colors.white,
-                      size: 26,
+                  Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFF2A8D).withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF2A8D).withValues(alpha: 0.3),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
-                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/logo/pigo live.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.live_tv,
+                          color: Colors.amber,
+                          size: 20,
+                        ),
+                      ),
+                    ),
                   ),
-                  const Spacer(),
-                  Text(
-                    AppLocalizations.of(context).profile,
-                    style: const TextStyle(
-                      fontSize: 20,
+                  const Text(
+                    'Profile',
+                    style: TextStyle(
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   const Spacer(),
-                  Row(
-                    children: [
-                      _buildHeaderIconButton(
-                        icon: CupertinoIcons.pencil,
-                        onTap: () => context.push(Routes.editProfile.path),
+                  GestureDetector(
+                    onTap: () => context.push(Routes.inbox.path),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF18102B),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF2C194C), width: 1),
                       ),
-                    ],
+                      child: const Icon(
+                        Icons.notifications_none_rounded,
+                        color: Color(0xFFFFD166),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => context.push(Routes.packageStore.path),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF18102B),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF2C194C), width: 1),
+                      ),
+                      child: const Icon(
+                        Icons.workspace_premium_rounded,
+                        color: Color(0xFFFFD166),
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => context.push(Routes.status.path),
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF18102B),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFFF2A8D).withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.add_box_outlined,
+                            color: Color(0xFFFF2A8D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Posts',
+                            style: TextStyle(
+                              color: Color(0xFFFF2A8D),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -216,36 +295,34 @@ class _ProfilePageState extends State<ProfilePage> {
                                   [],
                             );
 
-                            return SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  const SizedBox(height: 20),
-                                  _buildTopAvatar(userProfile),
-                                  const SizedBox(height: 12),
-                                  _buildNameAndId(userProfile, data['email'] ?? FirebaseAuth.instance.currentUser?.email, data['activeAddOns'] as Map<String, dynamic>?),
-                                  const SizedBox(height: 16),
-                                  _buildBadges(userProfile, systemTags),
-                                  const SizedBox(height: 24),
-                                  FutureBuilder<int>(
-                                    future: ProfileService.getMutualsList(
-                                      userProfile.id,
-                                    ).then((l) => l.length),
-                                    builder: (context, mutualsSnapshot) {
-                                      final friendsCount =
-                                          mutualsSnapshot.data ?? 0;
-                                      return _buildStatistics(
-                                        userProfile,
-                                        friendsCount,
-                                      );
-                                    },
+                            return FutureBuilder<int>(
+                              future: ProfileService.getMutualsList(
+                                userProfile.id,
+                              ).then((l) => l.length),
+                              builder: (context, mutualsSnapshot) {
+                                final friendsCount =
+                                    mutualsSnapshot.data ?? 0;
+                                return SingleChildScrollView(
+                                  physics: const BouncingScrollPhysics(),
+                                  child: Column(
+                                    children: [
+                                      const SizedBox(height: 12),
+                                      _buildHeroProfileCard(
+                                        userProfile: userProfile,
+                                        userEmail: data['email'] ??
+                                            FirebaseAuth
+                                                .instance
+                                                .currentUser
+                                                ?.email,
+                                        friendsCount: friendsCount,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildMenuList(context, userProfile),
+                                      const SizedBox(height: 120),
+                                    ],
                                   ),
-                                  const SizedBox(height: 24),
-                                  _buildCoinButtons(userProfile),
-                                  const SizedBox(height: 24),
-                                  _buildMenuList(context, userProfile),
-                                  const SizedBox(height: 120),
-                                ],
-                              ),
+                                );
+                              },
                             );
                           },
                         );
@@ -258,370 +335,452 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildHeaderIconButton({
-    required IconData icon,
-    required VoidCallback onTap,
+
+  Widget _buildHeroProfileCard({
+    required UserProfile userProfile,
+    required String? userEmail,
+    required int friendsCount,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: Colors.white, size: 20),
-      ),
-    );
-  }
+    final starCount = userProfile.beans >= 100000
+        ? userProfile.beans ~/ 100000
+        : (userProfile.giftSendingLevel * 3 + (userProfile.followers > 0 ? 5 : 1));
 
-  Widget _buildTopAvatar(UserProfile userProfile) {
-    final profileImageUrl = userProfile.profileImage;
-    const double avatarSize = 105.0;
     return Container(
-      width: avatarSize,
-      height: avatarSize,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF5A189A), width: 3.5),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: ClipOval(
-        child: (profileImageUrl.isNotEmpty)
-            ? CachedNetworkImage(
-                imageUrl: profileImageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    const Center(child: CircularProgressIndicator()),
-                errorWidget: (context, url, error) => const Center(
-                  child: Icon(Icons.person, color: Colors.grey, size: 50),
-                ),
-              )
-            : Container(
-                color: const Color(0xFF512DA8),
-                child: Center(
-                  child: Text(
-                    userProfile.name.isNotEmpty ? userProfile.name[0].toLowerCase() : 't',
-                    style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-
-  List<Widget> _buildRoleBadges(UserProfile userProfile) {
-    final List<Widget> badges = [];
-    
-    Widget buildBadge(String text, Color color, IconData? icon) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, color: Colors.white, size: 16),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14, // Bigger font size as requested
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF4A0E4E),
+            Color(0xFF260A3D),
+            Color(0xFF140624),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      );
-    }
-
-    bool hasRole = false;
-
-    if (userProfile.isHost) {
-      badges.add(buildBadge('Official host', const Color(0xFF9C27B0), Icons.mic));
-      hasRole = true;
-    }
-    if (userProfile.isAgency) {
-      badges.add(buildBadge('Agency', const Color(0xFFF44336), Icons.business_center));
-      hasRole = true;
-    }
-    if (userProfile.isReseller) {
-      badges.add(buildBadge('Reseler', const Color(0xFF2196F3), Icons.storefront));
-      hasRole = true;
-    }
-    if (userProfile.isModerator) {
-      badges.add(buildBadge('Moderator', const Color(0xFFE91E63), Icons.security));
-      hasRole = true;
-    }
-
-    if (!hasRole) {
-      badges.add(buildBadge('General User', const Color(0xFF607D8B), Icons.person));
-    }
-
-    return badges;
-  }
-
-  Widget _buildNameAndId(UserProfile userProfile, String? userEmail, Map<String, dynamic>? activeAddOns) {
-    return Column(
-      children: [
-        Text(
-          userProfile.name,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFF8A2BE2).withValues(alpha: 0.35),
+          width: 1.2,
         ),
-        if (userEmail != null && userEmail.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            userEmail,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4A0E4E).withValues(alpha: 0.45),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
           ),
         ],
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: userProfile.displayId));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('ID copied!'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // --- Top User Info Row ---
+          Row(
             children: [
-              Text(
-                'ID: ${userProfile.displayId}',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+              // Avatar with VVIP Badge
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF9D4EDD),
+                        width: 2.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF2A8D).withValues(alpha: 0.3),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(2.5),
+                    child: ClipOval(
+                      child: (userProfile.profileImage.isNotEmpty)
+                          ? CachedNetworkImage(
+                              imageUrl: userProfile.profileImage,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => const Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              errorWidget: (_, __, ___) => Container(
+                                color: const Color(0xFF512DA8),
+                                child: const Icon(Icons.person, color: Colors.white, size: 40),
+                              ),
+                            )
+                          : Container(
+                              color: const Color(0xFF512DA8),
+                              child: Center(
+                                child: Text(
+                                  userProfile.name.isNotEmpty
+                                      ? userProfile.name[0].toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                  // VVIP / VIP Badge at bottom right of Avatar
+                  Positioned(
+                    bottom: -2,
+                    right: -4,
+                    child: Image.asset(
+                      'assets/images/VVIP PNG.png',
+                      height: 28,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/images/VIP PNG.png',
+                        height: 28,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.verified,
+                          color: Colors.amber,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              const Icon(
-                CupertinoIcons.doc_on_doc,
-                size: 16,
-                color: Colors.white70,
+              const SizedBox(width: 14),
+              // User Details (Name, Subtitle, ID)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      userProfile.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      (userEmail != null && userEmail.isNotEmpty)
+                          ? userEmail
+                          : (userProfile.bio.isNotEmpty
+                              ? userProfile.bio
+                              : 'Pigo Live User'),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: userProfile.displayId));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('ID copied!'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFF5A189A),
+                          ),
+                        );
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'ID: ${userProfile.displayId}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.copy_rounded,
+                            size: 15,
+                            color: Colors.white70,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildBadges(UserProfile userProfile, Map<String, dynamic> systemTags) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ..._buildRoleBadges(userProfile),
-        // Green Level Pill
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF4CAF50),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            'L.V. ${userProfile.giftSendingLevel}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-        ),
-      ],
-    );
-  }
+          const SizedBox(height: 16),
 
-  Widget _buildStatistics(UserProfile userProfile, int friendsCount) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // 1. Friends (Text item)
-          GestureDetector(
-            onTap: _showFriendsBottomSheet,
+          // --- Dark Stats Pill Card Inside Hero Card ---
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0C071A),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFF261540).withValues(alpha: 0.9),
+                width: 1,
+              ),
+            ),
             child: Column(
               children: [
-                Text(
-                  '$friendsCount',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                // Top Badges Row (Diamond, Star, Level)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Diamond Pill
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RechargeDiamondsPage()),
+                      ),
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.diamond_rounded,
+                            color: Color(0xFF00B4D8),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${userProfile.beans}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Star Pill
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFFFD166),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$starCount',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD166),
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Level Pill (L.V. 13)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5A189A),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'L.V. ${userProfile.giftSendingLevel}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Friends',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 13,
-                  ),
+
+                const SizedBox(height: 12),
+                Divider(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  height: 1,
+                ),
+                const SizedBox(height: 10),
+
+                // Bottom Stats Row (Friends, Followers, Following)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    // Friends
+                    GestureDetector(
+                      onTap: _showFriendsBottomSheet,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.people_alt_rounded,
+                            color: Color(0xFF48CAE4),
+                            size: 22,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$friendsCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Friends',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Followers
+                    GestureDetector(
+                      onTap: _showFollowersBottomSheet,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.favorite_rounded,
+                            color: Color(0xFFFF2A8D),
+                            size: 22,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${userProfile.followers}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Followers',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Following
+                    GestureDetector(
+                      onTap: _showFollowingBottomSheet,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.person_add_alt_1_rounded,
+                            color: Color(0xFFFFB703),
+                            size: 22,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${userProfile.following}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Following',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-
-          // 2. Followers Solid Pink Pill Button
-          GestureDetector(
-            onTap: _showFollowersBottomSheet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF5A189A),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF5A189A).withValues(alpha: 0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(CupertinoIcons.heart_fill, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${userProfile.followers}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Text(
-                        'Followers',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 3. Following Solid Orange Pill Button
-          GestureDetector(
-            onTap: _showFollowingBottomSheet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7043),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF7043).withValues(alpha: 0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(CupertinoIcons.person_badge_plus_fill, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${userProfile.following}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Text(
-                        'Following',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(
-    String count,
-    String label,
-    Color countColor, {
-    VoidCallback? onTap,
+  Widget _buildMenuItemCard({
+    required IconData icon,
+    required String title,
+    required Color iconBgColor,
+    required Color iconColor,
+    required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: TextStyle(
-              color: countColor,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF1C1C1E),
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF130C22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF251842).withValues(alpha: 0.8),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCoinButtons(UserProfile userProfile) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildNewCoinButton(
-              title: 'Total Diamond',
-              icon: Icons.diamond_rounded,
-              value: userProfile.beans,
-              valueColor: const Color(0xFF0088FF),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const RechargeDiamondsPage()),
-              ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 22),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white38,
+                  size: 22,
+                ),
+              ],
             ),
-
           ),
-        ],
+        ),
       ),
     );
   }
@@ -837,136 +996,167 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Column(
         children: [
           if (userProfile.isReseller) ...[
-            _buildResellerCardGroup([
-              _PinkMenuItemData(
-                icon: Icons.storefront,
-                title: 'Reseller Hub',
-                onTap: () => context.push(Routes.resellerHub.path),
-              ),
-            ]),
-            const SizedBox(height: 16),
+            _buildMenuItemCard(
+              icon: Icons.storefront_rounded,
+              title: 'Reseller Hub',
+              iconBgColor: const Color(0xFF162544),
+              iconColor: const Color(0xFF2196F3),
+              onTap: () => context.push(Routes.resellerHub.path),
+            ),
           ],
           if (userProfile.isAgency) ...[
-            _buildAgencyCardGroup([
-              _PinkMenuItemData(
-                icon: Icons.admin_panel_settings,
-                title: 'Host Management',
-                onTap: () => context.push(Routes.hostManagement.path),
-              ),
-            ]),
-            const SizedBox(height: 16),
+            _buildMenuItemCard(
+              icon: Icons.admin_panel_settings_rounded,
+              title: 'Host Management',
+              iconBgColor: const Color(0xFF381A16),
+              iconColor: const Color(0xFFFF5722),
+              onTap: () => context.push(Routes.hostManagement.path),
+            ),
           ],
 
-          // Featured Recharge Diamonds Banner
-          _buildRechargeDiamondsCard(context),
-          const SizedBox(height: 6),
-
-          // GROUP 1: Edit Profile, Live History, Withdraw, Block List (Each has distinct color)
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.pencil_circle_fill,
-            title: 'Edit Profile',
+          // 1. Account (matching screenshot)
+          _buildMenuItemCard(
+            icon: Icons.manage_accounts_rounded,
+            title: 'Account',
+            iconBgColor: const Color(0xFF28133D),
+            iconColor: const Color(0xFFC77DFF),
             onTap: () => context.push(Routes.editProfile.path),
-            gradient: const [Color(0xFF6A11CB), Color(0xFF2575FC)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.time,
-            title: 'Live History',
-            onTap: () => context.push(Routes.history.path),
-            gradient: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.money_dollar_circle_fill,
-            title: 'Withdraw',
-            onTap: () => context.push(Routes.withdrawPage.path),
-            gradient: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.person_badge_minus_fill,
-            title: 'Block List: 0',
-            onTap: () => _showBlockedUsersDialog(),
-            gradient: const [Color(0xFFFF5858), Color(0xFFF09819)],
-          )),
-          const SizedBox(height: 6),
+          ),
 
-          // GROUP 2: Store, My Bag, Packages, Host Request (Each has distinct color)
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.bag_fill,
+          // 2. Block List: 0 (matching screenshot)
+          _buildMenuItemCard(
+            icon: Icons.person_off_rounded,
+            title: 'Block List: 0',
+            iconBgColor: const Color(0xFF380E23),
+            iconColor: const Color(0xFFFF2A8D),
+            onTap: () => _showBlockedUsersDialog(),
+          ),
+
+          // 3. History (matching screenshot)
+          _buildMenuItemCard(
+            icon: Icons.history_rounded,
+            title: 'History',
+            iconBgColor: const Color(0xFF0E1A38),
+            iconColor: const Color(0xFF48CAE4),
+            onTap: () => context.push(Routes.history.path),
+          ),
+
+          // 4. Withdraw (matching screenshot)
+          _buildMenuItemCard(
+            icon: Icons.monetization_on_rounded,
+            title: 'Withdraw',
+            iconBgColor: const Color(0xFF382B0E),
+            iconColor: const Color(0xFFFFD166),
+            onTap: () => context.push(Routes.withdrawPage.path),
+          ),
+
+          // 5. Store
+          _buildMenuItemCard(
+            icon: Icons.shopping_bag_rounded,
             title: 'Store',
+            iconBgColor: const Color(0xFF0E3827),
+            iconColor: const Color(0xFF2EC4B6),
             onTap: () => context.push(Routes.store.path),
-            gradient: const [Color(0xFF00B09B), Color(0xFF96C93D)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.briefcase_fill,
+          ),
+
+          // 6. My Bag
+          _buildMenuItemCard(
+            icon: Icons.inventory_2_rounded,
             title: 'My Bag',
+            iconBgColor: const Color(0xFF280E38),
+            iconColor: const Color(0xFF9D4EDD),
             onTap: () => context.push(Routes.myBag.path),
-            gradient: const [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: Icons.workspace_premium,
+          ),
+
+          // 7. Royal Package
+          _buildMenuItemCard(
+            icon: Icons.workspace_premium_rounded,
             title: 'Royal Package',
+            iconBgColor: const Color(0xFF38280E),
+            iconColor: const Color(0xFFFFB703),
             onTap: () => context.push(Routes.packageStore.path, extra: 'Royal Package'),
-            gradient: const [Color(0xFFFFB703), Color(0xFFFB8500)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
+          ),
+
+          // 8. Crown Package
+          _buildMenuItemCard(
             icon: Icons.stars_rounded,
             title: 'Crown Package',
+            iconBgColor: const Color(0xFF380E1E),
+            iconColor: const Color(0xFFFF512F),
             onTap: () => context.push(Routes.packageStore.path, extra: 'Crown Package'),
-            gradient: const [Color(0xFFFF512F), Color(0xFFDD2476)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
+          ),
+
+          // 9. King Package
+          _buildMenuItemCard(
             icon: Icons.diamond_rounded,
             title: 'King Package',
+            iconBgColor: const Color(0xFF161638),
+            iconColor: const Color(0xFF8F94FB),
             onTap: () => context.push(Routes.packageStore.path, extra: 'King Package'),
-            gradient: const [Color(0xFF4E54C8), Color(0xFF8F94FB)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
+          ),
+
+          // 10. Queen Package
+          _buildMenuItemCard(
             icon: Icons.favorite_rounded,
             title: 'Queen Package',
+            iconBgColor: const Color(0xFF300E38),
+            iconColor: const Color(0xFFDA22FF),
             onTap: () => context.push(Routes.packageStore.path, extra: 'Queen Package'),
-            gradient: const [Color(0xFFDA22FF), Color(0xFF9733EE)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.headphones,
+          ),
+
+          // 11. Host Request
+          _buildMenuItemCard(
+            icon: Icons.headset_mic_rounded,
             title: 'Host Request',
+            iconBgColor: const Color(0xFF0E2F38),
+            iconColor: const Color(0xFF00B4D8),
             onTap: () => context.push(Routes.applyHosting.path),
-            gradient: const [Color(0xFF00F2FE), Color(0xFF4FACFE)],
-          )),
-          const SizedBox(height: 6),
+          ),
 
-          // GROUP 3: Share, Support, Policy, Terms (Each has distinct color)
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.share,
+          // 12. Share App
+          _buildMenuItemCard(
+            icon: Icons.share_rounded,
             title: 'Share App',
+            iconBgColor: const Color(0xFF0E3832),
+            iconColor: const Color(0xFF48CAE4),
             onTap: () => _shareApp(),
-            gradient: const [Color(0xFF43E97B), Color(0xFF38F9D7)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.chat_bubble_2_fill,
-            title: 'Support',
-            onTap: () => _showSupportDialog(),
-            gradient: const [Color(0xFF2193B0), Color(0xFF6DD5ED)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.shield_fill,
-            title: 'Privacy Policy',
-            onTap: () => _showPrivacyPolicy(),
-            gradient: const [Color(0xFF667EEA), Color(0xFF764BA2)],
-          )),
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.doc_text_fill,
-            title: 'Terms & Conditions',
-            onTap: () => _showTermsConditions(),
-            gradient: const [Color(0xFF2C3E50), Color(0xFF4CA1AF)],
-          )),
-          const SizedBox(height: 6),
+          ),
 
-          // GROUP 4: Logout
-          _buildMulticolorMenuItem(_PinkMenuItemData(
-            icon: CupertinoIcons.square_arrow_left_fill,
+          // 13. Customer Support
+          _buildMenuItemCard(
+            icon: Icons.chat_bubble_rounded,
+            title: 'Support',
+            iconBgColor: const Color(0xFF112638),
+            iconColor: const Color(0xFF4EA8DE),
+            onTap: () => _showSupportDialog(),
+          ),
+
+          // 14. Privacy Policy
+          _buildMenuItemCard(
+            icon: Icons.shield_rounded,
+            title: 'Privacy Policy',
+            iconBgColor: const Color(0xFF1F1238),
+            iconColor: const Color(0xFF7209B7),
+            onTap: () => _showPrivacyPolicy(),
+          ),
+
+          // 15. Terms & Conditions
+          _buildMenuItemCard(
+            icon: Icons.description_rounded,
+            title: 'Terms & Conditions',
+            iconBgColor: const Color(0xFF261D38),
+            iconColor: const Color(0xFF90E0EF),
+            onTap: () => _showTermsConditions(),
+          ),
+
+          // 16. Logout
+          _buildMenuItemCard(
+            icon: Icons.logout_rounded,
             title: 'Logout',
+            iconBgColor: const Color(0xFF380E14),
+            iconColor: const Color(0xFFFF4D4D),
             onTap: () => _confirmLogout(),
-            gradient: const [Color(0xFFEB3349), Color(0xFFF45C43)],
-          )),
+          ),
         ],
       ),
     );
