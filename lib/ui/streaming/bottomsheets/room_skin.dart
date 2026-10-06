@@ -5,11 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:rxdart/rxdart.dart';
 import '../../../data/remote/firebase/profile_services.dart';
 import '../../../data/remote/firebase/room_services.dart';
+import '../../../data/remote/firebase/live_streaming_services.dart';
 
 class RoomSkinSideSheet extends StatelessWidget {
   final String roomId;
+  final bool isLiveStream;
 
-  const RoomSkinSideSheet({super.key, required this.roomId});
+  const RoomSkinSideSheet({
+    super.key,
+    required this.roomId,
+    this.isLiveStream = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +187,11 @@ class RoomSkinSideSheet extends StatelessWidget {
           );
 
           // Update room background
-          await RoomService.updateRoomBackground(roomId, skin.url);
+          if (isLiveStream) {
+            await LiveStreamService.updateRoomBackground(roomId, skin.url);
+          } else {
+            await RoomService.updateRoomBackground(roomId, skin.url);
+          }
 
           // Save to user profile and activeAddOns
           await ProfileService.savePreferredRoomSkin(skin.url);
@@ -243,7 +253,7 @@ class RoomSkinSideSheet extends StatelessWidget {
   }
 }
 
-void showRoomSkinSideSheet(BuildContext context, String roomId) {
+void showRoomSkinSideSheet(BuildContext context, String roomId, {bool isLiveStream = false}) {
   showGeneralDialog(
     context: context,
     barrierDismissible: true,
@@ -251,7 +261,7 @@ void showRoomSkinSideSheet(BuildContext context, String roomId) {
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (context, animation, secondaryAnimation) {
-      return RoomSkinSideSheet(roomId: roomId);
+      return RoomSkinSideSheet(roomId: roomId, isLiveStream: isLiveStream);
     },
     transitionBuilder: (context, animation, secondaryAnimation, child) {
       return SlideTransition(

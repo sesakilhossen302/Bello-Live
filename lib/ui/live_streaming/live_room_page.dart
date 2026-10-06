@@ -35,6 +35,7 @@ import 'bottomsheets/emoji_bottomsheet.dart';
 import '../../ui/streaming/bottomsheets/rocket_config_bottomsheet.dart';
 
 import '../../ui/streaming/bottomsheets/play_music_bottomsheet.dart';
+import '../streaming/bottomsheets/room_skin.dart';
 import 'bottomsheets/video_gifts_bottomsheet.dart';
 import '../../ui/streaming/bottomsheets/fans_ranking_bottomsheet.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -319,19 +320,19 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         tween: Tween<Offset>(
           begin: const Offset(1.5, 0.0),
           end: const Offset(0.0, 0.0),
-        ).chain(CurveTween(curve: Curves.linear)),
-        weight: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 1.2,
       ),
       TweenSequenceItem(
         tween: ConstantTween<Offset>(const Offset(0.0, 0.0)),
-        weight: 3.0,
+        weight: 2.6,
       ),
       TweenSequenceItem(
         tween: Tween<Offset>(
           begin: const Offset(0.0, 0.0),
           end: const Offset(-1.5, 0.0),
-        ).chain(CurveTween(curve: Curves.linear)),
-        weight: 1.0,
+        ).chain(CurveTween(curve: Curves.easeInCubic)),
+        weight: 1.2,
       ),
     ]).animate(_joinAnimationController);
 
@@ -652,7 +653,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           
           Map<String, dynamic>? idEntryData;
           for (var entry in addOns.entries) {
-            if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+            final key = entry.key.toLowerCase().replaceAll(' ', '');
+            if (key.contains('entry') || key.contains('ride') || key.contains('vehicle')) {
               idEntryData = entry.value as Map<String, dynamic>?;
               break;
             }
@@ -865,173 +867,300 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ? Container(
                   width: double.infinity,
                   height: double.infinity,
-                color: Colors.transparent,
-                child: Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.center,
-                  children: [
-                    if (_newJoinerIdEntryUrl!.toLowerCase().endsWith('.svga'))
-                      NetworkSVGAPlayer(
-                        imageUrl: _newJoinerIdEntryUrl!,
-                        fit: BoxFit.cover,
-                        onFinished: _hideJoinAnimation,
-                      )
-                    else
-                      Image.network(
-                        _newJoinerIdEntryUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
-                      ),
-                    Center(
-                      child: Text(
-                        '${_newJoinerName ?? ''} joined!',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                          shadows: [
-                            BoxShadow(
-                              color: Colors.black54,
-                              blurRadius: 4,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 12, bottom: 60),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.8),
-                        const Color(0xFF6A1B9A).withValues(alpha: 0.85),
-                        const Color(0xFFE91E63).withValues(alpha: 0.75),
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.8),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFE91E63).withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  color: Colors.transparent,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    alignment: Alignment.center,
                     children: [
-                      // Avatar with Frame
-                      SizedBox(
-                        width: 38,
-                        height: 38,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(0xFFFFD700),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: ClipOval(
-                                child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: _newJoinerPicture!,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) => const Icon(
-                                          Icons.person,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                        errorWidget: (context, url, error) => const Icon(
-                                          Icons.person,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                              ),
-                            ),
-                            if (_newJoinerId != null)
-                              Positioned(
-                                width: 49.4,
-                                height: 49.4,
-                                child: IgnorePointer(
-                                  child: ActiveFrameWidget(
-                                    userId: _newJoinerId!,
-                                    size: 49.4,
-                                  ),
-                                ),
-                              ),
-                          ],
+                      if (_newJoinerIdEntryUrl!.toLowerCase().endsWith('.svga'))
+                        NetworkSVGAPlayer(
+                          imageUrl: _newJoinerIdEntryUrl!,
+                          fit: BoxFit.cover,
+                          onFinished: _hideJoinAnimation,
+                        )
+                      else
+                        Image.network(
+                          _newJoinerIdEntryUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _newJoinerName ?? '',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.auto_awesome,
-                                  color: Color(0xFFFFD700),
-                                  size: 14,
-                                ),
+                      // Floating luxury badge at the bottom of the animation
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.only(left: 12, bottom: 80),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xE61A0A0A),
+                                Color(0xE64A148C),
+                                Color(0xE6880E4F),
                               ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
                             ),
-                            const Text(
-                              'Entered the live room ✨',
-                              style: TextStyle(
-                                color: Color(0xFFFFE082),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(
+                              color: const Color(0xFFFFD700).withValues(alpha: 0.9),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                                blurRadius: 16,
+                                spreadRadius: 2,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Avatar + ActiveFrame
+                              SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFFFFD700),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: ClipOval(
+                                        child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                            ? CachedNetworkImage(
+                                                imageUrl: _newJoinerPicture!,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) => const Icon(
+                                                  Icons.person,
+                                                  color: Colors.white,
+                                                  size: 22,
+                                                ),
+                                                errorWidget: (context, url, error) => const Icon(
+                                                  Icons.person,
+                                                  color: Colors.white,
+                                                  size: 22,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                                size: 22,
+                                              ),
+                                      ),
+                                    ),
+                                    if (_newJoinerId != null)
+                                      Positioned(
+                                        width: 54.6,
+                                        height: 54.6,
+                                        child: IgnorePointer(
+                                          child: ActiveFrameWidget(
+                                            userId: _newJoinerId!,
+                                            size: 54.6,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _newJoinerName ?? '',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            shadows: [
+                                              BoxShadow(
+                                                color: Colors.black87,
+                                                blurRadius: 4,
+                                                offset: Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.military_tech,
+                                          color: Color(0xFFFFD700),
+                                          size: 16,
+                                        ),
+                                      ],
+                                    ),
+                                    const Text(
+                                      'Arrived with luxury ride! ✨',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFE082),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                     ],
                   ),
+                )
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 12, bottom: 80),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xE61A0A0A),
+                          Color(0xE64A148C),
+                          Color(0xE6880E4F),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.85),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFE91E63).withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Avatar with Frame
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFFFFD700),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: ClipOval(
+                                  child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: _newJoinerPicture!,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                          errorWidget: (context, url, error) => const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                ),
+                              ),
+                              if (_newJoinerId != null)
+                                Positioned(
+                                  width: 52,
+                                  height: 52,
+                                  child: IgnorePointer(
+                                    child: ActiveFrameWidget(
+                                      userId: _newJoinerId!,
+                                      size: 52,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _newJoinerName ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13.5,
+                                      shadows: [
+                                        BoxShadow(
+                                          color: Colors.black87,
+                                          blurRadius: 4,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.auto_awesome,
+                                    color: Color(0xFFFFD700),
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                              const Text(
+                                'Entered the live room ✨',
+                                style: TextStyle(
+                                  color: Color(0xFFFFE082),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
         ),
       ),
     );
@@ -2368,6 +2497,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               backgroundColor: Colors.black,
               body: Stack(
                 children: [
+                  // 1. Global Room Theme / Skin Background
+                  if (roomData['backgroundUrl'] != null &&
+                      (roomData['backgroundUrl'] as String).isNotEmpty)
+                    Positioned.fill(
+                      child: CachedNetworkImage(
+                        imageUrl: roomData['backgroundUrl'] as String,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const SizedBox.shrink(),
+                        errorWidget: (context, url, error) => const SizedBox.shrink(),
+                      ),
+                    ),
                   if (!_isPKMode)
                     Positioned.fill(
                       child: _isInitialized
@@ -4931,6 +5071,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         size: 19,
                       ),
                     ),
+
+                    // 13. Room Skin / Theme Button (Host & Moderator)
+                    if (widget.isHost || _isCurrentModerator)
+                      _buildCircleActionButton(
+                        size: 38,
+                        onTap: () {
+                          showRoomSkinSideSheet(context, widget.roomID, isLiveStream: true);
+                        },
+                        child: const Icon(
+                          Icons.palette_outlined,
+                          color: Colors.white,
+                          size: 19,
+                        ),
+                      ),
 
                     // 13. Settings (Gear) Button -> Collapses back to Image 1!
                     _buildCircleActionButton(

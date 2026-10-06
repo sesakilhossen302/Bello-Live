@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/remote/firebase/live_streaming_services.dart';
 import '../../streaming/bottomsheets/play_music_bottomsheet.dart';
 import '../../streaming/blocked_users_page.dart';
+import '../../streaming/bottomsheets/room_skin.dart';
 
 import 'invite_pk_bottomsheet.dart';
 import 'share_bottomsheet.dart';
@@ -251,6 +252,11 @@ class _LiveToolsBottomSheetState extends State<LiveToolsBottomSheet> {
                     onTapLogic = () {
                       Navigator.pop(context);
                       _showNoticeDialog(context);
+                    };
+                  } else if (tool.label == 'Room skin') {
+                    onTapLogic = () {
+                      Navigator.pop(context);
+                      showRoomSkinSideSheet(context, widget.currentRoomId, isLiveStream: true);
                     };
                   } else if (tool.label == 'Block') {
                     onTapLogic = () {

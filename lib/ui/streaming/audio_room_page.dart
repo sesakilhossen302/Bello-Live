@@ -644,7 +644,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           
           Map<String, dynamic>? idEntryData;
           for (var entry in addOns.entries) {
-            if (entry.key.toLowerCase().replaceAll(' ', '') == 'identry') {
+            final key = entry.key.toLowerCase().replaceAll(' ', '');
+            if (key.contains('entry') || key.contains('ride') || key.contains('vehicle')) {
               idEntryData = entry.value as Map<String, dynamic>?;
               break;
             }
