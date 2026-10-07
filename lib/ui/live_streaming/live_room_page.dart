@@ -485,10 +485,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     WidgetsBinding.instance.removeObserver(this);
 
-    final bool isMinimizingNow = _isMinimizing ||
-        (context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
+    final bool isMinimizingNow = _isMinimizing;
 
     if (!isMinimizingNow) {
+      try {
+        context.read<AppCubit>().closeMinimizedRoom();
+      } catch (_) {}
       if (widget.isHost) {
         if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
           LiveStreamService.endPKBattle(
@@ -2344,14 +2346,77 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     ).then((shouldExit) {
       if (shouldExit == true) {
         if (!mounted) return shouldExit;
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(Routes.home.path);
-        }
+        _exitAndEndLiveRoom();
       }
       return shouldExit;
     });
+  }
+
+  Future<void> _exitAndEndLiveRoom() async {
+    _isMinimizing = false;
+    _isRoomEnded = true;
+
+    try {
+      if (mounted) {
+        context.read<AppCubit>().closeMinimizedRoom();
+      }
+    } catch (_) {}
+
+    try {
+      if (widget.isHost) {
+        if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
+          try {
+            await LiveStreamService.endPKBattle(
+              widget.roomID,
+              _pkState['opponentRoomId'],
+            );
+          } catch (e) {
+            debugPrint("Error ending PK battle: $e");
+          }
+
+          try {
+            final String opponentHostId = _pkState['opponentHostId'] ?? '';
+            if (opponentHostId.isNotEmpty) {
+              await StreamingService.instance.disconnectOpponentPKRoom();
+            }
+          } catch (e) {
+            debugPrint("Error disconnecting opponent PK room: $e");
+          }
+        }
+        await LiveStreamService.deleteRoom(widget.roomID);
+      } else {
+        final uid = _auth.currentUser?.uid;
+        if (uid != null) {
+          try {
+            await LiveStreamService.leaveCall(widget.roomID, uid);
+          } catch (_) {}
+        }
+        await LiveStreamService.leaveRoom(widget.roomID);
+      }
+    } catch (e) {
+      debugPrint("Error exiting live room: $e");
+    }
+
+    try {
+      await StreamingService.instance.disconnect();
+    } catch (e) {
+      debugPrint("Error disconnecting streaming service: $e");
+    }
+
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
+
+    try {
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
+    } catch (_) {}
+
+    if (mounted) {
+      context.go(Routes.home.path);
+    }
   }
 
   Widget _buildExitDialogOption({

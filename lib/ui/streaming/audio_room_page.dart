@@ -493,10 +493,12 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _joinAnimationController.dispose();
     _musicPlayerManager.dispose();
 
-    final bool isMinimizingNow = _isMinimizing ||
-        (context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
+    final bool isMinimizingNow = _isMinimizing;
 
     if (!isMinimizingNow) {
+      try {
+        context.read<AppCubit>().closeMinimizedRoom();
+      } catch (_) {}
       if (widget.isHost) {
         RoomService.deleteRoom(widget.roomID);
       } else {
@@ -1650,14 +1652,54 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     ).then((shouldExit) {
       if (shouldExit == true) {
         if (!mounted) return shouldExit;
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(Routes.home.path);
-        }
+        _exitAndEndAudioRoom();
       }
       return shouldExit;
     });
+  }
+
+  Future<void> _exitAndEndAudioRoom() async {
+    _isMinimizing = false;
+    _isRoomEnded = true;
+    if (AudioRoomPage.currentRoomId == widget.roomID) {
+      AudioRoomPage.currentRoomId = null;
+    }
+
+    try {
+      if (mounted) {
+        context.read<AppCubit>().closeMinimizedRoom();
+      }
+    } catch (_) {}
+
+    try {
+      if (widget.isHost) {
+        await RoomService.deleteRoom(widget.roomID);
+      } else {
+        final uid = _auth.currentUser?.uid;
+        if (uid != null) {
+          try {
+            await RoomService.leaveSeat(widget.roomID);
+          } catch (_) {}
+        }
+        await RoomService.leaveRoom(widget.roomID);
+      }
+    } catch (e) {
+      debugPrint("Error deleting/leaving audio room on exit: $e");
+    }
+
+    try {
+      await StreamingService.instance.disconnect();
+    } catch (e) {
+      debugPrint("Error disconnecting streaming on exit: $e");
+    }
+
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
+
+    if (mounted) {
+      context.go(Routes.home.path);
+    }
   }
 
   Widget _buildExitDialogOption({

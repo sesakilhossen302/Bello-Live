@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/cubits/app_cubit.dart';
 import '../../navigation/routes.dart';
 import '../../navigation/my_router.dart';
@@ -118,23 +119,34 @@ class _FloatingMinimizedRoomState extends State<FloatingMinimizedRoom>
                     const SizedBox(width: 8),
                     // Close Button
                     GestureDetector(
-                      onTap: () {
-                        // End room logic
-                        if (data.isAudioRoom) {
-                          if (data.isHost) {
-                            RoomService.deleteRoom(data.roomId);
+                      onTap: () async {
+                        // End room logic completely
+                        try {
+                          if (data.isAudioRoom) {
+                            if (data.isHost) {
+                              await RoomService.deleteRoom(data.roomId);
+                            } else {
+                              await RoomService.leaveRoom(data.roomId);
+                            }
                           } else {
-                            RoomService.leaveRoom(data.roomId);
+                            if (data.isHost) {
+                              await LiveStreamService.deleteRoom(data.roomId);
+                            } else {
+                              await LiveStreamService.leaveRoom(data.roomId);
+                            }
                           }
-                        } else {
-                          if (data.isHost) {
-                            LiveStreamService.deleteRoom(data.roomId);
-                          } else {
-                            LiveStreamService.leaveRoom(data.roomId);
-                          }
+                        } catch (e) {
+                          debugPrint('Error closing room from floating widget: $e');
                         }
-                        StreamingService.instance.disconnect();
-                        context.read<AppCubit>().closeMinimizedRoom();
+                        try {
+                          await StreamingService.instance.disconnect();
+                        } catch (_) {}
+                        try {
+                          await WakelockPlus.disable();
+                        } catch (_) {}
+                        if (context.mounted) {
+                          context.read<AppCubit>().closeMinimizedRoom();
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(4),
