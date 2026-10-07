@@ -18,7 +18,6 @@ import '../../core/cubits/app_cubit.dart';
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
 import '../../core/widgets/GiftImageWidget.dart'; // For GiftImageWidget
 import 'widgets/floating_youtube_player.dart';
-import '../../core/widgets/auto_scroll_text.dart';
 import '../../core/widgets/network_svga_player.dart';
 import '../../data/remote/firebase/live_streaming_services.dart';
 import '../../data/remote/firebase/profile_services.dart';
@@ -728,33 +727,53 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     }
 
-    if (widget.isHost && durationTimer == null) {
+    if (durationTimer == null) {
       startDurationTracking();
     }
 
     setState(() => _isInitialized = true);
   }
 
-  void startDurationTracking() {
-    final rawCreatedAt = roomData['createdAt'];
-    final int startTimestamp = (rawCreatedAt is num)
-        ? rawCreatedAt.toInt()
-        : DateTime.now().millisecondsSinceEpoch;
+  int? _roomStartTimestamp;
 
-    durationTimer?.cancel();
-    final initialElapsed = math.max(0, DateTime.now().millisecondsSinceEpoch - startTimestamp);
+  int _extractRoomStartTime() {
+    final raw = roomData['createdAt'];
+    if (raw is num) return raw.toInt();
+    if (raw is Timestamp) return raw.millisecondsSinceEpoch;
+    if (raw is String) {
+      final dt = DateTime.tryParse(raw);
+      if (dt != null) return dt.millisecondsSinceEpoch;
+      final n = num.tryParse(raw);
+      if (n != null) return n.toInt();
+    }
+    return 0;
+  }
+
+  void startDurationTracking() {
+    final extracted = _extractRoomStartTime();
+    if (extracted > 0) {
+      _roomStartTimestamp = extracted;
+    } else if (_roomStartTimestamp == null || _roomStartTimestamp == 0) {
+      _roomStartTimestamp = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    final initialElapsed = math.max(0, DateTime.now().millisecondsSinceEpoch - _roomStartTimestamp!);
     _currentDuration.value = Duration(milliseconds: initialElapsed);
 
+    durationTimer?.cancel();
     durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
 
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final elapsed = math.max(0, now - startTimestamp);
+      final latestCreated = _extractRoomStartTime();
+      if (latestCreated > 0 && latestCreated != _roomStartTimestamp) {
+        _roomStartTimestamp = latestCreated;
+      }
 
-      // Update the value directly. NO setState()!
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final elapsed = math.max(0, now - _roomStartTimestamp!);
       _currentDuration.value = Duration(milliseconds: elapsed);
     });
   }
@@ -1228,8 +1247,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           _roomNotice = roomData['notice'] ?? "";
         });
 
-        if (widget.isHost && durationTimer == null) {
+        if (durationTimer == null) {
           startDurationTracking();
+        } else {
+          final latestCreated = _extractRoomStartTime();
+          if (latestCreated > 0 && latestCreated != _roomStartTimestamp) {
+            _roomStartTimestamp = latestCreated;
+          }
         }
 
         final newPKState = data['pkState'] != null
@@ -2727,164 +2751,164 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).viewPadding.top),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12.0, 12.0, 0, 6.0),
+        padding: const EdgeInsets.fromLTRB(12.0, 8.0, 12.0, 6.0),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Host Info Section with capsule background - FLEXIBLE
-            Flexible(
-              child: GestureDetector(
-                onTap: () {
-                  if (hostId == currentUserId) return;
-                  showProfileInfoBottomSheet(
-                    context,
-                    userId: hostId,
-                    hostId: hostId,
-                    roomId: widget.roomID,
-                  );
-                },
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
+            // Host Info Section with clean capsule background
+            GestureDetector(
+              onTap: () {
+                if (hostId == currentUserId) return;
+                showProfileInfoBottomSheet(
+                  context,
+                  userId: hostId,
+                  hostId: hostId,
+                  roomId: widget.roomID,
+                );
+              },
+              child: Container(
+                height: 38,
+                padding: const EdgeInsets.fromLTRB(3, 3, 8, 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VipAvatarWidget(
+                      userId: hostId,
+                      userPicture: roomData['hostPicture'],
+                      avatarSize: 32,
+                      directVipType: roomData['vipType'] ?? roomData['vip'],
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: IntrinsicWidth(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    const SizedBox(width: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 44, maxWidth: 90),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          VipAvatarWidget(
-                            userId: hostId,
-                            userPicture: roomData['hostPicture'],
-                            avatarSize: 32,
-                            directVipType: roomData['vipType'] ?? roomData['vip'],
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_isPKMode)
-                                      Container(
-                                        margin: const EdgeInsets.only(right: 4),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'PK',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    Flexible(
-                                      child: AutoScrollText(
-                                        alignment: Alignment.centerLeft,
-                                        text: roomData["hostName"] ?? '',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                ValueListenableBuilder<Duration>(
-                                  valueListenable: _currentDuration,
-                                  builder: (context, duration, child) {
-                                    final hours = duration.inHours.toString().padLeft(2, '0');
-                                    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-                                    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-                                    return Text(
-                                      '$hours:$minutes:$seconds',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.75),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // ADD THIS: Follow Button inside the capsule
-                          if (isGuest)
-                            StreamBuilder<bool>(
-                              stream: ProfileService.isFollowing(hostId),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return const SizedBox.shrink();
-                                }
-                                final bool isFollowing = snapshot.data ?? false;
-                                if (isFollowing) return const SizedBox.shrink();
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(left: 8.0),
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      try {
-                                        await ProfileService.followUser(hostId);
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Error: $e'),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    child: Container(
-                                      width:
-                                          24, // Sized perfectly for the capsule
-                                      height: 24,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.pink.shade400,
-                                            Colors.pink.shade700,
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        Icons.add,
-                                        color: Colors.white,
-                                        size: 14,
-                                      ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_isPKMode)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: const Text(
+                                    'PK',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              Flexible(
+                                child: Text(
+                                  (roomData["hostName"] != null &&
+                                          (roomData["hostName"] as String).isNotEmpty)
+                                      ? roomData["hostName"]
+                                      : 'Host',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 1),
+                          ValueListenableBuilder<Duration>(
+                            valueListenable: _currentDuration,
+                            builder: (context, duration, child) {
+                              final hours = duration.inHours;
+                              final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+                              final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+                              final timeStr = hours > 0
+                                  ? '${hours.toString().padLeft(2, "0")}:$minutes:$seconds'
+                                  : '$minutes:$seconds';
+                              return Text(
+                                timeStr,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.2,
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
-                  ),
+
+                    if (isGuest)
+                      StreamBuilder<bool>(
+                        stream: ProfileService.isFollowing(hostId),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const SizedBox.shrink();
+                          }
+                          final bool isFollowing = snapshot.data ?? false;
+                          if (isFollowing) return const SizedBox.shrink();
+
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 4.0),
+                            child: GestureDetector(
+                              onTap: () async {
+                                try {
+                                  await ProfileService.followUser(hostId);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.pink.shade400,
+                                      Colors.pink.shade700,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.add,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -3513,7 +3537,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         ? StreamingService.instance.isCameraOn
         : (isCurrentUser
             ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
-            : participant.isCameraOn);
+            : (isHost ? (participant.isCameraOn != false) : participant.isCameraOn));
 
     final String? userVip = participant.vipType ??
         (isHost ? (roomData['vipType'] as String?) : null) ??
