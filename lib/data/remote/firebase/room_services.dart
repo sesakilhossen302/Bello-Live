@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'notification_service.dart';
 import 'profile_services.dart';
 import 'global_gift_banner_service.dart';
+import '../../../core/services/vip_service.dart';
 
 class RoomService {
   static final FirebaseDatabase _database = FirebaseDatabase.instance;
@@ -360,6 +361,7 @@ class RoomService {
     String? userPicture = user.photoURL;
     String displayId = '';
     String? idEntryUrl;
+    String? vipType;
 
     if (userProfileDoc.exists) {
       final data = userProfileDoc.data() as Map<String, dynamic>;
@@ -374,6 +376,7 @@ class RoomService {
       userName = data['displayName'] ?? userName;
       displayId = data['displayId'] ?? '';
       userPicture = data['photoUrl'] ?? data['profilePicture'] ?? userPicture;
+      vipType = VipService.resolveVipTypeFromUserData(data);
       
       final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
       final now = DateTime.now();
@@ -449,6 +452,7 @@ class RoomService {
         'isApprovedSpeaker': isCoHost,
         'isModerator': false,
         'isAdmin': false,
+        if (vipType != null) 'vipType': vipType,
         if (coHostUntilMs != null) 'coHostUntil': coHostUntilMs,
         if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
       });
@@ -457,6 +461,7 @@ class RoomService {
         'isOnline': true,
         'userName': userName,
         'userPicture': userPicture,
+        if (vipType != null) 'vipType': vipType,
         if (idEntryUrl != null) 'idEntryUrl': idEntryUrl,
       });
     }

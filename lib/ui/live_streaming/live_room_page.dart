@@ -90,8 +90,9 @@ class LiveStreamParticipant {
       isAdmin: data['isAdmin'] == true,
       isCoHost: data['isCoHost'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
-      callType: data['callType'] as String?,
-      vipType: data['vipType'] as String?,
+      vipType: (data['vipType'] as String?) ??
+          (data['vip'] is String ? data['vip'] as String : null) ??
+          (data['isVvip'] == true ? 'vvip' : (data['isVip'] == true ? 'vip' : null)),
     );
   }
 }
@@ -1299,6 +1300,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     LiveStreamParticipant.fromRTDB(entry.key, entry.value),
               )
               .toList();
+
+          for (final p in newParticipants) {
+            if (p.vipType != null && p.vipType!.isNotEmpty) {
+              VipService.setVipType(p.userId, p.vipType);
+            } else {
+              VipService.getVipType(p.userId).then((res) {
+                if (res != null && mounted) setState(() {});
+              });
+            }
+          }
 
           if (_participants.isNotEmpty && _newJoinerName == null) {
             final oldParticipantIds = _participants

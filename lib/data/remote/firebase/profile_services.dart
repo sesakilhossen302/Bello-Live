@@ -1086,7 +1086,7 @@ class ProfileService {
     return _usersCollection.doc(userId).snapshots().map((snapshot) {
       if (!snapshot.exists) return 0;
       final data = snapshot.data() as Map<String, dynamic>;
-      final num balanceNum = data['balance'] ?? 0;
+      final num balanceNum = data['diamonds'] ?? data['balance'] ?? 0;
       return balanceNum.toInt();
     });
   }

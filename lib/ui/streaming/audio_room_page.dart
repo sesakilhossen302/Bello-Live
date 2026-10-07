@@ -134,7 +134,9 @@ class RoomParticipant {
       isChatMuted: data['isChatMuted'] ?? false,
       isModerator: data['isModerator'] == true || data['isStealth'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
-      vipType: data['vipType'] as String?,
+      vipType: (data['vipType'] as String?) ??
+          (data['vip'] is String ? data['vip'] as String : null) ??
+          (data['isVvip'] == true ? 'vvip' : (data['isVip'] == true ? 'vip' : null)),
     );
   }
 
@@ -918,6 +920,16 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               entry.value,
             );
           }).toList();
+
+          for (final p in updatedParticipants) {
+            if (p.vipType != null && p.vipType!.isNotEmpty) {
+              VipService.setVipType(p.userId, p.vipType);
+            } else {
+              VipService.getVipType(p.userId).then((res) {
+                if (res != null && mounted) setState(() {});
+              });
+            }
+          }
 
           if (_participants.isNotEmpty && _newJoinerName == null) {
             final oldParticipantIds = _participants
