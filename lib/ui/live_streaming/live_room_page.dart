@@ -2620,6 +2620,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                             ),
                           ),
                   ),
+                  // 2. Full-Screen Host Video (when single host and NOT in PK mode)
+                  if (!_isPKMode && _isInitialized)
+                    _buildBackgroundVideoIfSingleHost(),
+
                   if (_isInitialized)
                     _isPKMode
                         ? _buildPKModeLayout()
@@ -2672,13 +2676,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   Widget _buildStandardModeOverlay() {
+    final String hostId = roomData['hostId'] ?? '';
+    final seatedGuests = _participants.where((p) => p.isOnSeat && p.userId != hostId).toList();
+    final bool isSingleHost = seatedGuests.isEmpty;
+
     return Stack(
       children: [
         Column(
           children: [
             _buildAppBar(),
             _buildHostStatsRow(),
-            _buildSeatsGrid(),
+            if (!isSingleHost) _buildDynamicVideoGrid(),
             Expanded(
               child: Container(
                 margin: const EdgeInsets.only(bottom: 60),
@@ -3206,109 +3214,552 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     );
   }
 
-  Widget _buildSeatsGrid() {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    const double horizontalPadding = 10.0;
-    final double availableWidth = screenWidth - (horizontalPadding * 2);
-    const double spacing = 6.0;
+  Widget _buildBackgroundVideoIfSingleHost() {
+    final String hostId = roomData['hostId'] ?? '';
+    final seatedGuests = _participants.where((p) => p.isOnSeat && p.userId != hostId).toList();
+    if (seatedGuests.isNotEmpty) return const SizedBox.shrink();
 
-    // 4 equal columns
-    final double cellWidth = (availableWidth - (spacing * 3)) / 4;
-    // Host card width = 2 cells + 1 spacing
-    final double hostWidth = (cellWidth * 2) + spacing;
-    // Height for standard seat cells
-    final double cellHeight = cellWidth * 1.16;
-    // Host height = 2 standard cells + 1 spacing
-    final double hostHeight = (cellHeight * 2) + spacing;
+    LiveStreamParticipant? host;
+    for (final p in _participants) {
+      if (p.userId == hostId) {
+        host = p;
+        break;
+      }
+    }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 4.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Row 1 & 2: Left is Host (2x2), Right is Seats 2, 3 (top) and Seats 4, 5 (bottom)
-          SizedBox(
-            height: hostHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Host Card (Spans 2 cols, 2 rows)
-                _buildHostSeatCard(hostWidth, hostHeight),
-                SizedBox(width: spacing),
-                // Right 2x2 Grid: Seat 2, 3, 4, 5
-                Expanded(
-                  child: Column(
-                    children: [
-                      // Seats 2 & 3
-                      Row(
-                        children: [
-                          Expanded(child: _buildSeatCard(seatNo: 2, width: cellWidth, height: cellHeight)),
-                          SizedBox(width: spacing),
-                          Expanded(child: _buildSeatCard(seatNo: 3, width: cellWidth, height: cellHeight)),
-                        ],
-                      ),
-                      SizedBox(height: spacing),
-                      // Seats 4 & 5
-                      Row(
-                        children: [
-                          Expanded(child: _buildSeatCard(seatNo: 4, width: cellWidth, height: cellHeight)),
-                          SizedBox(width: spacing),
-                          Expanded(child: _buildSeatCard(seatNo: 5, width: cellWidth, height: cellHeight)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: spacing),
-          // Row 3: Bottom row with Seats 6, 7, 8, 9 (1 row, 4 cols)
-          Row(
-            children: [
-              Expanded(child: _buildSeatCard(seatNo: 6, width: cellWidth, height: cellHeight)),
-              SizedBox(width: spacing),
-              Expanded(child: _buildSeatCard(seatNo: 7, width: cellWidth, height: cellHeight)),
-              SizedBox(width: spacing),
-              Expanded(child: _buildSeatCard(seatNo: 8, width: cellWidth, height: cellHeight)),
-              SizedBox(width: spacing),
-              Expanded(child: _buildSeatCard(seatNo: 9, width: cellWidth, height: cellHeight)),
-            ],
-          ),
-        ],
+    final hostParticipant = host ??
+        LiveStreamParticipant(
+          userId: hostId,
+          userName: roomData['hostName'] ?? 'Host',
+          userPicture: roomData['hostPicture'],
+          isMuted: false,
+          isCameraOn: true,
+          isOnSeat: true,
+          vipType: roomData['vipType'] as String?,
+        );
+
+    return Positioned.fill(
+      child: _buildParticipantVideo(
+        hostParticipant,
+        isFullScreen: true,
       ),
     );
   }
 
-  Widget _buildHostSeatCard(double width, double height) {
+  Widget _buildDynamicVideoGrid() {
     final String hostId = roomData['hostId'] ?? '';
-    final String hostName = roomData['hostName'] ?? 'Host';
-    final String? hostPicture = roomData['hostPicture'];
-    LiveStreamParticipant? hostParticipant;
-    try {
-      hostParticipant = _participants.firstWhere((p) => p.userId == hostId);
-    } catch (_) {
-      hostParticipant = null;
+    LiveStreamParticipant? host;
+    final List<LiveStreamParticipant> guests = [];
+
+    for (final p in _participants) {
+      if (p.userId == hostId) {
+        host = p;
+      } else if (p.isOnSeat) {
+        guests.add(p);
+      }
     }
 
-    final bool isHostCameraActive = (widget.isHost && hostId == _auth.currentUser?.uid)
+    final hostParticipant = host ??
+        LiveStreamParticipant(
+          userId: hostId,
+          userName: roomData['hostName'] ?? 'Host',
+          userPicture: roomData['hostPicture'],
+          isMuted: false,
+          isCameraOn: true,
+          isOnSeat: true,
+          vipType: roomData['vipType'] as String?,
+        );
+
+    final allParticipants = [hostParticipant, ...guests];
+    final count = allParticipants.length;
+
+    if (count <= 1) return const SizedBox.shrink();
+
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    if (count == 2) {
+      return Container(
+        height: screenHeight * 0.38,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _buildParticipantVideo(allParticipants[0])),
+            const SizedBox(width: 6),
+            Expanded(child: _buildParticipantVideo(allParticipants[1])),
+          ],
+        ),
+      );
+    } else if (count == 3) {
+      return Container(
+        height: screenHeight * 0.44,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[0])),
+                  const SizedBox(width: 6),
+                  Expanded(child: _buildParticipantVideo(allParticipants[1])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[2])),
+                  const SizedBox(width: 6),
+                  const Expanded(child: SizedBox.shrink()),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (count == 4) {
+      return Container(
+        height: screenHeight * 0.44,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[0])),
+                  const SizedBox(width: 6),
+                  Expanded(child: _buildParticipantVideo(allParticipants[1])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[2])),
+                  const SizedBox(width: 6),
+                  Expanded(child: _buildParticipantVideo(allParticipants[3])),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (count == 5) {
+      return Container(
+        height: screenHeight * 0.46,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[0])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[1])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[2])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[3])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[4])),
+                  const SizedBox(width: 4),
+                  const Expanded(child: SizedBox.shrink()),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (count == 6) {
+      return Container(
+        height: screenHeight * 0.46,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[0])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[1])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[2])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildParticipantVideo(allParticipants[3])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[4])),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildParticipantVideo(allParticipants[5])),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // 7 or more participants: 3-column rows
+      final row1 = allParticipants.take(3).toList();
+      final row2 = allParticipants.skip(3).take(3).toList();
+      final row3 = allParticipants.skip(6).take(3).toList();
+      final row4 = allParticipants.skip(9).take(3).toList();
+
+      return Container(
+        height: row4.isNotEmpty ? screenHeight * 0.54 : screenHeight * 0.48,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < 3; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    Expanded(
+                      child: i < row1.length
+                          ? _buildParticipantVideo(row1[i])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < 3; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    Expanded(
+                      child: i < row2.length
+                          ? _buildParticipantVideo(row2[i])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (row3.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < 3; i++) ...[
+                      if (i > 0) const SizedBox(width: 4),
+                      Expanded(
+                        child: i < row3.length
+                            ? _buildParticipantVideo(row3[i])
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            if (row4.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < 3; i++) ...[
+                      if (i > 0) const SizedBox(width: 4),
+                      Expanded(
+                        child: i < row4.length
+                            ? _buildParticipantVideo(row4[i])
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildParticipantVideo(LiveStreamParticipant participant, {bool isFullScreen = false}) {
+    final String hostId = roomData['hostId'] ?? '';
+    final bool isHost = participant.userId == hostId;
+    final bool isCurrentUser = participant.userId == _auth.currentUser?.uid;
+
+    final bool isCameraActive = (widget.isHost && isHost && isCurrentUser)
         ? StreamingService.instance.isCameraOn
-        : (hostParticipant?.isCameraOn ?? true);
+        : (isCurrentUser
+            ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
+            : participant.isCameraOn);
 
-    final bool isMuted = hostParticipant?.isMuted ?? false;
-    final double avatarSize = width * 0.44;
+    final String? userVip = participant.vipType ??
+        (isHost ? (roomData['vipType'] as String?) : null) ??
+        VipService.getVipTypeSync(participant.userId);
+    final bool hasVip = userVip != null && userVip.isNotEmpty;
+    final bool isVvip = hasVip && userVip.toLowerCase().contains('vvip');
 
-    final String? hostVip = hostParticipant?.vipType ??
-        (roomData['vipType'] as String?) ??
-        VipService.getVipTypeSync(hostId);
-    final bool hasHostVip = hostVip != null && hostVip.isNotEmpty;
-    final bool isHostVvip = hasHostVip && hostVip.toLowerCase().contains('vvip');
+    final String? userPicture = participant.userPicture ??
+        (isHost ? roomData['hostPicture'] : null);
+    final String userName = participant.userName.isNotEmpty
+        ? participant.userName
+        : (isHost ? (roomData['hostName'] ?? 'Host') : 'User');
+
+    Widget content = Stack(
+      children: [
+        // 1. Live Video Stream (when Camera ON)
+        if (isCameraActive)
+          Positioned.fill(
+            child: (isCurrentUser && widget.isHost)
+                ? StreamingService.instance.buildVideoView(participant.userId, fit: BoxFit.cover)
+                : _SafeParticipantVideoWidget(participant: participant),
+          ),
+
+        // 2. Avatar with blur background & talking SVGA (when Camera OFF)
+        if (!isCameraActive)
+          Positioned.fill(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (userPicture != null && userPicture.isNotEmpty)
+                  Positioned.fill(
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                      child: CachedNetworkImage(
+                        imageUrl: userPicture,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.45),
+                  ),
+                ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double cardMinSide = math.min(constraints.maxWidth, constraints.maxHeight);
+                    final double avatarSize = isFullScreen ? 100.0 : math.max(36.0, cardMinSide * 0.38);
+
+                    return StreamBuilder<List<String>>(
+                      stream: StreamingService.instance.activeSpeakersStream,
+                      builder: (context, snapshot) {
+                        final isSpeaking = !participant.isMuted &&
+                            (snapshot.data ?? []).contains(participant.userId);
+
+                        return Stack(
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: avatarSize,
+                              height: avatarSize,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSpeaking
+                                      ? const Color(0xFF00E5FF)
+                                      : (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)),
+                                  width: 2.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isSpeaking
+                                            ? const Color(0xFF00E5FF)
+                                            : (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)))
+                                        .withValues(alpha: 0.5),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: (userPicture != null && userPicture.isNotEmpty)
+                                    ? CachedNetworkImage(
+                                        imageUrl: userPicture,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) => const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
+                                      )
+                                    : const Icon(Icons.person, color: Colors.white, size: 28),
+                              ),
+                            ),
+                            if (isSpeaking)
+                              Transform.scale(
+                                scale: 1.35,
+                                child: SVGAEasyPlayer(
+                                  assetsName: "assets/svga/talking.svga",
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            if (hasVip)
+                              Positioned(
+                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                                left: (avatarSize - (avatarSize * 1.823)) / 2,
+                                child: IgnorePointer(
+                                  child: Image.asset(
+                                    isVvip ? 'assets/images/vvip.png' : 'assets/images/vip.png',
+                                    width: avatarSize * 1.823,
+                                    height: avatarSize * 1.823,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+        // 3. Diamond balance chip (Top-left, if not fullscreen)
+        if (!isFullScreen)
+          Positioned(
+            top: 4,
+            left: 4,
+            child: StreamBuilder<int>(
+              stream: _diamondsStreamCache.putIfAbsent(
+                participant.userId,
+                () => ProfileService.getUserDiamondsStream(participant.userId),
+              ),
+              builder: (context, snapshot) {
+                final diamonds = snapshot.data ?? 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF00E5FF).withValues(alpha: 0.6),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.diamond, color: Color(0xFF00E5FF), size: 10),
+                      const SizedBox(width: 2),
+                      Text(
+                        _formatNumber(diamonds),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (diamonds >= 100000) ...[
+                        const SizedBox(width: 2),
+                        const Icon(Icons.star, color: Colors.amber, size: 9),
+                        Text(
+                          '${diamonds ~/ 100000}',
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+        // 4. Name pill (Bottom-left, if not fullscreen)
+        if (!isFullScreen)
+          Positioned(
+            left: 4,
+            bottom: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isHost) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      margin: const EdgeInsets.only(right: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE91E63),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: const Text(
+                        'Host',
+                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                  Text(
+                    userName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // 5. Mic Muted Indicator (Bottom-right, if not fullscreen)
+        if (!isFullScreen && participant.isMuted)
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mic_off, color: Colors.white, size: 10),
+            ),
+          ),
+      ],
+    );
 
     return GestureDetector(
       onTap: () {
         showProfileInfoBottomSheet(
           context,
-          userId: hostId,
+          userId: participant.userId,
           hostId: hostId,
           roomId: widget.roomID,
           isSeated: true,
@@ -3322,781 +3773,36 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               isOnSeat: false,
             ),
           ).isAdmin,
-        );
-      },
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: const Color(0xFF28073D).withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: const Color(0xFFE91E63),
-            width: 1.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFE91E63).withValues(alpha: 0.25),
-              blurRadius: 6,
-              spreadRadius: 0.5,
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // 1. Live Video Stream (when Camera ON)
-            if (isHostCameraActive && hostParticipant != null)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: _SafeParticipantVideoWidget(participant: hostParticipant),
-                ),
-              )
-            else if (isHostCameraActive && widget.isHost)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: StreamingService.instance.buildVideoView(hostId, fit: BoxFit.cover),
-                ),
-              ),
-
-            // 2. Avatar with blur background & talking SVGA (when Camera OFF)
-            if (!isHostCameraActive)
-              Positioned.fill(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (hostPicture != null && hostPicture.isNotEmpty)
-                      Positioned.fill(
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                          child: CachedNetworkImage(
-                            imageUrl: hostPicture,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => const SizedBox.shrink(),
-                            errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                          ),
-                        ),
-                      ),
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    Center(
-                      child: SizedBox(
-                        width: avatarSize * 1.5,
-                        height: avatarSize * 1.5,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            StreamBuilder<List<String>>(
-                              stream: StreamingService.instance.activeSpeakersStream,
-                              builder: (context, snapshot) {
-                                final isSpeaking = !isMuted && (snapshot.data ?? []).contains(hostId);
-                                return Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Container(
-                                      width: avatarSize,
-                                      height: avatarSize,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSpeaking ? const Color(0xFF00E5FF) : const Color(0xFFE91E63),
-                                          width: 2.2,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: (isSpeaking ? const Color(0xFF00E5FF) : const Color(0xFFE91E63))
-                                                .withValues(alpha: 0.5),
-                                            blurRadius: 10,
-                                          ),
-                                        ],
-                                      ),
-                                      child: ClipOval(
-                                        child: hostPicture != null && hostPicture.isNotEmpty
-                                            ? CachedNetworkImage(
-                                                imageUrl: hostPicture,
-                                                fit: BoxFit.cover,
-                                                errorWidget: (_, __, ___) => const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white,
-                                                  size: 32,
-                                                ),
-                                              )
-                                            : const Icon(Icons.person, color: Colors.white, size: 32),
-                                      ),
-                                    ),
-                                    if (isSpeaking)
-                                      Transform.scale(
-                                        scale: 1.35,
-                                        child: SVGAEasyPlayer(
-                                          assetsName: "assets/svga/talking.svga",
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-
-                            // VIP / VVIP Frame (Only if host has VIP) or Active Frame
-                            if (hasHostVip)
-                              Positioned(
-                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
-                                left: (avatarSize - (avatarSize * 1.823)) / 2,
-                                width: avatarSize * 1.823,
-                                height: avatarSize * 1.823,
-                                child: IgnorePointer(
-                                  child: Image.asset(
-                                    isHostVvip
-                                        ? 'assets/images/VVIP PNG.png'
-                                        : 'assets/images/VIP PNG.png',
-                                    width: avatarSize * 1.823,
-                                    height: avatarSize * 1.823,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              )
-                            else
-                              // Active Frame
-                              Positioned(
-                                width: avatarSize * 1.3,
-                                height: avatarSize * 1.3,
-                                child: IgnorePointer(
-                                  child: ActiveFrameWidget(userId: hostId, size: avatarSize * 1.3),
-                                ),
-                              ),
-
-                            // Muted Indicator
-                            if (isMuted)
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2.5),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(CupertinoIcons.mic_off, color: Colors.white, size: 12),
-                                ),
-                              ),
-
-                            _buildEmojiOnAvatar(hostId, avatarSize),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Top Stats Strip: Host label, Diamonds, Stars, Viewers
-            Positioned(
-              top: 5,
-              left: 6,
-              right: 6,
-              child: StreamBuilder<int>(
-                stream: _diamondsStreamCache.putIfAbsent(
-                  hostId,
-                  () => ProfileService.getUserDiamondsStream(hostId),
-                ),
-                builder: (context, snapshot) {
-                  final int hostBalance = snapshot.data ?? 0;
-                  final int starLevel = hostBalance >= 100000 ? hostBalance ~/ 100000 : 1;
-                  final int viewerCount = _participantCount > 0 ? _participantCount : 1;
-
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Host',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.diamond, color: Color(0xFF00E5FF), size: 12),
-                        const SizedBox(width: 2),
-                        Text(
-                          _formatNumber(hostBalance),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        const Icon(Icons.star, color: Colors.amber, size: 12),
-                        const SizedBox(width: 1),
-                        Text(
-                          '$starLevel',
-                          style: const TextStyle(
-                            color: Colors.amber,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        const Icon(Icons.remove_red_eye, color: Colors.white70, size: 12),
-                        const SizedBox(width: 2),
-                        Text(
-                          '$viewerCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Bottom Capsule Pill with Mini Avatar, Name, and Diamonds
-            Positioned(
-              left: 5,
-              right: 5,
-              bottom: 4,
-              child: StreamBuilder<int>(
-                stream: _diamondsStreamCache.putIfAbsent(
-                  hostId,
-                  () => ProfileService.getUserDiamondsStream(hostId),
-                ),
-                builder: (context, snapshot) {
-                  final int hostBalance = snapshot.data ?? 0;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF14011D).withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFF4A156D).withValues(alpha: 0.6),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 8,
-                          backgroundImage: hostPicture != null && hostPicture.isNotEmpty
-                              ? NetworkImage(hostPicture)
-                              : null,
-                          child: (hostPicture == null || hostPicture.isEmpty)
-                              ? const Icon(Icons.person, size: 9, color: Colors.white)
-                              : null,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            hostName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.diamond, color: Color(0xFF00E5FF), size: 10),
-                        const SizedBox(width: 2),
-                        Text(
-                          _formatNumber(hostBalance),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSeatCard({
-    required int seatNo,
-    required double width,
-    required double height,
-  }) {
-    final currentUserId = _auth.currentUser?.uid ?? '';
-    final String hostId = roomData['hostId'] ?? '';
-
-    // Guest seats index 0..7 correspond to seatNo 2..9
-    final guestIndex = seatNo - 2;
-    final seatedGuests = _participants.where((p) => p.isOnSeat && p.userId != hostId).toList();
-    LiveStreamParticipant? participant;
-    if (guestIndex < seatedGuests.length) {
-      participant = seatedGuests[guestIndex];
-    }
-
-    final lockedData = roomData['lockedSeats'];
-    bool isLocked = false;
-    if (lockedData is Map) {
-      isLocked = lockedData['seat_$seatNo'] == true || lockedData[seatNo.toString()] == true;
-    } else if (lockedData is List) {
-      if (seatNo < lockedData.length) {
-        isLocked = lockedData[seatNo] == true;
-      }
-    }
-
-    if (participant != null) {
-      return _buildOccupiedSeatCard(
-        seatNo: seatNo,
-        participant: participant,
-        width: width,
-        height: height,
-        isCurrentUser: participant.userId == currentUserId,
-        isLocked: isLocked,
-      );
-    } else {
-      return _buildEmptySeatCard(
-        seatNo: seatNo,
-        width: width,
-        height: height,
-        isLocked: isLocked,
-      );
-    }
-  }
-
-  Widget _buildOccupiedSeatCard({
-    required int seatNo,
-    required LiveStreamParticipant participant,
-    required double width,
-    required double height,
-    required bool isCurrentUser,
-    required bool isLocked,
-  }) {
-    final double avatarSize = width * 0.48;
-
-    final bool isCameraActive = isCurrentUser
-        ? (StreamingService.instance.isCameraOn || participant.isCameraOn)
-        : participant.isCameraOn;
-
-    final String? guestVip = participant.vipType ?? VipService.getVipTypeSync(participant.userId);
-    final bool hasGuestVip = guestVip != null && guestVip.isNotEmpty;
-    final bool isGuestVvip = hasGuestVip && guestVip.toLowerCase().contains('vvip');
-
-    return GestureDetector(
-      onTap: () {
-        final participantMap = _participants.firstWhere(
-          (p) => p.userId == _auth.currentUser!.uid,
-          orElse: () => LiveStreamParticipant(
-            userId: '',
-            userName: '',
-            isMuted: false,
-            isCameraOn: false,
-            isOnSeat: false,
-          ),
-        );
-        showProfileInfoBottomSheet(
-          context,
-          userId: participant.userId,
-          hostId: roomData['hostId'] ?? '',
-          roomId: widget.roomID,
-          isSeated: true,
-          isCurrentUserAdmin: participantMap.isAdmin,
           isCurrentUserModerator: _isCurrentModerator,
         );
       },
       child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: const Color(0xFF28073D).withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0xFF4A156D).withValues(alpha: 0.5),
-            width: 0.8,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // 1. Live Video Stream (when Camera ON)
-            if (isCameraActive)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: _SafeParticipantVideoWidget(participant: participant),
+        decoration: isFullScreen
+            ? null
+            : BoxDecoration(
+                color: const Color(0xFF28073D).withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0).withValues(alpha: 0.8),
+                  width: 1.5,
                 ),
-              ),
-
-            // 2. Avatar with talking animation (when Camera OFF)
-            if (!isCameraActive)
-              Positioned.fill(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (participant.userPicture != null && participant.userPicture!.isNotEmpty)
-                      Positioned.fill(
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-                          child: CachedNetworkImage(
-                            imageUrl: participant.userPicture!,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => const SizedBox.shrink(),
-                            errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                          ),
-                        ),
-                      ),
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    Center(
-                      child: SizedBox(
-                        width: avatarSize * 1.4,
-                        height: avatarSize * 1.4,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            StreamBuilder<List<String>>(
-                              stream: StreamingService.instance.activeSpeakersStream,
-                              builder: (context, snapshot) {
-                                final isSpeaking = !participant.isMuted &&
-                                    (snapshot.data ?? []).contains(participant.userId);
-                                return Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Container(
-                                      width: avatarSize,
-                                      height: avatarSize,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSpeaking
-                                              ? const Color(0xFF00E5FF)
-                                              : Colors.pinkAccent.withValues(alpha: 0.6),
-                                          width: 2.0,
-                                        ),
-                                      ),
-                                      child: ClipOval(
-                                        child: participant.userPicture != null &&
-                                                participant.userPicture!.isNotEmpty
-                                            ? CachedNetworkImage(
-                                                imageUrl: participant.userPicture!,
-                                                fit: BoxFit.cover,
-                                                errorWidget: (_, __, ___) => const Icon(
-                                                  Icons.person,
-                                                  size: 20,
-                                                  color: Colors.white,
-                                                ),
-                                              )
-                                            : const Icon(Icons.person, size: 20, color: Colors.white),
-                                      ),
-                                    ),
-                                    if (isSpeaking)
-                                      Transform.scale(
-                                        scale: 1.35,
-                                        child: SVGAEasyPlayer(
-                                          assetsName: "assets/svga/talking.svga",
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-
-                            // VIP / VVIP Frame (Only if guest has VIP) or Active Frame
-                            if (hasGuestVip)
-                              Positioned(
-                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
-                                left: (avatarSize - (avatarSize * 1.823)) / 2,
-                                width: avatarSize * 1.823,
-                                height: avatarSize * 1.823,
-                                child: IgnorePointer(
-                                  child: Image.asset(
-                                    isGuestVvip
-                                        ? 'assets/images/VVIP PNG.png'
-                                        : 'assets/images/VIP PNG.png',
-                                    width: avatarSize * 1.823,
-                                    height: avatarSize * 1.823,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              )
-                            else
-                              // Active Frame
-                              Positioned(
-                                width: avatarSize * 1.3,
-                                height: avatarSize * 1.3,
-                                child: IgnorePointer(
-                                  child: ActiveFrameWidget(
-                                    userId: participant.userId,
-                                    size: avatarSize * 1.3,
-                                  ),
-                                ),
-                              ),
-
-                            // Muted Indicator
-                            if (participant.isMuted)
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(CupertinoIcons.mic_off, color: Colors.white, size: 9),
-                                ),
-                              ),
-
-                            _buildEmojiOnAvatar(participant.userId, avatarSize),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Top Row: Seat Number on Left, (x) on Right
-            Positioned(
-              top: 3,
-              left: 4,
-              right: 4,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 16,
-                    height: 16,
-                    decoration: const BoxDecoration(
-                      color: Color(0x80000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$seatNo',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)).withValues(alpha: 0.25),
+                    blurRadius: 4,
+                    spreadRadius: 0.5,
                   ),
-                  if (widget.isHost || _isCurrentModerator || isCurrentUser)
-                    GestureDetector(
-                      onTap: () async {
-                        if (isCurrentUser) {
-                          _leaveCallSession();
-                        } else {
-                          final bool? confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: const Color(0xFF2d1b2b),
-                              title: const Text('Remove from Seat?', style: TextStyle(color: Colors.white)),
-                              content: Text('Are you sure you want to remove ${participant.userName} from this seat?', style: const TextStyle(color: Colors.white70)),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('Remove', style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            try {
-                              await LiveStreamService.removeUserFromSeat(widget.roomID, participant.userId);
-                            } catch (e) {
-                              debugPrint('Error removing from seat: $e');
-                            }
-                          }
-                        }
-                      },
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: const BoxDecoration(
-                          color: Color(0x33FFFFFF),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Icon(Icons.close, size: 10, color: Colors.white70),
-                        ),
-                      ),
-                    ),
                 ],
               ),
-            ),
-
-            // Bottom Capsule Pill with Mini Avatar, Name, and Diamonds
-            Positioned(
-              left: 3,
-              right: 3,
-              bottom: 3,
-              child: StreamBuilder<int>(
-                stream: _diamondsStreamCache.putIfAbsent(
-                  participant.userId,
-                  () => ProfileService.getUserDiamondsStream(participant.userId),
-                ),
-                builder: (context, snapshot) {
-                  final int diamonds = snapshot.data ?? 0;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF14011D).withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF4A156D).withValues(alpha: 0.6),
-                        width: 0.6,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 6,
-                          backgroundImage: participant.userPicture != null && participant.userPicture!.isNotEmpty
-                              ? NetworkImage(participant.userPicture!)
-                              : null,
-                          child: (participant.userPicture == null || participant.userPicture!.isEmpty)
-                              ? const Icon(Icons.person, size: 7, color: Colors.white)
-                              : null,
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            participant.userName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Icon(Icons.diamond, color: Color(0xFF00E5FF), size: 8),
-                        const SizedBox(width: 1),
-                        Text(
-                          _formatNumber(diamonds),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+        clipBehavior: isFullScreen ? Clip.none : Clip.antiAlias,
+        child: ClipRRect(
+          borderRadius: isFullScreen ? BorderRadius.zero : BorderRadius.circular(9),
+          child: content,
         ),
       ),
     );
   }
 
-  Widget _buildEmptySeatCard({
-    required int seatNo,
-    required double width,
-    required double height,
-    required bool isLocked,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        if (isLocked) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('This seat is locked.'),
-              duration: Duration(seconds: 1),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
-
-        if (widget.isHost) {
-          _openCallAndViewsBottomSheet(initialTab: 1); // Waiting / Requests tab
-        } else {
-          // Viewer taps seat to join call
-          _openCallAndViewsBottomSheet(initialTab: 0);
-        }
-      },
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: const Color(0xFF28073D).withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0xFF4A156D).withValues(alpha: 0.4),
-            width: 0.8,
-          ),
-        ),
-        padding: const EdgeInsets.all(4),
-        child: Stack(
-          children: [
-            // Seat Number on Top Left
-            Align(
-              alignment: Alignment.topLeft,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  color: Color(0x66000000),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '$seatNo',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Center Chair / Lock Icon
-            Center(
-              child: Icon(
-                isLocked ? Icons.lock : Icons.event_seat_rounded,
-                size: 24,
-                color: isLocked ? Colors.amber.withValues(alpha: 0.7) : Colors.white30,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   String _formatNumber(int number) {
     if (number >= 1000000) {
