@@ -1620,7 +1620,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                   color: Colors.red,
                   label: 'Exit',
                   onTap: () {
-                    Navigator.of(context).pop(true);
+                    Navigator.of(context).pop(false);
+                    _exitAndEndAudioRoom();
                   },
                 ),
                 if (_isCurrentModerator) ...[

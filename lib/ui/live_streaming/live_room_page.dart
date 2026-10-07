@@ -2314,7 +2314,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   color: Colors.red,
                   label: 'Exit',
                   onTap: () {
-                    Navigator.of(context).pop(true);
+                    Navigator.of(context).pop(false);
+                    _exitAndEndLiveRoom();
                   },
                 ),
                 if (_isCurrentModerator) ...[
