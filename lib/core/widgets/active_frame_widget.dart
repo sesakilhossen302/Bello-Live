@@ -49,22 +49,18 @@ class _ActiveFrameWidgetState extends State<ActiveFrameWidget> {
             pkgStr.contains('queen') ||
             pkgStr.contains('crown');
 
-        if (isVvip) {
-          return SizedBox(
-            width: widget.size * 1.35,
-            height: widget.size * 1.35,
-            child: Image.asset(
-              'assets/images/VVIP PNG.png',
-              fit: BoxFit.contain,
-            ),
-          );
-        } else if (isVip) {
-          return SizedBox(
-            width: widget.size * 1.35,
-            height: widget.size * 1.35,
-            child: Image.asset(
-              'assets/images/VIP PNG.png',
-              fit: BoxFit.contain,
+        if (isVvip || isVip) {
+          final double frameSize = widget.size * 1.823;
+          final double verticalShift = widget.size * 0.1644;
+          return Transform.translate(
+            offset: Offset(0, -verticalShift),
+            child: SizedBox(
+              width: frameSize,
+              height: frameSize,
+              child: Image.asset(
+                isVvip ? 'assets/images/VVIP PNG.png' : 'assets/images/VIP PNG.png',
+                fit: BoxFit.contain,
+              ),
             ),
           );
         }

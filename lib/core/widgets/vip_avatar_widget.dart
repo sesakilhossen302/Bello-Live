@@ -71,7 +71,8 @@ class _VipAvatarWidgetState extends State<VipAvatarWidget> {
     final bool hasVipBadge = isVvip || isVip;
 
     // Frame scale factor so the circular cutout matches the avatar size perfectly
-    final double frameSize = widget.avatarSize * 1.88;
+    final double frameSize = widget.avatarSize * 1.823;
+    final double verticalShift = widget.avatarSize * 0.1644;
 
     Widget avatarCore = Container(
       width: widget.avatarSize,
@@ -108,8 +109,8 @@ class _VipAvatarWidgetState extends State<VipAvatarWidget> {
     );
 
     Widget content = SizedBox(
-      width: hasVipBadge ? frameSize : widget.avatarSize,
-      height: hasVipBadge ? frameSize : widget.avatarSize,
+      width: widget.avatarSize,
+      height: widget.avatarSize,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
@@ -117,27 +118,18 @@ class _VipAvatarWidgetState extends State<VipAvatarWidget> {
           // Base circular avatar
           avatarCore,
 
-          // VIP / VVIP Golden Crest Frame
-          if (isVvip)
+          // VIP / VVIP Golden Crest Frame (precisely framed over circular avatar)
+          if (isVvip || isVip)
             Positioned(
+              top: (widget.avatarSize - frameSize) / 2 - verticalShift,
+              left: (widget.avatarSize - frameSize) / 2,
               width: frameSize,
               height: frameSize,
               child: IgnorePointer(
                 child: Image.asset(
-                  'assets/images/VVIP PNG.png',
-                  width: frameSize,
-                  height: frameSize,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            )
-          else if (isVip)
-            Positioned(
-              width: frameSize,
-              height: frameSize,
-              child: IgnorePointer(
-                child: Image.asset(
-                  'assets/images/VIP PNG.png',
+                  isVvip
+                      ? 'assets/images/VVIP PNG.png'
+                      : 'assets/images/VIP PNG.png',
                   width: frameSize,
                   height: frameSize,
                   fit: BoxFit.contain,

@@ -16,7 +16,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/cubits/app_cubit.dart';
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
-import '../../core/widgets/gift_image_widget.dart'; // For MyImageWidget
 import '../../core/widgets/GiftImageWidget.dart'; // For GiftImageWidget
 import 'widgets/floating_youtube_player.dart';
 import '../../core/widgets/auto_scroll_text.dart';
@@ -2673,31 +2672,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(
-                            width: 32, // radius 16 * 2
-                            height: 32,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              alignment: Alignment.center,
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundImage: NetworkImage(
-                                    roomData['hostPicture'] ?? '',
-                                  ),
-                                ),
-                                Positioned(
-                                  width: 41.6, // 32 * 1.3
-                                  height: 41.6,
-                                  child: IgnorePointer(
-                                    child: ActiveFrameWidget(
-                                      userId: hostId,
-                                      size: 41.6,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          VipAvatarWidget(
+                            userId: hostId,
+                            userPicture: roomData['hostPicture'],
+                            avatarSize: 32,
+                            directVipType: roomData['vipType'] ?? roomData['vip'],
                           ),
                           const SizedBox(width: 8),
                           Flexible(
@@ -3387,29 +3366,31 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                               },
                             ),
 
-                            // Active Frame
-                            Positioned(
-                              width: avatarSize * 1.3,
-                              height: avatarSize * 1.3,
-                              child: IgnorePointer(
-                                child: ActiveFrameWidget(userId: hostId, size: avatarSize * 1.3),
-                              ),
-                            ),
-
-                            // VIP Badge at bottom right (ONLY IF HOST HAS VIP)
+                            // VIP / VVIP Frame (Only if host has VIP) or Active Frame
                             if (hasHostVip)
                               Positioned(
-                                bottom: -4,
-                                right: -4,
+                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                                left: (avatarSize - (avatarSize * 1.823)) / 2,
+                                width: avatarSize * 1.823,
+                                height: avatarSize * 1.823,
                                 child: IgnorePointer(
                                   child: Image.asset(
                                     isHostVvip
                                         ? 'assets/images/VVIP PNG.png'
                                         : 'assets/images/VIP PNG.png',
-                                    width: 44,
-                                    height: 44,
+                                    width: avatarSize * 1.823,
+                                    height: avatarSize * 1.823,
                                     fit: BoxFit.contain,
                                   ),
+                                ),
+                              )
+                            else
+                              // Active Frame
+                              Positioned(
+                                width: avatarSize * 1.3,
+                                height: avatarSize * 1.3,
+                                child: IgnorePointer(
+                                  child: ActiveFrameWidget(userId: hostId, size: avatarSize * 1.3),
                                 ),
                               ),
 
@@ -3765,31 +3746,33 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                               },
                             ),
 
-                            // Active Frame
-                            Positioned(
-                              width: avatarSize * 1.3,
-                              height: avatarSize * 1.3,
-                              child: IgnorePointer(
-                                child: ActiveFrameWidget(
-                                  userId: participant.userId,
-                                  size: avatarSize * 1.3,
-                                ),
-                              ),
-                            ),
-
-                            // VIP Badge at bottom right (ONLY IF GUEST HAS VIP)
+                            // VIP / VVIP Frame (Only if guest has VIP) or Active Frame
                             if (hasGuestVip)
                               Positioned(
-                                bottom: -3,
-                                right: -3,
+                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                                left: (avatarSize - (avatarSize * 1.823)) / 2,
+                                width: avatarSize * 1.823,
+                                height: avatarSize * 1.823,
                                 child: IgnorePointer(
                                   child: Image.asset(
                                     isGuestVvip
                                         ? 'assets/images/VVIP PNG.png'
                                         : 'assets/images/VIP PNG.png',
-                                    width: 26,
-                                    height: 26,
+                                    width: avatarSize * 1.823,
+                                    height: avatarSize * 1.823,
                                     fit: BoxFit.contain,
+                                  ),
+                                ),
+                              )
+                            else
+                              // Active Frame
+                              Positioned(
+                                width: avatarSize * 1.3,
+                                height: avatarSize * 1.3,
+                                child: IgnorePointer(
+                                  child: ActiveFrameWidget(
+                                    userId: participant.userId,
+                                    size: avatarSize * 1.3,
                                   ),
                                 ),
                               ),
