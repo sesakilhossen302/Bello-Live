@@ -224,10 +224,10 @@ class ProfileService {
     }
   }
 
-  /// Uploads an image file to JusiLive API and returns the secure URL.
+  /// Uploads an image file to PigoLive API and returns the secure URL.
   /// Uses an explicit http.Client with close() to prevent Android connection reset errors.
   static Future<String> _uploadImage(File imageFile) async {
-    final uri = Uri.parse('https://api.sdlive.fun/api/upload');
+    final uri = Uri.parse('https://api.pigolive.top/api/upload');
 
     // Use an explicit client so we can close it properly — this prevents
     // "Connection reset by peer (errno=104)" on Android.

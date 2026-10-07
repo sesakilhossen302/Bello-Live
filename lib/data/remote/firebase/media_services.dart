@@ -8,8 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-import 'profile_services.dart';
-
 class MediaService {
   static final _storage = FirebaseStorage.instance;
 
@@ -38,7 +36,7 @@ class MediaService {
           : imageFile;
 
       // Upload to custom API
-      final uri = Uri.parse('https://api.sdlive.fun/api/upload');
+      final uri = Uri.parse('https://api.pigolive.top/api/upload');
       final request = http.MultipartRequest('POST', uri)
         ..files.add(
           await http.MultipartFile.fromPath('image', fileToUpload.path),
