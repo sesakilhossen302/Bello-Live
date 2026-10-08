@@ -17,6 +17,7 @@ import 'package:get_it/get_it.dart';
 import '../../data/local/secure_storage/secure_storage.dart';
 
 import '../../core/widgets/active_frame_widget.dart'; // Added the ActiveFrameWidget import
+import '../../core/services/vip_service.dart';
 import '../../data/remote/firebase/profile_services.dart';
 import '../recharge/recharge_diamonds_page.dart';
 import '../../data/remote/firebase/level_service.dart';
@@ -265,6 +266,24 @@ class _ProfilePageState extends State<ProfilePage> {
                               }
                             }
 
+                            int parseVal(dynamic v) {
+                              if (v == null) return 0;
+                              if (v is num) return v.toInt();
+                              return int.tryParse(v.toString()) ?? 0;
+                            }
+                            int balanceVal = parseVal(data['balance']);
+                            if (balanceVal == 0) {
+                              final int d = parseVal(data['diamonds']);
+                              if (d > 0) {
+                                balanceVal = d;
+                              } else {
+                                final int b = parseVal(data['beans']);
+                                if (b > 0) balanceVal = b;
+                              }
+                            }
+                            final int diamondsVal = parseVal(data['diamonds']);
+                            final String? vipType = VipService.resolveVipTypeFromUserData(data);
+
                             // Map Firestore data to our local UserProfile model
                             final userProfile = UserProfile(
                               name:
@@ -278,10 +297,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                   data['bio'] ??
                                   AppLocalizations.of(context).noBio,
                               profileImage: data['photoUrl'] ?? '',
-                              followers: (data['followerCount'] as num?)?.toInt() ?? 0,
-                              following: (data['followingCount'] as num?)?.toInt() ?? 0,
-                              diamonds: (data['diamonds'] as num?)?.toInt() ?? 0,
-                              beans: (data['balance'] as num?)?.toInt() ?? 0,
+                              followers: parseVal(data['followerCount']),
+                              following: parseVal(data['followingCount']),
+                              diamonds: diamondsVal > 0 ? diamondsVal : balanceVal,
+                              beans: balanceVal,
                               isHost: isHost || data['isHost'] == true || data['ishost'] == true || data['role'] == 'host',
                               isAgency: isAgency || data['isAgency'] == true || data['isagency'] == true || data['role'] == 'agency',
                               gender: data['gender'] ?? '',
@@ -289,6 +308,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               totalReceived: (data['totalReceived'] as num?)?.toInt() ?? 0,
                               giftSendingLevel: level,
                               isModerator: ProfileService.checkIsModerator(data),
+                              vipType: vipType,
                               manualTags: (data['manualTags'] as List<dynamic>?)
                                       ?.map((e) => e.toString())
                                       .toList() ??
@@ -427,15 +447,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                     ),
                   ),
-                  // VVIP / VIP Badge at bottom right of Avatar
-                  Positioned(
-                    bottom: -2,
-                    right: -4,
-                    child: Image.asset(
-                      'assets/images/VVIP PNG.png',
-                      height: 28,
-                      errorBuilder: (_, __, ___) => Image.asset(
-                        'assets/images/VIP PNG.png',
+                  // VVIP / VIP Badge at bottom right of Avatar (Dynamic)
+                  if (userProfile.vipType != null && userProfile.vipType!.isNotEmpty)
+                    Positioned(
+                      bottom: -2,
+                      right: -4,
+                      child: Image.asset(
+                        userProfile.vipType == 'vvip'
+                            ? 'assets/images/VVIP PNG.png'
+                            : 'assets/images/VIP PNG.png',
                         height: 28,
                         errorBuilder: (_, __, ___) => const Icon(
                           Icons.verified,
@@ -444,7 +464,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(width: 14),
@@ -1750,6 +1769,7 @@ class UserProfile {
   final bool isReseller;
   final bool isModerator;
   final int totalReceived;
+  final String? vipType;
   final List<String> manualTags;
 
   UserProfile({
@@ -1771,6 +1791,7 @@ class UserProfile {
     this.isReseller = false,
     this.isModerator = false,
     this.totalReceived = 0,
+    this.vipType,
     this.manualTags = const [],
   });
 }

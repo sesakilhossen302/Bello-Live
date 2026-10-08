@@ -89,9 +89,12 @@ class LiveStreamParticipant {
       isAdmin: data['isAdmin'] == true,
       isCoHost: data['isCoHost'] == true,
       idEntryUrl: data['idEntryUrl'] as String?,
-      vipType: (data['vipType'] as String?) ??
+      vipType:
+          (data['vipType'] as String?) ??
           (data['vip'] is String ? data['vip'] as String : null) ??
-          (data['isVvip'] == true ? 'vvip' : (data['isVip'] == true ? 'vip' : null)),
+          (data['isVvip'] == true
+              ? 'vvip'
+              : (data['isVip'] == true ? 'vip' : null)),
     );
   }
 }
@@ -194,6 +197,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   StreamSubscription? _globalRandomPKInvitesSubscription;
   StreamSubscription? _callInviteSubscription;
   StreamSubscription? _commentsEnabledSubscription;
+  StreamSubscription? _userDocSubscription;
   bool _isCommentsEnabled = true;
   bool _isCallInviteDialogShowing = false;
   BuildContext? _currentRandomPKDialogContext;
@@ -269,13 +273,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   final Map<String, Future<String?>> _packageBadgeFetchFutures = {};
 
   Future<String?> _fetchPackageBadgeUrl(String userId) async {
-    if (_packageBadgeCache.containsKey(userId)) return _packageBadgeCache[userId];
+    if (_packageBadgeCache.containsKey(userId))
+      return _packageBadgeCache[userId];
     if (_packageBadgeFetchFutures.containsKey(userId)) {
       return await _packageBadgeFetchFutures[userId];
     }
     final Future<String?> future = () async {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
         if (userDoc.exists) {
           final data = userDoc.data();
           if (data != null && data.containsKey('activeAddOns')) {
@@ -285,12 +293,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               if (entry.key.toLowerCase().contains('package')) {
                 final itemData = entry.value as Map<String, dynamic>?;
                 if (itemData != null) {
-                   final expiry = itemData['expiresAt'] as Timestamp?;
-                   if (expiry == null || expiry.toDate().isAfter(now)) {
-                      final url = itemData['imageUrl'] as String?;
-                      _packageBadgeCache[userId] = url;
-                      return url;
-                   }
+                  final expiry = itemData['expiresAt'] as Timestamp?;
+                  if (expiry == null || expiry.toDate().isAfter(now)) {
+                    final url = itemData['imageUrl'] as String?;
+                    _packageBadgeCache[userId] = url;
+                    return url;
+                  }
                 }
               }
             }
@@ -304,6 +312,68 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final result = await future;
     _packageBadgeFetchFutures.remove(userId);
     return result;
+  }
+
+  Future<void> _checkModeratorStatus() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+    try {
+      // Clear any stale cached moderator value
+      ProfileService.clearModeratorCache();
+      bool isMod = false;
+
+      // 1. Check user document directly in Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() ?? {};
+        final role = data['role']?.toString().toLowerCase().trim() ?? '';
+        final userField = data['user']?.toString().toLowerCase().trim() ?? '';
+        final isM = data['isModerator'] == true || data['ismoderator'] == true;
+        // Strictly check for moderator role only (do NOT include admin or host)
+        if (role == 'moderator' ||
+            role == 'mod' ||
+            userField == 'moderator' ||
+            userField == 'mod' ||
+            isM) {
+          isMod = true;
+        }
+      }
+
+      if (mounted && _isCurrentModerator != isMod) {
+        setState(() {
+          _isCurrentModerator = isMod;
+        });
+      }
+
+      // 2. Listen to real-time changes on the user's document
+      _userDocSubscription?.cancel();
+      _userDocSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .snapshots()
+          .listen((snapshot) {
+        if (!mounted || !snapshot.exists) return;
+        final data = snapshot.data() ?? {};
+        final role = data['role']?.toString().toLowerCase().trim() ?? '';
+        final userField = data['user']?.toString().toLowerCase().trim() ?? '';
+        final isM = data['isModerator'] == true || data['ismoderator'] == true;
+        final bool modNow = (role == 'moderator' ||
+            role == 'mod' ||
+            userField == 'moderator' ||
+            userField == 'mod' ||
+            isM);
+        if (mounted && _isCurrentModerator != modNow) {
+          setState(() {
+            _isCurrentModerator = modNow;
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Error checking moderator status: $e');
+    }
   }
 
   @override
@@ -348,6 +418,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _initChat();
 
     WakelockPlus.enable();
+    _checkModeratorStatus();
     _initialize();
 
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -365,7 +436,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     // 2. Set up listener for real-time messages from stream
     _messageSubscription?.cancel();
-    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
+    _messageSubscription = StreamingService.instance.chatMessagesStream.listen((
+      message,
+    ) {
       if (!mounted) return;
       _addChatMessageToUI(
         ChatMessage(
@@ -384,10 +457,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     StreamingService.instance
         .fetchPastComments(widget.roomID, isVideo: true)
         .then((_) {
-      if (mounted) {
-        _syncMessagesFromHistory();
-      }
-    });
+          if (mounted) {
+            _syncMessagesFromHistory();
+          }
+        });
   }
 
   void _syncMessagesFromHistory() {
@@ -396,11 +469,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     bool hasNew = false;
     for (final m in history) {
-      final bool alreadyExists = _messages.any((existing) =>
-          (existing.id != null && m.id.isNotEmpty && existing.id == m.id) ||
-          (existing.userId == m.userId &&
-              existing.message == m.message &&
-              existing.timestamp.difference(m.timestamp).abs().inSeconds < 4));
+      final bool alreadyExists = _messages.any(
+        (existing) =>
+            (existing.id != null && m.id.isNotEmpty && existing.id == m.id) ||
+            (existing.userId == m.userId &&
+                existing.message == m.message &&
+                existing.timestamp.difference(m.timestamp).abs().inSeconds < 4),
+      );
 
       if (!alreadyExists) {
         _messages.add(
@@ -429,11 +504,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   }
 
   void _addChatMessageToUI(ChatMessage newMsg) {
-    final bool alreadyExists = _messages.any((m) =>
-        (m.id != null && newMsg.id != null && m.id == newMsg.id) ||
-        (m.userId == newMsg.userId &&
-            m.message == newMsg.message &&
-            m.timestamp.difference(newMsg.timestamp).abs().inSeconds < 4));
+    final bool alreadyExists = _messages.any(
+      (m) =>
+          (m.id != null && newMsg.id != null && m.id == newMsg.id) ||
+          (m.userId == newMsg.userId &&
+              m.message == newMsg.message &&
+              m.timestamp.difference(newMsg.timestamp).abs().inSeconds < 4),
+    );
 
     if (!alreadyExists) {
       setState(() {
@@ -467,6 +544,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     _globalRandomPKInvitesSubscription?.cancel();
     _callInviteSubscription?.cancel();
     _commentsEnabledSubscription?.cancel();
+    _userDocSubscription?.cancel();
     _pkTimer?.cancel();
 
     _joinAnimationTimer?.cancel();
@@ -520,16 +598,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       StreamingService.instance.pauseCameraForMinimize();
       LiveStreamService.pausePresence(widget.roomID, widget.isHost);
     } else if (state == AppLifecycleState.resumed) {
       if (StreamingService.instance.isCameraOn) {
-        StreamingService.instance.resumeCameraFromMinimize(isHost: widget.isHost);
+        StreamingService.instance.resumeCameraFromMinimize(
+          isHost: widget.isHost,
+        );
       }
       final uid = _auth.currentUser?.uid;
       if (uid != null) {
-        LiveStreamService.resumePresence(widget.roomID, uid, isHost: widget.isHost);
+        LiveStreamService.resumePresence(
+          widget.roomID,
+          uid,
+          isHost: widget.isHost,
+        );
       }
     }
   }
@@ -558,7 +643,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
       final currentUser = _auth.currentUser;
       if (currentUser != null) {
-        _isCurrentModerator = await ProfileService.isUserModerator(currentUser.uid);
+        await _checkModeratorStatus();
       }
 
       final bool isLocked = roomData['isLocked'] ?? false;
@@ -631,7 +716,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       });
     }
 
-    final bool isResuming = (StreamingService.instance.currentRoomName == widget.roomID);
+    final bool isResuming =
+        (StreamingService.instance.currentRoomName == widget.roomID);
 
     await StreamingService.instance.connectRoom(
       roomName: widget.roomID,
@@ -649,30 +735,34 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         await StreamingService.instance.setCameraEnabled(true);
       } else {
         if (StreamingService.instance.isCameraOn) {
-          await StreamingService.instance.resumeCameraFromMinimize(isHost: true);
+          await StreamingService.instance.resumeCameraFromMinimize(
+            isHost: true,
+          );
         }
       }
     } else {
       await LiveStreamService.joinRoom(widget.roomID);
       if (!_isCurrentModerator && !isResuming) {
         _sendJoinMessage();
-        
+
         final userDoc = await ProfileService.getUserProfile(currentUser.uid);
         String? idEntryUrl;
         if (userDoc.exists) {
           final data = userDoc.data() as Map<String, dynamic>;
           final addOns = data['activeAddOns'] as Map<String, dynamic>? ?? {};
           final now = DateTime.now();
-          
+
           Map<String, dynamic>? idEntryData;
           for (var entry in addOns.entries) {
             final key = entry.key.toLowerCase().replaceAll(' ', '');
-            if (key.contains('entry') || key.contains('ride') || key.contains('vehicle')) {
+            if (key.contains('entry') ||
+                key.contains('ride') ||
+                key.contains('vehicle')) {
               idEntryData = entry.value as Map<String, dynamic>?;
               break;
             }
           }
-          
+
           if (idEntryData != null) {
             final expiry = idEntryData['expiresAt'] as Timestamp?;
             if (expiry == null || expiry.toDate().isAfter(now)) {
@@ -680,7 +770,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             }
           }
         }
-        _showJoinAnimation(_currentUserName, currentUser.photoURL, currentUser.uid, idEntryUrl: idEntryUrl);
+        _showJoinAnimation(
+          _currentUserName,
+          currentUser.photoURL,
+          currentUser.uid,
+          idEntryUrl: idEntryUrl,
+        );
       }
     }
 
@@ -690,12 +785,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       try {
         final currentBg = roomData['backgroundUrl'] as String?;
         if (currentBg == null || currentBg.isEmpty) {
-          final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .get();
           if (userDoc.exists) {
             final uData = userDoc.data() as Map<String, dynamic>;
             String? activeBg;
             if (uData.containsKey('activeAddOns')) {
-              final addOns = uData['activeAddOns'] as Map<String, dynamic>? ?? {};
+              final addOns =
+                  uData['activeAddOns'] as Map<String, dynamic>? ?? {};
               final now = DateTime.now();
               for (var entry in addOns.entries) {
                 final cat = entry.key.toLowerCase().trim();
@@ -718,7 +817,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               activeBg = uData['preferredRoomSkin'] as String?;
             }
             if (activeBg != null && activeBg.isNotEmpty) {
-              await LiveStreamService.updateRoomBackground(widget.roomID, activeBg);
+              await LiveStreamService.updateRoomBackground(
+                widget.roomID,
+                activeBg,
+              );
             }
           }
         }
@@ -757,7 +859,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       _roomStartTimestamp = DateTime.now().millisecondsSinceEpoch;
     }
 
-    final initialElapsed = math.max(0, DateTime.now().millisecondsSinceEpoch - _roomStartTimestamp!);
+    final initialElapsed = math.max(
+      0,
+      DateTime.now().millisecondsSinceEpoch - _roomStartTimestamp!,
+    );
     _currentDuration.value = Duration(milliseconds: initialElapsed);
 
     durationTimer?.cancel();
@@ -854,7 +959,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     });
   }
 
-  void _showJoinAnimation(String userName, String? userPicture, String userId, {String? idEntryUrl}) {
+  void _showJoinAnimation(
+    String userName,
+    String? userPicture,
+    String userId, {
+    String? idEntryUrl,
+  }) {
     _joinAnimationTimer?.cancel();
     _joinAnimationController.forward(from: 0.0);
     setState(() {
@@ -864,7 +974,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       _newJoinerIdEntryUrl = idEntryUrl;
     });
 
-    bool isSvga = idEntryUrl != null && idEntryUrl.toLowerCase().endsWith('.svga');
+    bool isSvga =
+        idEntryUrl != null && idEntryUrl.toLowerCase().endsWith('.svga');
     if (!isSvga) {
       _joinAnimationTimer = Timer(welcomeTime, () {
         if (mounted) {
@@ -896,7 +1007,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       child: IgnorePointer(
         child: SlideTransition(
           position: _joinAnimationOffset,
-          child: _newJoinerIdEntryUrl != null && _newJoinerIdEntryUrl!.isNotEmpty
+          child:
+              _newJoinerIdEntryUrl != null && _newJoinerIdEntryUrl!.isNotEmpty
               ? Container(
                   width: double.infinity,
                   height: double.infinity,
@@ -916,14 +1028,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           _newJoinerIdEntryUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
-                              Image.asset("assets/animations/id_entry.gif", fit: BoxFit.cover),
+                              Image.asset(
+                                "assets/animations/id_entry.gif",
+                                fit: BoxFit.cover,
+                              ),
                         ),
                       // Floating luxury badge at the bottom of the animation
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.only(left: 12, bottom: 80),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [
@@ -936,12 +1054,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                             ),
                             borderRadius: BorderRadius.circular(30),
                             border: Border.all(
-                              color: const Color(0xFFFFD700).withValues(alpha: 0.9),
+                              color: const Color(
+                                0xFFFFD700,
+                              ).withValues(alpha: 0.9),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                                color: const Color(
+                                  0xFFFFD700,
+                                ).withValues(alpha: 0.3),
                                 blurRadius: 16,
                                 spreadRadius: 2,
                               ),
@@ -969,20 +1091,25 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                                         ),
                                       ),
                                       child: ClipOval(
-                                        child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                        child:
+                                            _newJoinerPicture != null &&
+                                                _newJoinerPicture!.isNotEmpty
                                             ? CachedNetworkImage(
                                                 imageUrl: _newJoinerPicture!,
                                                 fit: BoxFit.cover,
-                                                placeholder: (context, url) => const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white,
-                                                  size: 22,
-                                                ),
-                                                errorWidget: (context, url, error) => const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white,
-                                                  size: 22,
-                                                ),
+                                                placeholder: (context, url) =>
+                                                    const Icon(
+                                                      Icons.person,
+                                                      color: Colors.white,
+                                                      size: 22,
+                                                    ),
+                                                errorWidget:
+                                                    (context, url, error) =>
+                                                        const Icon(
+                                                          Icons.person,
+                                                          color: Colors.white,
+                                                          size: 22,
+                                                        ),
                                               )
                                             : const Icon(
                                                 Icons.person,
@@ -1062,7 +1189,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   alignment: Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(left: 12, bottom: 80),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [
@@ -1108,20 +1238,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                                   ),
                                 ),
                                 child: ClipOval(
-                                  child: _newJoinerPicture != null && _newJoinerPicture!.isNotEmpty
+                                  child:
+                                      _newJoinerPicture != null &&
+                                          _newJoinerPicture!.isNotEmpty
                                       ? CachedNetworkImage(
                                           imageUrl: _newJoinerPicture!,
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) => const Icon(
-                                            Icons.person,
-                                            color: Colors.white,
-                                            size: 20,
-                                          ),
-                                          errorWidget: (context, url, error) => const Icon(
-                                            Icons.person,
-                                            color: Colors.white,
-                                            size: 20,
-                                          ),
+                                          placeholder: (context, url) =>
+                                              const Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
+                                          errorWidget: (context, url, error) =>
+                                              const Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
                                         )
                                       : const Icon(
                                           Icons.person,
@@ -1264,7 +1398,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
         if (isNowInPK) {
           if (newPKState['scores'] != null && newPKState['scores'] is Map) {
-            final scores = Map<dynamic, dynamic>.from(newPKState['scores'] as Map);
+            final scores = Map<dynamic, dynamic>.from(
+              newPKState['scores'] as Map,
+            );
             setState(() {
               _pkScoreBlue = (scores['blue'] as num? ?? 0).toInt();
               _pkScoreRed = (scores['red'] as num? ?? 0).toInt();
@@ -1275,9 +1411,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           }
         } else if (!isNowInPK && _isPKMode) {
           debugPrint("PK Mode ENDING");
-          
+
           StreamingService.instance.disconnectOpponentPKRoom();
-          
+
           _opponentParticipantsSubscription?.cancel();
           _pkTimer?.cancel();
 
@@ -1311,144 +1447,169 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     });
 
-    _participantsSubscription =
-        LiveStreamService.getRoomParticipants(widget.roomID).listen((event) {
-          if (!event.snapshot.exists) {
-            if (mounted) setState(() => _participants = []);
-            return;
-          }
-          final participantsMap = Map<dynamic, dynamic>.from(
-            event.snapshot.value as Map,
+    _participantsSubscription = LiveStreamService.getRoomParticipants(widget.roomID).listen((
+      event,
+    ) {
+      if (!event.snapshot.exists) {
+        if (mounted) setState(() => _participants = []);
+        return;
+      }
+      final participantsMap = Map<dynamic, dynamic>.from(
+        event.snapshot.value as Map,
+      );
+      final newParticipants = participantsMap.entries
+          .map(
+            (entry) => LiveStreamParticipant.fromRTDB(entry.key, entry.value),
+          )
+          .toList();
+
+      for (final p in newParticipants) {
+        if (p.vipType != null && p.vipType!.isNotEmpty) {
+          VipService.setVipType(p.userId, p.vipType);
+        } else {
+          VipService.getVipType(p.userId).then((res) {
+            if (res != null && mounted) setState(() {});
+          });
+        }
+      }
+
+      if (_participants.isNotEmpty && _newJoinerName == null) {
+        final oldParticipantIds = _participants.map((p) => p.userId).toSet();
+        final String hostId = _isInitialized ? (roomData['hostId'] ?? '') : '';
+
+        final newGuests = newParticipants
+            .where(
+              (p) =>
+                  !oldParticipantIds.contains(p.userId) &&
+                  p.userId != hostId &&
+                  !p.isModerator,
+            )
+            .toList();
+
+        if (newGuests.isNotEmpty) {
+          _showJoinAnimation(
+            newGuests.first.userName,
+            newGuests.first.userPicture,
+            newGuests.first.userId,
+            idEntryUrl: newGuests.first.idEntryUrl,
           );
-          final newParticipants = participantsMap.entries
-              .map(
-                (entry) =>
-                    LiveStreamParticipant.fromRTDB(entry.key, entry.value),
-              )
-              .toList();
+        }
+      }
 
-          for (final p in newParticipants) {
-            if (p.vipType != null && p.vipType!.isNotEmpty) {
-              VipService.setVipType(p.userId, p.vipType);
-            } else {
-              VipService.getVipType(p.userId).then((res) {
-                if (res != null && mounted) setState(() {});
-              });
+      final currentUser = _auth.currentUser!;
+      final myParticipant = newParticipants.firstWhere(
+        (p) => p.userId == currentUser.uid,
+        orElse: () => LiveStreamParticipant(
+          userId: '',
+          userName: '',
+          isMuted: true,
+          isCameraOn: false,
+          isOnSeat: false,
+        ),
+      );
+
+      if (myParticipant.userId.isNotEmpty && myParticipant.isModerator) {
+        if (!_isCurrentModerator && mounted) {
+          setState(() {
+            _isCurrentModerator = true;
+          });
+        }
+      }
+
+      // Only treat as kicked if the user was PREVIOUSLY confirmed in _participants
+      // and we are not currently minimizing/minimized
+      final bool wasAlreadyInRoom = _participants.any(
+        (p) => p.userId == currentUser.uid,
+      );
+      final bool isMinimizingNow =
+          _isMinimizing ||
+          (mounted &&
+              context.read<AppCubit>().state.minimizedRoom?.roomId ==
+                  widget.roomID);
+
+      if (wasAlreadyInRoom &&
+          myParticipant.userId.isEmpty &&
+          !widget.isHost &&
+          !_isCurrentModerator &&
+          !isMinimizingNow &&
+          !_isRoomEnded) {
+        // We were kicked!
+        if (mounted) {
+          _handleKicked();
+        }
+        return;
+      }
+
+      // Handle remote mute/unmute and camera off when demoted or seat changes
+      if (myParticipant.userId.isNotEmpty && _participants.isNotEmpty) {
+        final oldMe = _participants.firstWhere(
+          (p) => p.userId == currentUser.uid,
+          orElse: () => myParticipant,
+        );
+        if (myParticipant.isMuted != oldMe.isMuted) {
+          StreamingService.instance.setMicrophoneEnabled(
+            !myParticipant.isMuted,
+          );
+        }
+        if (!myParticipant.isCameraOn && oldMe.isCameraOn) {
+          StreamingService.instance.setCameraEnabled(false);
+        }
+      }
+
+      final isNowJoined = myParticipant.isOnSeat;
+
+      if (isNowJoined && !_isJoined) {
+        debugPrint(
+          "Join request approved! Call type: ${myParticipant.callType}",
+        );
+        StreamingService.instance.setMicrophoneEnabled(true);
+        if (myParticipant.callType == 'video' || myParticipant.isCameraOn) {
+          Permission.camera.request().then((status) {
+            if (status.isGranted) {
+              StreamingService.instance.setCameraEnabled(true);
+              LiveStreamService.toggleCameraState(widget.roomID, true);
             }
-          }
-
-          if (_participants.isNotEmpty && _newJoinerName == null) {
-            final oldParticipantIds = _participants
-                .map((p) => p.userId)
-                .toSet();
-            final String hostId = _isInitialized
-                ? (roomData['hostId'] ?? '')
-                : '';
-
-            final newGuests = newParticipants
-                .where(
-                  (p) =>
-                      !oldParticipantIds.contains(p.userId) &&
-                      p.userId != hostId &&
-                      !p.isModerator,
-                )
-                .toList();
-
-            if (newGuests.isNotEmpty) {
-              _showJoinAnimation(
-                newGuests.first.userName,
-                newGuests.first.userPicture,
-                newGuests.first.userId,
-                idEntryUrl: newGuests.first.idEntryUrl,
-              );
-            }
-          }
-
-          final currentUser = _auth.currentUser!;
-          final myParticipant = newParticipants.firstWhere(
-            (p) => p.userId == currentUser.uid,
-            orElse: () => LiveStreamParticipant(
-              userId: '',
-              userName: '',
-              isMuted: true,
-              isCameraOn: false,
-              isOnSeat: false,
+          });
+        } else {
+          StreamingService.instance.setCameraEnabled(false);
+          LiveStreamService.toggleCameraState(widget.roomID, false);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                myParticipant.callType == 'video'
+                    ? 'Host accepted your request! You are live on Video Call.'
+                    : 'Host accepted your request! You are live on Audio Call.',
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
             ),
           );
+        }
+      } else if (!isNowJoined && _isJoined) {
+        debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
+        StreamingService.instance.setMicrophoneEnabled(false);
+        StreamingService.instance.setCameraEnabled(false);
+      }
 
-          // Only treat as kicked if the user was PREVIOUSLY confirmed in _participants
-          // and we are not currently minimizing/minimized
-          final bool wasAlreadyInRoom = _participants.any((p) => p.userId == currentUser.uid);
-          final bool isMinimizingNow = _isMinimizing ||
-              (mounted && context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
-
-          if (wasAlreadyInRoom && myParticipant.userId.isEmpty && !widget.isHost && !_isCurrentModerator && !isMinimizingNow && !_isRoomEnded) {
-            // We were kicked!
-            if (mounted) {
-              _handleKicked();
-            }
-            return;
-          }
-
-          // Handle remote mute/unmute and camera off when demoted or seat changes
-          if (myParticipant.userId.isNotEmpty && _participants.isNotEmpty) {
-            final oldMe = _participants.firstWhere(
-              (p) => p.userId == currentUser.uid,
-              orElse: () => myParticipant,
-            );
-            if (myParticipant.isMuted != oldMe.isMuted) {
-              StreamingService.instance.setMicrophoneEnabled(!myParticipant.isMuted);
-            }
-            if (!myParticipant.isCameraOn && oldMe.isCameraOn) {
-              StreamingService.instance.setCameraEnabled(false);
-            }
-          }
-
-          final isNowJoined = myParticipant.isOnSeat;
-
-          if (isNowJoined && !_isJoined) {
-            debugPrint("Join request approved! Call type: ${myParticipant.callType}");
-            StreamingService.instance.setMicrophoneEnabled(true);
-            if (myParticipant.callType == 'video' || myParticipant.isCameraOn) {
-              Permission.camera.request().then((status) {
-                if (status.isGranted) {
-                  StreamingService.instance.setCameraEnabled(true);
-                  LiveStreamService.toggleCameraState(widget.roomID, true);
-                }
-              });
-            } else {
-              StreamingService.instance.setCameraEnabled(false);
-              LiveStreamService.toggleCameraState(widget.roomID, false);
-            }
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(myParticipant.callType == 'video'
-                      ? 'Host accepted your request! You are live on Video Call.'
-                      : 'Host accepted your request! You are live on Audio Call.'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          } else if (!isNowJoined && _isJoined) {
-            debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
-            StreamingService.instance.setMicrophoneEnabled(false);
-            StreamingService.instance.setCameraEnabled(false);
-          }
-
-          if (mounted) {
-            setState(() {
-              _participants = newParticipants;
-              _isJoined = isNowJoined;
-              _localMuteOverride = null;
-            });
-          }
+      if (mounted) {
+        setState(() {
+          _participants = newParticipants;
+          _isJoined = isNowJoined;
+          _localMuteOverride = null;
         });
+      }
+    });
 
     _commentsEnabledSubscription =
-        LiveStreamService.getCommentsEnabledStream(widget.roomID).listen((event) {
-          if (!mounted || !event.snapshot.exists || event.snapshot.value == null) return;
+        LiveStreamService.getCommentsEnabledStream(widget.roomID).listen((
+          event,
+        ) {
+          if (!mounted ||
+              !event.snapshot.exists ||
+              event.snapshot.value == null)
+            return;
           final enabled = event.snapshot.value as bool? ?? true;
           if (_isCommentsEnabled != enabled) {
             setState(() {
@@ -1459,7 +1620,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     _emojiSubscription = LiveStreamService.getEmojiStream(widget.roomID).listen(
       (event) {
-        if (!mounted || !event.snapshot.exists || event.snapshot.value == null) {
+        if (!mounted ||
+            !event.snapshot.exists ||
+            event.snapshot.value == null) {
           return;
         }
 
@@ -1550,7 +1713,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           durationSec: data['duration'] as int?,
         );
 
-        if (_isPKMode && _pkState.containsKey('opponentRoomId') && giftValue > 0) {
+        if (_isPKMode &&
+            _pkState.containsKey('opponentRoomId') &&
+            giftValue > 0) {
           final isBlue = (_pkState['role'] == 'sender');
           LiveStreamService.addPKPoints(
             widget.roomID,
@@ -1563,9 +1728,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     });
 
     _joinRequestsSubscription =
-        LiveStreamService.getJoinRequestsStream(widget.roomID).listen((
-          event,
-        ) {
+        LiveStreamService.getJoinRequestsStream(widget.roomID).listen((event) {
           if (!event.snapshot.exists) {
             if (mounted) setState(() => _joinRequests = []);
             return;
@@ -1635,15 +1798,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId != null && !widget.isHost) {
       _callInviteSubscription =
-          LiveStreamService.getCallInviteStream(widget.roomID, currentUserId)
-              .listen((event) {
-                if (!event.snapshot.exists || event.snapshot.value == null) return;
-                final data = event.snapshot.value;
-                if (data is Map) {
-                  final hostName = (data['hostName'] as String?) ?? 'Host';
-                  _showCallInviteDialog(hostName, currentUserId);
-                }
-              });
+          LiveStreamService.getCallInviteStream(
+            widget.roomID,
+            currentUserId,
+          ).listen((event) {
+            if (!event.snapshot.exists || event.snapshot.value == null) return;
+            final data = event.snapshot.value;
+            if (data is Map) {
+              final hostName = (data['hostName'] as String?) ?? 'Host';
+              _showCallInviteDialog(hostName, currentUserId);
+            }
+          });
     }
   }
 
@@ -1668,13 +1833,21 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 color: Colors.green.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.phone_in_talk, color: Colors.greenAccent, size: 26),
+              child: const Icon(
+                Icons.phone_in_talk,
+                color: Colors.greenAccent,
+                size: 26,
+              ),
             ),
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
                 'Call Invitation',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -1683,7 +1856,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           '$hostName invited you to join the live call!',
           style: const TextStyle(color: Colors.white70, fontSize: 15),
         ),
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
         actions: [
           TextButton(
             onPressed: () async {
@@ -1691,21 +1867,35 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               _isCallInviteDialogShowing = false;
               await LiveStreamService.rejectCallInvite(widget.roomID, myUserId);
             },
-            child: const Text('Decline', style: TextStyle(color: Colors.redAccent, fontSize: 15)),
+            child: const Text(
+              'Decline',
+              style: TextStyle(color: Colors.redAccent, fontSize: 15),
+            ),
           ),
           ElevatedButton.icon(
             icon: const Icon(Icons.call, color: Colors.white, size: 18),
-            label: const Text('Accept Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            label: const Text(
+              'Accept Call',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
             onPressed: () async {
               Navigator.of(dialogCtx).pop();
               _isCallInviteDialogShowing = false;
               try {
-                await LiveStreamService.acceptCallInvite(widget.roomID, myUserId);
+                await LiveStreamService.acceptCallInvite(
+                  widget.roomID,
+                  myUserId,
+                );
                 await StreamingService.instance.setMicrophoneEnabled(true);
                 if (mounted) {
                   setState(() {
@@ -1721,7 +1911,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error joining call: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text('Error joining call: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -1778,10 +1971,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isWinner
-                    ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32), const Color(0xFF388E3C)]
+                    ? [
+                        const Color(0xFF1B5E20),
+                        const Color(0xFF2E7D32),
+                        const Color(0xFF388E3C),
+                      ]
                     : isTie
-                        ? [const Color(0xFF37474F), const Color(0xFF455A64)]
-                        : [const Color(0xFFB71C1C), const Color(0xFFC62828), const Color(0xFFD32F2F)],
+                    ? [const Color(0xFF37474F), const Color(0xFF455A64)]
+                    : [
+                        const Color(0xFFB71C1C),
+                        const Color(0xFFC62828),
+                        const Color(0xFFD32F2F),
+                      ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -1792,7 +1993,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: (isWinner ? Colors.amber : Colors.red).withValues(alpha: 0.5),
+                  color: (isWinner ? Colors.amber : Colors.red).withValues(
+                    alpha: 0.5,
+                  ),
                   blurRadius: 20,
                   spreadRadius: 4,
                 ),
@@ -1805,14 +2008,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   isWinner
                       ? Icons.emoji_events_rounded
                       : isTie
-                          ? Icons.handshake_rounded
-                          : Icons.sentiment_dissatisfied_rounded,
+                      ? Icons.handshake_rounded
+                      : Icons.sentiment_dissatisfied_rounded,
                   color: isWinner ? const Color(0xFFFFD700) : Colors.white,
                   size: 64,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  isWinner ? 'VICTORY!' : isTie ? 'DRAW!' : 'DEFEAT',
+                  isWinner
+                      ? 'VICTORY!'
+                      : isTie
+                      ? 'DRAW!'
+                      : 'DEFEAT',
                   style: TextStyle(
                     color: isWinner ? const Color(0xFFFFD700) : Colors.white,
                     fontSize: 26,
@@ -1825,14 +2032,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   isWinner
                       ? 'Congratulations! You won the PK battle!'
                       : isTie
-                          ? 'It is a tie! Both hosts fought well!'
-                          : 'Better luck next time!',
+                      ? 'It is a tie! Both hosts fought well!'
+                      : 'Better luck next time!',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 20),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black45,
                     borderRadius: BorderRadius.circular(16),
@@ -1842,17 +2052,52 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     children: [
                       Column(
                         children: [
-                          const Text('Blue Team', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const Text(
+                            'Blue Team',
+                            style: TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('$_pkScoreBlue', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                          Text(
+                            '$_pkScoreBlue',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
-                      const Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16)),
+                      const Text(
+                        'VS',
+                        style: TextStyle(
+                          color: Colors.amber,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
                       Column(
                         children: [
-                          const Text('Red Team', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const Text(
+                            'Red Team',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('$_pkScoreRed', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                          Text(
+                            '$_pkScoreRed',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -1863,8 +2108,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black87,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 10,
+                    ),
                   ),
                   onPressed: () {
                     Navigator.of(ctx).pop();
@@ -1875,7 +2125,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       );
                     }
                   },
-                  child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
                 ),
               ],
             ),
@@ -2342,10 +2595,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     _exitAndEndLiveRoom();
                   },
                 ),
-                if (_isCurrentModerator) ...[
+                if (!widget.isHost && _isCurrentModerator) ...[
                   const SizedBox(height: 24),
                   _buildExitDialogOption(
-                    icon: Icons.cancel_presentation_rounded,
+                    icon: Icons.close_rounded,
                     color: Colors.red.shade900,
                     label: 'Close Live',
                     onTap: () {
@@ -2483,9 +2736,19 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.redAccent,
+              size: 28,
+            ),
             SizedBox(width: 8),
-            Text('Close Live Stream', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(
+              'Close Live Stream',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         content: const Text(
@@ -2500,10 +2763,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Close Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Close Live',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -2511,7 +2782,54 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     if (confirm == true) {
       try {
+        _isMinimizing = false;
+        _isRoomEnded = true;
+
+        try {
+          if (mounted) {
+            context.read<AppCubit>().closeMinimizedRoom();
+          }
+        } catch (_) {}
+
+        if (_isPKMode && _pkState.containsKey('opponentRoomId')) {
+          try {
+            await LiveStreamService.endPKBattle(
+              widget.roomID,
+              _pkState['opponentRoomId'],
+            );
+          } catch (e) {
+            debugPrint("Error ending PK battle: $e");
+          }
+
+          try {
+            final String opponentHostId = _pkState['opponentHostId'] ?? '';
+            if (opponentHostId.isNotEmpty) {
+              await StreamingService.instance.disconnectOpponentPKRoom();
+            }
+          } catch (e) {
+            debugPrint("Error disconnecting opponent PK room: $e");
+          }
+        }
+
         await LiveStreamService.deleteRoom(widget.roomID);
+
+        try {
+          await StreamingService.instance.disconnect();
+        } catch (e) {
+          debugPrint("Error disconnecting streaming service: $e");
+        }
+
+        try {
+          await WakelockPlus.disable();
+        } catch (_) {}
+
+        try {
+          SystemChrome.setEnabledSystemUIMode(
+            SystemUiMode.manual,
+            overlays: SystemUiOverlay.values,
+          );
+        } catch (_) {}
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2524,7 +2842,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error closing live: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error closing live: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -2622,13 +2943,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 children: [
                   // 1. Global Room Theme / Skin Background
                   Positioned.fill(
-                    child: roomData['backgroundUrl'] != null &&
+                    child:
+                        roomData['backgroundUrl'] != null &&
                             (roomData['backgroundUrl'] as String).isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: roomData['backgroundUrl'] as String,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => const SizedBox.shrink(),
-                            errorWidget: (context, url, error) => const SizedBox.shrink(),
+                            placeholder: (context, url) =>
+                                const SizedBox.shrink(),
+                            errorWidget: (context, url, error) =>
+                                const SizedBox.shrink(),
                           )
                         : Container(
                             decoration: const BoxDecoration(
@@ -2666,7 +2990,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
                   if (_isInitialized && !_isChatExpanded) _buildRightToolbar(),
                   if (_isInitialized) _buildFloatingEmojis(),
-                  if (_isInitialized) FloatingYoutubePlayer(roomId: widget.roomID, isHost: widget.isHost),
+                  if (_isInitialized)
+                    FloatingYoutubePlayer(
+                      roomId: widget.roomID,
+                      isHost: widget.isHost,
+                    ),
                 ],
               ),
             ),
@@ -2701,7 +3029,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildStandardModeOverlay() {
     final String hostId = roomData['hostId'] ?? '';
-    final seatedGuests = _participants.where((p) => p.isOnSeat && p.userId != hostId).toList();
+    final seatedGuests = _participants
+        .where((p) => p.isOnSeat && p.userId != hostId)
+        .toList();
     final bool isSingleHost = seatedGuests.isEmpty;
 
     return Stack(
@@ -2725,12 +3055,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
           ],
         ),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: _buildChatInput(),
-        ),
+        Positioned(bottom: 0, left: 0, right: 0, child: _buildChatInput()),
       ],
     );
   }
@@ -2767,7 +3092,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 );
               },
               child: Container(
-                height: 38,
+                height: 40,
                 padding: const EdgeInsets.fromLTRB(3, 3, 8, 3),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.35),
@@ -2788,7 +3113,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     ),
                     const SizedBox(width: 6),
                     ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 44, maxWidth: 90),
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        maxWidth: 90,
+                      ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2819,7 +3147,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                               Flexible(
                                 child: Text(
                                   (roomData["hostName"] != null &&
-                                          (roomData["hostName"] as String).isNotEmpty)
+                                          (roomData["hostName"] as String)
+                                              .isNotEmpty)
                                       ? roomData["hostName"]
                                       : 'Host',
                                   maxLines: 1,
@@ -2838,8 +3167,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                             valueListenable: _currentDuration,
                             builder: (context, duration, child) {
                               final hours = duration.inHours;
-                              final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-                              final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+                              final minutes = (duration.inMinutes % 60)
+                                  .toString()
+                                  .padLeft(2, '0');
+                              final seconds = (duration.inSeconds % 60)
+                                  .toString()
+                                  .padLeft(2, '0');
                               final timeStr = hours > 0
                                   ? '${hours.toString().padLeft(2, "0")}:$minutes:$seconds'
                                   : '$minutes:$seconds';
@@ -2919,7 +3252,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               GestureDetector(
                 onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.45),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.28,
+                  ),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
@@ -2938,7 +3273,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.8),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    width: 0.8,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -2952,7 +3290,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     Text(
                       (guestParticipants.isNotEmpty
                               ? guestParticipants.length
-                              : (_participantCount > 1 ? _participantCount - 1 : 0))
+                              : (_participantCount > 1
+                                    ? _participantCount - 1
+                                    : 0))
                           .toString(),
                       style: const TextStyle(
                         color: Colors.white,
@@ -2985,14 +3325,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
             const SizedBox(width: 8),
 
-            if (_isCurrentModerator) ...[
+            if (!widget.isHost && _isCurrentModerator) ...[
               _buildCircleActionButton(
                 size: 38,
                 onTap: _showModeratorCloseDialog,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFE11D48), Color(0xFF9F1239)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: Border.all(
+                  color: const Color(0xFFFF4D6D),
+                  width: 1.5,
+                ),
                 child: const Icon(
-                  Icons.cancel_presentation_rounded,
-                  color: Colors.redAccent,
-                  size: 19,
+                  Icons.close_rounded,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
               const SizedBox(width: 8),
@@ -3008,7 +3357,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: const Color(0xFF23032F),
-                  border: Border.all(color: const Color(0xFFFF1744), width: 1.8),
+                  border: Border.all(
+                    color: const Color(0xFFFF1744),
+                    width: 1.8,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFFFF1744).withValues(alpha: 0.4),
@@ -3240,7 +3592,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildBackgroundVideoIfSingleHost() {
     final String hostId = roomData['hostId'] ?? '';
-    final seatedGuests = _participants.where((p) => p.isOnSeat && p.userId != hostId).toList();
+    final seatedGuests = _participants
+        .where((p) => p.isOnSeat && p.userId != hostId)
+        .toList();
     if (seatedGuests.isNotEmpty) return const SizedBox.shrink();
 
     LiveStreamParticipant? host;
@@ -3251,7 +3605,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     }
 
-    final hostParticipant = host ??
+    final hostParticipant =
+        host ??
         LiveStreamParticipant(
           userId: hostId,
           userName: roomData['hostName'] ?? 'Host',
@@ -3263,10 +3618,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         );
 
     return Positioned.fill(
-      child: _buildParticipantVideo(
-        hostParticipant,
-        isFullScreen: true,
-      ),
+      child: _buildParticipantVideo(hostParticipant, isFullScreen: true),
     );
   }
 
@@ -3283,7 +3635,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       }
     }
 
-    final hostParticipant = host ??
+    final hostParticipant =
+        host ??
         LiveStreamParticipant(
           userId: hostId,
           userName: roomData['hostName'] ?? 'Host',
@@ -3528,7 +3881,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     }
   }
 
-  Widget _buildParticipantVideo(LiveStreamParticipant participant, {bool isFullScreen = false}) {
+  Widget _buildParticipantVideo(
+    LiveStreamParticipant participant, {
+    bool isFullScreen = false,
+  }) {
     final String hostId = roomData['hostId'] ?? '';
     final bool isHost = participant.userId == hostId;
     final bool isCurrentUser = participant.userId == _auth.currentUser?.uid;
@@ -3536,17 +3892,20 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final bool isCameraActive = (widget.isHost && isHost && isCurrentUser)
         ? StreamingService.instance.isCameraOn
         : (isCurrentUser
-            ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
-            : (isHost ? (participant.isCameraOn != false) : participant.isCameraOn));
+              ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
+              : (isHost
+                    ? (participant.isCameraOn != false)
+                    : participant.isCameraOn));
 
-    final String? userVip = participant.vipType ??
+    final String? userVip =
+        participant.vipType ??
         (isHost ? (roomData['vipType'] as String?) : null) ??
         VipService.getVipTypeSync(participant.userId);
     final bool hasVip = userVip != null && userVip.isNotEmpty;
     final bool isVvip = hasVip && userVip.toLowerCase().contains('vvip');
 
-    final String? userPicture = participant.userPicture ??
-        (isHost ? roomData['hostPicture'] : null);
+    final String? userPicture =
+        participant.userPicture ?? (isHost ? roomData['hostPicture'] : null);
     final String userName = participant.userName.isNotEmpty
         ? participant.userName
         : (isHost ? (roomData['hostName'] ?? 'Host') : 'User');
@@ -3557,7 +3916,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         if (isCameraActive)
           Positioned.fill(
             child: (isCurrentUser && widget.isHost)
-                ? StreamingService.instance.buildVideoView(participant.userId, fit: BoxFit.cover)
+                ? StreamingService.instance.buildVideoView(
+                    participant.userId,
+                    fit: BoxFit.cover,
+                  )
                 : _SafeParticipantVideoWidget(participant: participant),
           ),
 
@@ -3580,19 +3942,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     ),
                   ),
                 Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.45),
-                  ),
+                  child: Container(color: Colors.black.withValues(alpha: 0.45)),
                 ),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final double cardMinSide = math.min(constraints.maxWidth, constraints.maxHeight);
-                    final double avatarSize = isFullScreen ? 100.0 : math.max(36.0, cardMinSide * 0.38);
+                    final double cardMinSide = math.min(
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                    );
+                    final double avatarSize = isFullScreen
+                        ? 100.0
+                        : math.max(36.0, cardMinSide * 0.38);
 
                     return StreamBuilder<List<String>>(
                       stream: StreamingService.instance.activeSpeakersStream,
                       builder: (context, snapshot) {
-                        final isSpeaking = !participant.isMuted &&
+                        final isSpeaking =
+                            !participant.isMuted &&
                             (snapshot.data ?? []).contains(participant.userId);
 
                         return Stack(
@@ -3607,21 +3973,30 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                                 border: Border.all(
                                   color: isSpeaking
                                       ? const Color(0xFF00E5FF)
-                                      : (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)),
+                                      : (isHost
+                                            ? const Color(0xFFE91E63)
+                                            : const Color(0xFF9C27B0)),
                                   width: 2.0,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (isSpeaking
-                                            ? const Color(0xFF00E5FF)
-                                            : (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)))
-                                        .withValues(alpha: 0.5),
+                                    color:
+                                        (isSpeaking
+                                                ? const Color(0xFF00E5FF)
+                                                : (isHost
+                                                      ? const Color(0xFFE91E63)
+                                                      : const Color(
+                                                          0xFF9C27B0,
+                                                        )))
+                                            .withValues(alpha: 0.5),
                                     blurRadius: 8,
                                   ),
                                 ],
                               ),
                               child: ClipOval(
-                                child: (userPicture != null && userPicture.isNotEmpty)
+                                child:
+                                    (userPicture != null &&
+                                        userPicture.isNotEmpty)
                                     ? CachedNetworkImage(
                                         imageUrl: userPicture,
                                         fit: BoxFit.cover,
@@ -3631,7 +4006,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                                           size: 28,
                                         ),
                                       )
-                                    : const Icon(Icons.person, color: Colors.white, size: 28),
+                                    : const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 28,
+                                      ),
                               ),
                             ),
                             if (isSpeaking)
@@ -3644,11 +4023,15 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                               ),
                             if (hasVip)
                               Positioned(
-                                top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                                top:
+                                    (avatarSize - (avatarSize * 1.823)) / 2 -
+                                    (avatarSize * 0.1644),
                                 left: (avatarSize - (avatarSize * 1.823)) / 2,
                                 child: IgnorePointer(
                                   child: Image.asset(
-                                    isVvip ? 'assets/images/vvip.png' : 'assets/images/vip.png',
+                                    isVvip
+                                        ? 'assets/images/vvip.png'
+                                        : 'assets/images/vip.png',
                                     width: avatarSize * 1.823,
                                     height: avatarSize * 1.823,
                                     fit: BoxFit.contain,
@@ -3665,99 +4048,99 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
           ),
 
-        // 3. Diamond balance chip (Top-left, if not fullscreen)
-        if (!isFullScreen)
-          Positioned(
-            top: 4,
-            left: 4,
-            child: StreamBuilder<int>(
-              stream: _diamondsStreamCache.putIfAbsent(
-                participant.userId,
-                () => ProfileService.getUserDiamondsStream(participant.userId),
-              ),
-              builder: (context, snapshot) {
-                final diamonds = snapshot.data ?? 0;
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF00E5FF).withValues(alpha: 0.6),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.diamond, color: Color(0xFF00E5FF), size: 10),
-                      const SizedBox(width: 2),
-                      Text(
-                        _formatNumber(diamonds),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (diamonds >= 100000) ...[
-                        const SizedBox(width: 2),
-                        const Icon(Icons.star, color: Colors.amber, size: 9),
-                        Text(
-                          '${diamonds ~/ 100000}',
-                          style: const TextStyle(
-                            color: Colors.amber,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-        // 4. Name pill (Bottom-left, if not fullscreen)
+        // 3. Name & Diamond balance pill (Bottom-left, if not fullscreen)
         if (!isFullScreen)
           Positioned(
             left: 4,
             bottom: 4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isHost) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      margin: const EdgeInsets.only(right: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE91E63),
-                        borderRadius: BorderRadius.circular(3),
+            right: participant.isMuted ? 28 : 4,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isHost) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 3,
+                          vertical: 1,
+                        ),
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE91E63),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'Host',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      child: const Text(
-                        'Host',
-                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                    ],
+                    Flexible(
+                      child: Text(
+                        userName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                    const SizedBox(width: 4),
+                    StreamBuilder<int>(
+                      stream: _diamondsStreamCache.putIfAbsent(
+                        participant.userId,
+                        () => ProfileService.getUserDiamondsStream(participant.userId),
+                      ),
+                      builder: (context, snapshot) {
+                        final diamonds = snapshot.data ?? 0;
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.diamond,
+                              color: Color(0xFF00E5FF),
+                              size: 10,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              _formatNumber(diamonds),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (diamonds >= 100000) ...[
+                              const SizedBox(width: 2),
+                              const Icon(Icons.star, color: Colors.amber, size: 9),
+                              Text(
+                                '${diamonds ~/ 100000}',
+                                style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ],
-                  Text(
-                    userName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -3787,16 +4170,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           hostId: hostId,
           roomId: widget.roomID,
           isSeated: true,
-          isCurrentUserAdmin: _participants.firstWhere(
-            (p) => p.userId == _auth.currentUser!.uid,
-            orElse: () => LiveStreamParticipant(
-              userId: '',
-              userName: '',
-              isMuted: false,
-              isCameraOn: false,
-              isOnSeat: false,
-            ),
-          ).isAdmin,
+          isCurrentUserAdmin: _participants
+              .firstWhere(
+                (p) => p.userId == _auth.currentUser!.uid,
+                orElse: () => LiveStreamParticipant(
+                  userId: '',
+                  userName: '',
+                  isMuted: false,
+                  isCameraOn: false,
+                  isOnSeat: false,
+                ),
+              )
+              .isAdmin,
           isCurrentUserModerator: _isCurrentModerator,
         );
       },
@@ -3807,12 +4192,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 color: const Color(0xFF28073D).withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0).withValues(alpha: 0.8),
+                  color: isHost
+                      ? const Color(0xFFE91E63)
+                      : const Color(0xFF9C27B0).withValues(alpha: 0.8),
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: (isHost ? const Color(0xFFE91E63) : const Color(0xFF9C27B0)).withValues(alpha: 0.25),
+                    color:
+                        (isHost
+                                ? const Color(0xFFE91E63)
+                                : const Color(0xFF9C27B0))
+                            .withValues(alpha: 0.25),
                     blurRadius: 4,
                     spreadRadius: 0.5,
                   ),
@@ -3820,13 +4211,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
         clipBehavior: isFullScreen ? Clip.none : Clip.antiAlias,
         child: ClipRRect(
-          borderRadius: isFullScreen ? BorderRadius.zero : BorderRadius.circular(9),
+          borderRadius: isFullScreen
+              ? BorderRadius.zero
+              : BorderRadius.circular(9),
           child: content,
         ),
       ),
     );
   }
-
 
   String _formatNumber(int number) {
     if (number >= 1000000) {
@@ -3890,7 +4282,8 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   // FIXED: Host video for PK with BoxFit.cover for no black bars
   Widget _buildHostVideoForPK(LiveStreamParticipant host) {
-    final bool isCameraActive = (widget.isHost && host.userId == _auth.currentUser?.uid)
+    final bool isCameraActive =
+        (widget.isHost && host.userId == _auth.currentUser?.uid)
         ? (host.isCameraOn || StreamingService.instance.isCameraOn)
         : host.isCameraOn;
     if (isCameraActive) {
@@ -4151,8 +4544,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           'assets/images/levels/rank_caifu_cf_$level.png',
           height: 18,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              const SizedBox.shrink(),
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
       );
     } else {
@@ -4163,8 +4555,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           'assets/images/levels/rank_caifu_cf_1.png',
           height: 18,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              const SizedBox.shrink(),
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
       );
     }
@@ -4249,7 +4640,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              Icon(CupertinoIcons.chat_bubble_2_fill, color: Colors.white, size: 14),
+              Icon(
+                CupertinoIcons.chat_bubble_2_fill,
+                color: Colors.white,
+                size: 14,
+              ),
               SizedBox(width: 5),
               Text(
                 'Show comments',
@@ -4302,203 +4697,222 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 padding: const EdgeInsets.all(12),
                 itemCount: _messages.length + 1,
                 itemBuilder: (context, index) {
-          if (index == _messages.length) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(
-                    width: 150,
-                    child: Text(
-                      "Any sexual or violation content is strictly prohibited. All violator will be banned. Do not expose your personal info such phone or location.",
-                      style: TextStyle(color: Colors.white, fontSize: 10),
-                    ),
-                  ),
-                  if (_roomNotice.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.pink.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.pink.withValues(alpha: 0.5),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
+                  if (index == _messages.length) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.campaign,
-                            color: Colors.pink,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
+                          const SizedBox(
+                            width: 150,
                             child: Text(
-                              _roomNotice,
-                              style: const TextStyle(
+                              "Any sexual or violation content is strictly prohibited. All violator will be banned. Do not expose your personal info such phone or location.",
+                              style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 10,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }
-
-          final m = _messages[index];
-
-          if (m.message == "Just joined the room!") {
-            return GestureDetector(
-              onTap: () {
-                if (m.userId.isNotEmpty) {
-                  showProfileInfoBottomSheet(
-                    context,
-                    userId: m.userId,
-                    hostId: roomData['hostId'] ?? '',
-                    roomId: widget.roomID,
-                  );
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildChatAvatar(m.userId, m.username),
-                        _buildLevelBadge(m.userId),
-                        _buildChatVipBadge(m.userId),
-                        Text(
-                          "${m.username}:",
-                          style: TextStyle(
-                            color: Colors.pink.shade300,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Text(
-                      "Just joined the room!",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          if (m.isGiftMessage) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.diamond, color: Colors.cyan, size: 16),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        m.message,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.pink,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: () {
-                  if (m.userId.isNotEmpty) {
-                    showProfileInfoBottomSheet(
-                      context,
-                      userId: m.userId,
-                      hostId: roomData['hostId'] ?? '',
-                      roomId: widget.roomID,
-                    );
-                  }
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E022A).withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: const Color(0xFF9C27B0).withValues(alpha: 0.5),
-                      width: 1.0,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF9C27B0).withValues(alpha: 0.15),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildChatAvatar(m.userId, m.username),
-                      _buildLevelBadge(m.userId),
-                      _buildChatVipBadge(m.userId),
-                      Flexible(
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: '${m.username}: ',
-                                style: const TextStyle(
-                                  color: Color(0xFFF48FB1),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
+                          if (_roomNotice.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.pink.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.pink.withValues(alpha: 0.5),
+                                  width: 1,
                                 ),
                               ),
-                              TextSpan(
-                                text: m.message,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.campaign,
+                                    color: Colors.pink,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _roomNotice,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }
+
+                  final m = _messages[index];
+
+                  if (m.message == "Just joined the room!") {
+                    return GestureDetector(
+                      onTap: () {
+                        if (m.userId.isNotEmpty) {
+                          showProfileInfoBottomSheet(
+                            context,
+                            userId: m.userId,
+                            hostId: roomData['hostId'] ?? '',
+                            roomId: widget.roomID,
+                          );
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _buildChatAvatar(m.userId, m.username),
+                                _buildLevelBadge(m.userId),
+                                _buildChatVipBadge(m.userId),
+                                Text(
+                                  "${m.username}:",
+                                  style: TextStyle(
+                                    color: Colors.pink.shade300,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Text(
+                              "Just joined the room!",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (m.isGiftMessage) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.diamond,
+                              color: Colors.cyan,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                m.message,
                                 style: const TextStyle(
-                                  color: Colors.white,
                                   fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.pink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (m.userId.isNotEmpty) {
+                            showProfileInfoBottomSheet(
+                              context,
+                              userId: m.userId,
+                              hostId: roomData['hostId'] ?? '',
+                              roomId: widget.roomID,
+                            );
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF1E022A,
+                            ).withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF9C27B0,
+                              ).withValues(alpha: 0.5),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF9C27B0,
+                                ).withValues(alpha: 0.15),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildChatAvatar(m.userId, m.username),
+                              _buildLevelBadge(m.userId),
+                              _buildChatVipBadge(m.userId),
+                              Flexible(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '${m.username}: ',
+                                        style: const TextStyle(
+                                          color: Color(0xFFF48FB1),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: m.message,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             ),
-          );
-        },
-      ),
-    ),
           ),
         ),
       ),
@@ -4531,7 +4945,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     return Center(
       child: Text(
         name.isNotEmpty ? name.characters.first.toUpperCase() : "?",
-        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -4573,11 +4991,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     child: TextField(
                       controller: _chatController,
                       focusNode: _chatFocusNode,
-                      enabled: _isCommentsEnabled || widget.isHost || _isCurrentModerator,
+                      enabled:
+                          _isCommentsEnabled ||
+                          widget.isHost ||
+                          _isCurrentModerator,
                       textInputAction: TextInputAction.send,
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: (_isCommentsEnabled || widget.isHost || _isCurrentModerator)
+                        hintText:
+                            (_isCommentsEnabled ||
+                                widget.isHost ||
+                                _isCurrentModerator)
                             ? 'Say hi'
                             : 'Comments are disabled by host',
                         hintStyle: TextStyle(
@@ -4586,7 +5010,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         ),
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
@@ -4687,7 +5113,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               child: GestureDetector(
                 onTap: () {
                   FocusManager.instance.primaryFocus?.unfocus();
-                  _openCallAndViewsBottomSheet(initialTab: widget.isHost ? 1 : 0);
+                  _openCallAndViewsBottomSheet(
+                    initialTab: widget.isHost ? 1 : 0,
+                  );
                 },
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -4708,18 +5136,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF00E676).withValues(alpha: 0.4),
+                            color: const Color(
+                              0xFF00E676,
+                            ).withValues(alpha: 0.4),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
                       child: const Center(
-                        child: Icon(
-                          Icons.call,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                        child: Icon(Icons.call, color: Colors.white, size: 20),
                       ),
                     ),
                     if (widget.isHost && _joinRequests.isNotEmpty)
@@ -4867,7 +5293,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2d1b2b),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('End Call?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'End Call?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'Are you sure you want to end your call session and return to audience?',
           style: TextStyle(color: Colors.white70),
@@ -4880,10 +5309,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('End Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'End Call',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -4958,11 +5395,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 end: Alignment.bottomRight,
               ),
               onTap: _leaveCallSession,
-              child: const Icon(
-                Icons.call_end,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: const Icon(Icons.call_end, color: Colors.white, size: 22),
             ),
             const SizedBox(height: 8),
           ],
@@ -4971,8 +5404,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             // 1. COLLAPSED TOOLBAR (Image 1)
             // ---------------------------------------------------------
             // PK Badge Button
-            if (widget.isHost)
-              _buildPKBadgeButton(size: 38),
+            if (widget.isHost) _buildPKBadgeButton(size: 38),
 
             // Share Button (Cyan)
             _buildCircleActionButton(
@@ -4982,11 +5414,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 colors: [Color(0xFF00E5FF), Color(0xFF0097A7)],
               ),
               border: Border.all(color: const Color(0xFF00E5FF), width: 1.2),
-              child: const Icon(
-                Icons.share,
-                color: Colors.white,
-                size: 19,
-              ),
+              child: const Icon(Icons.share, color: Colors.white, size: 19),
             ),
 
             // Lock / Unlock Button (Gold)
@@ -5005,15 +5433,24 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 }
                 final newLockState = !isRoomLocked;
                 try {
-                  await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
+                  await LiveStreamService.toggleRoomLock(
+                    widget.roomID,
+                    newLockState,
+                  );
                   if (mounted) {
                     setState(() {
                       roomData['isLocked'] = newLockState;
                     });
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(newLockState ? 'Room is locked!' : 'Room is unlocked!'),
-                        backgroundColor: newLockState ? Colors.redAccent : Colors.green,
+                        content: Text(
+                          newLockState
+                              ? 'Room is locked!'
+                              : 'Room is unlocked!',
+                        ),
+                        backgroundColor: newLockState
+                            ? Colors.redAccent
+                            : Colors.green,
                         duration: const Duration(seconds: 1),
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -5046,11 +5483,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                 colors: [Color(0xFFAB47BC), Color(0xFF7B1FA2)],
               ),
               border: Border.all(color: const Color(0xFFAB47BC), width: 1.2),
-              child: const Icon(
-                Icons.settings,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: const Icon(Icons.settings, color: Colors.white, size: 20),
             ),
           ] else ...[
             // ---------------------------------------------------------
@@ -5174,7 +5607,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         }
                         final newLockState = !isRoomLocked;
                         try {
-                          await LiveStreamService.toggleRoomLock(widget.roomID, newLockState);
+                          await LiveStreamService.toggleRoomLock(
+                            widget.roomID,
+                            newLockState,
+                          );
                           if (mounted) {
                             setState(() {
                               roomData['isLocked'] = newLockState;
@@ -5200,7 +5636,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           _localMuteOverride = newMuteState;
                         });
                         try {
-                          await StreamingService.instance.setMicrophoneEnabled(!newMuteState);
+                          await StreamingService.instance.setMicrophoneEnabled(
+                            !newMuteState,
+                          );
                           await LiveStreamService.toggleMuteState(
                             widget.roomID,
                             newMuteState,
@@ -5210,8 +5648,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         }
                       },
                       child: Icon(
-                        isCurrentlyMuted ? CupertinoIcons.mic_off : CupertinoIcons.mic_fill,
-                        color: isCurrentlyMuted ? Colors.white70 : Colors.greenAccent,
+                        isCurrentlyMuted
+                            ? CupertinoIcons.mic_off
+                            : CupertinoIcons.mic_fill,
+                        color: isCurrentlyMuted
+                            ? Colors.white70
+                            : Colors.greenAccent,
                         size: 19,
                       ),
                     ),
@@ -5225,13 +5667,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           final status = await Permission.camera.request();
                           if (!status.isGranted) return;
                         }
-                        StreamingService.instance.setCameraEnabled(newCameraState);
+                        StreamingService.instance.setCameraEnabled(
+                          newCameraState,
+                        );
                         if (!newCameraState) _isFrontCamera = true;
-                        LiveStreamService.toggleCameraState(widget.roomID, newCameraState);
+                        LiveStreamService.toggleCameraState(
+                          widget.roomID,
+                          newCameraState,
+                        );
                       },
                       child: Icon(
-                        isCurrentlyCameraOn ? Icons.videocam : Icons.videocam_off,
-                        color: isCurrentlyCameraOn ? Colors.white : Colors.redAccent,
+                        isCurrentlyCameraOn
+                            ? Icons.videocam
+                            : Icons.videocam_off,
+                        color: isCurrentlyCameraOn
+                            ? Colors.white
+                            : Colors.redAccent,
                         size: 19,
                       ),
                     ),
@@ -5243,12 +5694,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                         if (_isSwitchingCamera) return;
                         setState(() => _isSwitchingCamera = true);
                         try {
-                          final isFront = await StreamingService.instance.flipCamera();
+                          final isFront = await StreamingService.instance
+                              .flipCamera();
                           if (mounted) setState(() => _isFrontCamera = isFront);
                         } catch (e) {
                           debugPrint("Error flipping camera: $e");
                         } finally {
-                          if (mounted) setState(() => _isSwitchingCamera = false);
+                          if (mounted)
+                            setState(() => _isSwitchingCamera = false);
                         }
                       },
                       child: const Icon(
@@ -5299,7 +5752,11 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       _buildCircleActionButton(
                         size: 38,
                         onTap: () {
-                          showRoomSkinSideSheet(context, widget.roomID, isLiveStream: true);
+                          showRoomSkinSideSheet(
+                            context,
+                            widget.roomID,
+                            isLiveStream: true,
+                          );
                         },
                         child: const Icon(
                           Icons.palette_outlined,
@@ -5352,13 +5809,15 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: gradient ??
+                gradient:
+                    gradient ??
                     const LinearGradient(
                       colors: [Color(0xFF881337), Color(0xFF4C0519)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                border: border ??
+                border:
+                    border ??
                     Border.all(
                       color: const Color(0xFFFF2D55).withValues(alpha: 0.5),
                       width: 1.2,
@@ -5373,12 +5832,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               ),
               child: Center(child: child),
             ),
-            if (badge != null)
-              Positioned(
-                top: -3,
-                right: -3,
-                child: badge,
-              ),
+            if (badge != null) Positioned(top: -3, right: -3, child: badge),
           ],
         ),
       ),
@@ -5411,7 +5865,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.4),
@@ -5450,15 +5907,13 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final String shareMessage = '$hostName\n$shareLink';
 
     // ignore: deprecated_member_use
-    Share.share(
-      shareMessage,
-      subject: '$hostName - Pigo Live',
-    );
+    Share.share(shareMessage, subject: '$hostName - Pigo Live');
   }
 
   void _openCallAndViewsBottomSheet({int initialTab = 0}) {
     final hostId = roomData['hostId'] ?? '';
-    final isCurrentAdmin = widget.isHost ||
+    final isCurrentAdmin =
+        widget.isHost ||
         _isCurrentModerator ||
         _participants.any(
           (p) =>
@@ -5502,7 +5957,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "Enter room notice...",
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderSide: BorderSide(
                         color: Colors.white.withValues(alpha: 0.3),
@@ -5514,12 +5971,17 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   ),
                 )
               : Text(
-                  _roomNotice.isNotEmpty ? _roomNotice : "No notice has been set for this room.",
+                  _roomNotice.isNotEmpty
+                      ? _roomNotice
+                      : "No notice has been set for this room.",
                   style: const TextStyle(color: Colors.white70),
                 ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Close', style: TextStyle(color: Colors.white70)),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.white70),
+              ),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             if (widget.isHost)
@@ -5530,12 +5992,18 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('Save Notice', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Save Notice',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onPressed: () async {
                   final notice = noticeController.text.trim();
                   Navigator.of(dialogContext).pop();
                   try {
-                    await LiveStreamService.setRoomNotice(widget.roomID, notice);
+                    await LiveStreamService.setRoomNotice(
+                      widget.roomID,
+                      notice,
+                    );
                     if (mounted) {
                       setState(() {
                         _roomNotice = notice;
@@ -5569,12 +6037,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     if (!mounted) return;
     final key = UniqueKey();
     setState(() {
-      _floatingEmojis.add(FloatingEmoji(
-        emoji: emoji,
-        key: key,
-        leftOffset: 10.0 + (DateTime.now().millisecondsSinceEpoch % 30),
-        senderName: senderName,
-      ));
+      _floatingEmojis.add(
+        FloatingEmoji(
+          emoji: emoji,
+          key: key,
+          leftOffset: 10.0 + (DateTime.now().millisecondsSinceEpoch % 30),
+          senderName: senderName,
+        ),
+      );
     });
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
@@ -5587,7 +6057,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildFloatingEmojis() {
     final bool hasJoinCallButton = !widget.isHost && !_isJoined && !_isPKMode;
-    final double bottomOffset = (hasJoinCallButton ? 104.0 : 62.0) + MediaQuery.of(context).padding.bottom;
+    final double bottomOffset =
+        (hasJoinCallButton ? 104.0 : 62.0) +
+        MediaQuery.of(context).padding.bottom;
 
     return Positioned(
       right: 58,
@@ -5597,12 +6069,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       child: IgnorePointer(
         child: Stack(
           clipBehavior: Clip.none,
-          children: _floatingEmojis.map((e) => _FloatingEmojiWidget(
-            key: e.key,
-            emoji: e.emoji,
-            leftOffset: e.leftOffset,
-            senderName: e.senderName,
-          )).toList(),
+          children: _floatingEmojis
+              .map(
+                (e) => _FloatingEmojiWidget(
+                  key: e.key,
+                  emoji: e.emoji,
+                  leftOffset: e.leftOffset,
+                  senderName: e.senderName,
+                ),
+              )
+              .toList(),
         ),
       ),
     );
@@ -5641,13 +6117,14 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     }
   }
 
-
   Widget _buildParticipantAvatars(List<LiveStreamParticipant> participants) {
     if (participants.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final participantsToShow = participants.where((p) => !p.isModerator).toList();
+    final participantsToShow = participants
+        .where((p) => !p.isModerator)
+        .toList();
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -5700,7 +6177,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             return;
           }
           try {
-            final bool hasVip = await ProfileService.hasKingOrRoyalPackage(currentUserId);
+            final bool hasVip = await ProfileService.hasKingOrRoyalPackage(
+              currentUserId,
+            );
             if (hasVip) {
               await LiveStreamService.joinCallImmediately(widget.roomID);
               if (mounted) {
@@ -5778,7 +6257,12 @@ class FloatingEmoji {
   final double leftOffset;
   final String? senderName;
 
-  FloatingEmoji({required this.emoji, required this.key, required this.leftOffset, this.senderName});
+  FloatingEmoji({
+    required this.emoji,
+    required this.key,
+    required this.leftOffset,
+    this.senderName,
+  });
 }
 
 class _FloatingEmojiWidget extends StatefulWidget {
@@ -5797,7 +6281,8 @@ class _FloatingEmojiWidget extends StatefulWidget {
   State<_FloatingEmojiWidget> createState() => _FloatingEmojiWidgetState();
 }
 
-class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget> with SingleTickerProviderStateMixin {
+class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _positionAnimation;
   late Animation<double> _opacityAnimation;
@@ -5809,11 +6294,12 @@ class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget> with SingleT
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
-    
-    _positionAnimation = Tween<double>(begin: 0, end: -250).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    
+
+    _positionAnimation = Tween<double>(
+      begin: 0,
+      end: -250,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
     _opacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
     );
@@ -5842,20 +6328,23 @@ class _FloatingEmojiWidgetState extends State<_FloatingEmojiWidget> with SingleT
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.emoji,
-                    style: const TextStyle(fontSize: 28),
-                  ),
+                  Text(widget.emoji, style: const TextStyle(fontSize: 28)),
                   if (widget.senderName != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black45,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         widget.senderName!,
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
                       ),
                     ),
                 ],
@@ -5873,18 +6362,21 @@ class _SafeParticipantVideoWidget extends StatefulWidget {
   const _SafeParticipantVideoWidget({super.key, required this.participant});
 
   @override
-  State<_SafeParticipantVideoWidget> createState() => _SafeParticipantVideoWidgetState();
+  State<_SafeParticipantVideoWidget> createState() =>
+      _SafeParticipantVideoWidgetState();
 }
 
-class _SafeParticipantVideoWidgetState extends State<_SafeParticipantVideoWidget> {
+class _SafeParticipantVideoWidgetState
+    extends State<_SafeParticipantVideoWidget> {
   StreamSubscription? _subscription;
 
   @override
   void initState() {
     super.initState();
-    _subscription = StreamingService.instance.remoteParticipantsChangedStream.listen((_) {
-      if (mounted) setState(() {});
-    });
+    _subscription = StreamingService.instance.remoteParticipantsChangedStream
+        .listen((_) {
+          if (mounted) setState(() {});
+        });
   }
 
   @override
@@ -5905,5 +6397,3 @@ class _SafeParticipantVideoWidgetState extends State<_SafeParticipantVideoWidget
     );
   }
 }
-
-

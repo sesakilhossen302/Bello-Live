@@ -269,6 +269,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   StreamSubscription? _emojiSubscription;
   StreamSubscription? _giftNotificationSubscription;
   StreamSubscription? _callInviteSubscription;
+  StreamSubscription? _userDocSubscription;
   bool _isCallInviteDialogShowing = false;
 
   final Map<String, Stream<int>> _balanceStreamCache = {};
@@ -322,6 +323,68 @@ class _AudioRoomPageState extends State<AudioRoomPage>
   int? _fullScreenGiftDuration;
   bool _isMinimizing = false;
 
+  Future<void> _checkModeratorStatus() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+    try {
+      // Clear any stale cached moderator value
+      ProfileService.clearModeratorCache();
+      bool isMod = false;
+
+      // 1. Check user document directly in Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() ?? {};
+        final role = data['role']?.toString().toLowerCase().trim() ?? '';
+        final userField = data['user']?.toString().toLowerCase().trim() ?? '';
+        final isM = data['isModerator'] == true || data['ismoderator'] == true;
+        // Strictly check for moderator role only (do NOT include admin or host)
+        if (role == 'moderator' ||
+            role == 'mod' ||
+            userField == 'moderator' ||
+            userField == 'mod' ||
+            isM) {
+          isMod = true;
+        }
+      }
+
+      if (mounted && _isCurrentModerator != isMod) {
+        setState(() {
+          _isCurrentModerator = isMod;
+        });
+      }
+
+      // 2. Listen to real-time changes on the user's document
+      _userDocSubscription?.cancel();
+      _userDocSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .snapshots()
+          .listen((snapshot) {
+        if (!mounted || !snapshot.exists) return;
+        final data = snapshot.data() ?? {};
+        final role = data['role']?.toString().toLowerCase().trim() ?? '';
+        final userField = data['user']?.toString().toLowerCase().trim() ?? '';
+        final isM = data['isModerator'] == true || data['ismoderator'] == true;
+        final bool modNow = (role == 'moderator' ||
+            role == 'mod' ||
+            userField == 'moderator' ||
+            userField == 'mod' ||
+            isM);
+        if (mounted && _isCurrentModerator != modNow) {
+          setState(() {
+            _isCurrentModerator = modNow;
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Error checking moderator status: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -362,6 +425,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
     _musicPlayerManager = MusicPlayerManager();
 
+    _checkModeratorStatus();
     _initialize();
   }
 
@@ -476,6 +540,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _coHostElapsedTimer?.cancel();
     _giftNotificationSubscription?.cancel();
     _callInviteSubscription?.cancel();
+    _userDocSubscription?.cancel();
     WakelockPlus.disable();
 
     _chatFocusNode.removeListener(_updateChatExpansion);
@@ -541,7 +606,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
       final currentUser = _auth.currentUser;
       if (currentUser != null) {
-        _isCurrentModerator = await ProfileService.isUserModerator(currentUser.uid);
+        await _checkModeratorStatus();
       }
 
       if (isLocked && !widget.isHost && !_isCurrentModerator) {
@@ -1020,6 +1085,14 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                 isMuted: true,
               ),
             );
+
+            if (newCurrentUser.userId.isNotEmpty && newCurrentUser.isModerator) {
+              if (!_isCurrentModerator && mounted) {
+                setState(() {
+                  _isCurrentModerator = true;
+                });
+              }
+            }
 
             final bool isMinimizingNow = _isMinimizing ||
                 (mounted && context.read<AppCubit>().state.minimizedRoom?.roomId == widget.roomID);
@@ -1624,10 +1697,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     _exitAndEndAudioRoom();
                   },
                 ),
-                if (_isCurrentModerator) ...[
+                if (!widget.isHost && _isCurrentModerator) ...[
                   const SizedBox(height: 24),
                   _buildExitDialogOption(
-                    icon: Icons.cancel_presentation_rounded,
+                    icon: Icons.close_rounded,
                     color: Colors.red.shade900,
                     label: 'Close Room',
                     onTap: () {
@@ -1770,7 +1843,27 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
     if (confirm == true) {
       try {
+        _isMinimizing = false;
+        _isRoomEnded = true;
+
+        try {
+          if (mounted) {
+            context.read<AppCubit>().closeMinimizedRoom();
+          }
+        } catch (_) {}
+
         await RoomService.deleteRoom(widget.roomID);
+
+        try {
+          await StreamingService.instance.disconnect();
+        } catch (e) {
+          debugPrint("Error disconnecting streaming service: $e");
+        }
+
+        try {
+          await WakelockPlus.disable();
+        } catch (_) {}
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2301,20 +2394,36 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           ),
           const SizedBox(width: 6),
 
-          if (_isCurrentModerator) ...[
+          if (!widget.isHost && _isCurrentModerator) ...[
             GestureDetector(
               onTap: _showModeratorCloseDialog,
               child: Container(
                 margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.all(4),
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(20),
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE11D48), Color(0xFF9F1239)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(
+                    color: const Color(0xFFFF4D6D),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Icon(
-                  Icons.cancel_presentation_rounded,
-                  size: 22,
-                  color: Colors.redAccent,
+                  Icons.close_rounded,
+                  size: 18,
+                  color: Colors.white,
                 ),
               ),
             ),

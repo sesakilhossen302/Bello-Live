@@ -85,6 +85,22 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
         final int followingCount = data['followingCount'] ?? 0;
         final int level = getSentLevel(data['totalSent'] ?? 0);
 
+        int parseVal(dynamic v) {
+          if (v == null) return 0;
+          if (v is num) return v.toInt();
+          return int.tryParse(v.toString()) ?? 0;
+        }
+        int userBalance = parseVal(data['balance']);
+        if (userBalance == 0) {
+          final int d = parseVal(data['diamonds']);
+          if (d > 0) {
+            userBalance = d;
+          } else {
+            final int b = parseVal(data['beans']);
+            if (b > 0) userBalance = b;
+          }
+        }
+
         return SafeArea(
           child: Stack(
             children: [
@@ -247,15 +263,15 @@ class _ProfileInfoBottomSheetState extends State<ProfileInfoBottomSheet> {
                                   const Icon(Icons.diamond_outlined, color: Colors.white, size: 20),
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${data['balance'] ?? 0}',
+                                    '$userBalance',
                                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                                   ),
-                                  if ((data['balance'] ?? 0) >= 100000) ...[
+                                  if (userBalance >= 100000) ...[
                                     const SizedBox(width: 8),
                                     const Icon(Icons.star, color: Colors.amber, size: 16),
                                     const SizedBox(width: 2),
                                     Text(
-                                      '${(data['balance'] ?? 0) ~/ 100000}',
+                                      '${userBalance ~/ 100000}',
                                       style: const TextStyle(color: Colors.amber, fontSize: 14, fontWeight: FontWeight.bold),
                                     ),
                                   ],

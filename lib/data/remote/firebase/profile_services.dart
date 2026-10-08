@@ -919,6 +919,12 @@ class ProfileService {
     }
   }
 
+  static int _parseBalanceValue(dynamic val) {
+    if (val == null) return 0;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
   static Future<int> getCurrentUserBalance() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return 0;
@@ -927,7 +933,13 @@ class ProfileService {
       final doc = await _usersCollection.doc(currentUserId).get();
       if (!doc.exists) return 0;
       final data = doc.data() as Map<String, dynamic>;
-      return (data['balance'] as num?)?.toInt() ?? 0;
+      final int b = _parseBalanceValue(data['balance']);
+      if (b > 0) return b;
+      final int d = _parseBalanceValue(data['diamonds']);
+      if (d > 0) return d;
+      final int bn = _parseBalanceValue(data['beans']);
+      if (bn > 0) return bn;
+      return b;
     } catch (e) {
       return 0;
     }
@@ -940,7 +952,13 @@ class ProfileService {
     return _usersCollection.doc(currentUserId).snapshots().map((snapshot) {
       if (!snapshot.exists) return 0;
       final data = snapshot.data() as Map<String, dynamic>;
-      return (data['balance'] as num?)?.toInt() ?? 0;
+      final int b = _parseBalanceValue(data['balance']);
+      if (b > 0) return b;
+      final int d = _parseBalanceValue(data['diamonds']);
+      if (d > 0) return d;
+      final int bn = _parseBalanceValue(data['beans']);
+      if (bn > 0) return bn;
+      return b;
     });
   }
 
@@ -1086,8 +1104,13 @@ class ProfileService {
     return _usersCollection.doc(userId).snapshots().map((snapshot) {
       if (!snapshot.exists) return 0;
       final data = snapshot.data() as Map<String, dynamic>;
-      final num balanceNum = data['diamonds'] ?? data['balance'] ?? 0;
-      return balanceNum.toInt();
+      final int b = _parseBalanceValue(data['balance']);
+      if (b > 0) return b;
+      final int d = _parseBalanceValue(data['diamonds']);
+      if (d > 0) return d;
+      final int bn = _parseBalanceValue(data['beans']);
+      if (bn > 0) return bn;
+      return b;
     });
   }
 
