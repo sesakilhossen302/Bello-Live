@@ -454,6 +454,10 @@ class LiveStreamService {
     return _participantsRef.child(roomId).orderByChild('joinedAt').onValue;
   }
 
+  static Future<DataSnapshot> getRoomParticipant(String roomId, String userId) {
+    return _participantsRef.child('$roomId/$userId').get();
+  }
+
   static void _setupParticipantCountSync(String roomId) {
     _participantCountListeners[roomId]?.cancel();
     _participantCountListeners[roomId] = _participantsRef

@@ -10,6 +10,7 @@ class VipAvatarWidget extends StatefulWidget {
   final String? userPicture;
   final double avatarSize;
   final String? directVipType; // If already known synchronously (e.g. from RTDB)
+  final double? frameScale;
   final VoidCallback? onTap;
 
   const VipAvatarWidget({
@@ -18,6 +19,7 @@ class VipAvatarWidget extends StatefulWidget {
     this.userPicture,
     this.avatarSize = 34.0,
     this.directVipType,
+    this.frameScale,
     this.onTap,
   });
 
@@ -71,8 +73,9 @@ class _VipAvatarWidgetState extends State<VipAvatarWidget> {
     final bool hasVipBadge = isVvip || isVip;
 
     // Frame scale factor so the circular cutout matches the avatar size perfectly
-    final double frameSize = widget.avatarSize * 1.823;
-    final double verticalShift = widget.avatarSize * 0.1644;
+    final double scale = widget.frameScale ?? 1.823;
+    final double frameSize = widget.avatarSize * scale;
+    final double verticalShift = widget.avatarSize * (scale / 1.823 * 0.1644);
 
     Widget avatarCore = Container(
       width: widget.avatarSize,

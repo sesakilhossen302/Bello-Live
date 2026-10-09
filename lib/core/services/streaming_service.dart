@@ -289,6 +289,7 @@ class StreamingService {
     required String role,
     bool isVideo = false,
     bool isHost = false,
+    bool? initialCameraOn,
   }) async {
     final bool isAlreadyJoined = (_currentRoomName == roomName && _currentUserId == userId);
 
@@ -301,7 +302,9 @@ class StreamingService {
     _currentUserName = userName;
     _isVideo = isVideo;
     _isHost = isHost;
-    if (!isAlreadyJoined) {
+    if (initialCameraOn != null) {
+      _isCameraOn = initialCameraOn;
+    } else if (!isAlreadyJoined) {
       _isMicOn = isHost;
       _isCameraOn = isHost && isVideo;
     }
@@ -388,10 +391,38 @@ class StreamingService {
     if (isVideo) {
       await _engine!.enableVideo();
       if (isHost) {
-        _isCameraOn = true;
-        await _engine!.enableLocalVideo(true);
-        await _engine!.startPreview();
-        await _engine!.muteLocalVideoStream(false);
+        if (_isCameraOn) {
+          await _engine!.enableLocalVideo(true);
+          await _engine!.startPreview();
+          await _engine!.muteLocalVideoStream(false);
+          if (isAlreadyJoined) {
+            try {
+              await _engine!.updateChannelMediaOptions(
+                const ChannelMediaOptions(
+                  publishCameraTrack: true,
+                  clientRoleType: ClientRoleType.clientRoleBroadcaster,
+                ),
+              );
+            } catch (e) {
+              debugPrint('[StreamingService] updateChannelMediaOptions error: $e');
+            }
+          }
+        } else {
+          await _engine!.stopPreview();
+          await _engine!.enableLocalVideo(false);
+          await _engine!.muteLocalVideoStream(true);
+          if (isAlreadyJoined) {
+            try {
+              await _engine!.updateChannelMediaOptions(
+                const ChannelMediaOptions(
+                  publishCameraTrack: false,
+                ),
+              );
+            } catch (e) {
+              debugPrint('[StreamingService] updateChannelMediaOptions error: $e');
+            }
+          }
+        }
       }
     } else {
       _isCameraOn = false;
@@ -409,7 +440,7 @@ class StreamingService {
         options: ChannelMediaOptions(
           autoSubscribeVideo: true,
           autoSubscribeAudio: true,
-          publishCameraTrack: isHost && isVideo,
+          publishCameraTrack: isHost && isVideo && _isCameraOn,
           publishMicrophoneTrack: isHost,
           clientRoleType: isHost ? ClientRoleType.clientRoleBroadcaster : ClientRoleType.clientRoleAudience,
         ),
@@ -576,14 +607,32 @@ class StreamingService {
         await _engine!.muteLocalVideoStream(false);
         if (isHost) {
           await _engine!.startPreview();
-          await _engine!.updateChannelMediaOptions(
-            const ChannelMediaOptions(
-              publishCameraTrack: true,
-              clientRoleType: ClientRoleType.clientRoleBroadcaster,
-            ),
-          );
+          try {
+            await _engine!.updateChannelMediaOptions(
+              const ChannelMediaOptions(
+                publishCameraTrack: true,
+                clientRoleType: ClientRoleType.clientRoleBroadcaster,
+              ),
+            );
+          } catch (e) {
+            debugPrint('[StreamingService] updateChannelMediaOptions on resume error: $e');
+          }
         }
         debugPrint('[StreamingService] Camera resumed from minimize');
+      } else {
+        await _engine!.stopPreview();
+        await _engine!.enableLocalVideo(false);
+        await _engine!.muteLocalVideoStream(true);
+        try {
+          await _engine!.updateChannelMediaOptions(
+            const ChannelMediaOptions(
+              publishCameraTrack: false,
+            ),
+          );
+        } catch (e) {
+          debugPrint('[StreamingService] updateChannelMediaOptions on resume error: $e');
+        }
+        debugPrint('[StreamingService] Camera was off; keeping preview and video off');
       }
     } catch (e) {
       debugPrint('[StreamingService] resumeCameraFromMinimize error: $e');

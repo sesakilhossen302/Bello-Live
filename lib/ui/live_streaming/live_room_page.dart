@@ -603,12 +603,26 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       StreamingService.instance.pauseCameraForMinimize();
       LiveStreamService.pausePresence(widget.roomID, widget.isHost);
     } else if (state == AppLifecycleState.resumed) {
-      if (StreamingService.instance.isCameraOn) {
+      final uid = _auth.currentUser?.uid;
+      LiveStreamParticipant? me;
+      if (uid != null) {
+        try {
+          me = _participants.firstWhere((p) => p.userId == uid);
+        } catch (_) {}
+      }
+
+      final bool shouldCameraBeOn = me != null
+          ? me.isCameraOn
+          : StreamingService.instance.isCameraOn;
+
+      if (shouldCameraBeOn) {
         StreamingService.instance.resumeCameraFromMinimize(
           isHost: widget.isHost,
         );
+      } else {
+        StreamingService.instance.setCameraEnabled(false);
       }
-      final uid = _auth.currentUser?.uid;
+
       if (uid != null) {
         LiveStreamService.resumePresence(
           widget.roomID,
@@ -716,6 +730,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       });
     }
 
+    // Check existing participant data in RTDB to preserve camera state if re-entering/resuming
+    bool? existingCameraState;
+    try {
+      final pSnap = await LiveStreamService.getRoomParticipant(
+        widget.roomID,
+        currentUser.uid,
+      );
+      if (pSnap.exists && pSnap.value is Map) {
+        final pMap = Map<dynamic, dynamic>.from(pSnap.value as Map);
+        if (pMap.containsKey('isCameraOn')) {
+          existingCameraState = pMap['isCameraOn'] == true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error getting existing participant camera state: $e');
+    }
+
     final bool isResuming =
         (StreamingService.instance.currentRoomName == widget.roomID);
 
@@ -726,18 +757,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       role: widget.isHost ? 'HOST' : 'PARTICIPANT',
       isVideo: true,
       isHost: widget.isHost,
+      initialCameraOn: existingCameraState,
     );
     _syncMessagesFromHistory();
 
     if (widget.isHost) {
-      if (!isResuming) {
+      if (!isResuming && existingCameraState == null) {
         await LiveStreamService.toggleCameraState(widget.roomID, true);
         await StreamingService.instance.setCameraEnabled(true);
       } else {
-        if (StreamingService.instance.isCameraOn) {
+        final bool targetCameraOn =
+            existingCameraState ?? StreamingService.instance.isCameraOn;
+        if (targetCameraOn) {
           await StreamingService.instance.resumeCameraFromMinimize(
             isHost: true,
           );
+        } else {
+          await StreamingService.instance.setCameraEnabled(false);
         }
       }
     } else {
@@ -1558,12 +1594,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
       final isNowJoined = myParticipant.isOnSeat;
 
-      if (isNowJoined && !_isJoined) {
+      if (!widget.isHost && isNowJoined && !_isJoined) {
         debugPrint(
-          "Join request approved! Call type: ${myParticipant.callType}",
+          "Guest seat joined/restored! Call type: ${myParticipant.callType}, isCameraOn: ${myParticipant.isCameraOn}",
         );
-        StreamingService.instance.setMicrophoneEnabled(true);
-        if (myParticipant.callType == 'video' || myParticipant.isCameraOn) {
+        StreamingService.instance.setMicrophoneEnabled(!myParticipant.isMuted);
+        if (myParticipant.callType == 'video' && myParticipant.isCameraOn) {
           Permission.camera.request().then((status) {
             if (status.isGranted) {
               StreamingService.instance.setCameraEnabled(true);
@@ -1587,7 +1623,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
           );
         }
-      } else if (!isNowJoined && _isJoined) {
+      } else if (!widget.isHost && !isNowJoined && _isJoined) {
         debugPrint("Demoted from seat or left seat. Turning off mic & camera.");
         StreamingService.instance.setMicrophoneEnabled(false);
         StreamingService.instance.setCameraEnabled(false);
@@ -3012,11 +3048,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         Expanded(
           flex: 2,
           child: Stack(
+            fit: StackFit.expand,
             children: [
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: _buildChatSection(),
-              ),
+              _buildChatSection(),
               _buildJoinCallOverlay(),
               if (_isCommentsHidden) _buildShowCommentsButton(),
             ],
@@ -3034,26 +3068,39 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         .toList();
     final bool isSingleHost = seatedGuests.isEmpty;
 
+    final mediaQuery = MediaQuery.of(context);
+    final double safeBottom = math.max(
+      mediaQuery.padding.bottom,
+      mediaQuery.viewPadding.bottom,
+    );
+    final double bottomPadding = mediaQuery.viewInsets.bottom > 0
+        ? 10.0 + mediaQuery.viewInsets.bottom
+        : math.max(26.0, 12.0 + safeBottom);
+    final double chatBottomMargin = 50.0 + bottomPadding;
+
     return Stack(
       children: [
-        Column(
-          children: [
-            _buildAppBar(),
-            _buildHostStatsRow(),
-            if (!isSingleHost) _buildDynamicVideoGrid(),
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 60),
-                child: Stack(
-                  children: [
-                    _buildChatSection(),
-                    _buildJoinCallOverlay(),
-                    if (_isCommentsHidden) _buildShowCommentsButton(),
-                  ],
+        Positioned.fill(
+          child: Column(
+            children: [
+              _buildAppBar(),
+              _buildHostStatsRow(),
+              if (!isSingleHost) _buildDynamicVideoGrid(),
+              Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(bottom: chatBottomMargin),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildChatSection(),
+                      _buildJoinCallOverlay(),
+                      if (_isCommentsHidden) _buildShowCommentsButton(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         Positioned(bottom: 0, left: 0, right: 0, child: _buildChatInput()),
       ],
@@ -3108,14 +3155,15 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     VipAvatarWidget(
                       userId: hostId,
                       userPicture: roomData['hostPicture'],
-                      avatarSize: 32,
+                      avatarSize: 28,
+                      frameScale: 1.45,
                       directVipType: roomData['vipType'] ?? roomData['vip'],
                     ),
                     const SizedBox(width: 6),
                     ConstrainedBox(
                       constraints: const BoxConstraints(
                         minWidth: 44,
-                        maxWidth: 90,
+                        maxWidth: 140,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -3163,31 +3211,84 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                             ],
                           ),
                           const SizedBox(height: 1),
-                          ValueListenableBuilder<Duration>(
-                            valueListenable: _currentDuration,
-                            builder: (context, duration, child) {
-                              final hours = duration.inHours;
-                              final minutes = (duration.inMinutes % 60)
-                                  .toString()
-                                  .padLeft(2, '0');
-                              final seconds = (duration.inSeconds % 60)
-                                  .toString()
-                                  .padLeft(2, '0');
-                              final timeStr = hours > 0
-                                  ? '${hours.toString().padLeft(2, "0")}:$minutes:$seconds'
-                                  : '$minutes:$seconds';
-                              return Text(
-                                timeStr,
-                                maxLines: 1,
-                                softWrap: false,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.85),
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.2,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ValueListenableBuilder<Duration>(
+                                valueListenable: _currentDuration,
+                                builder: (context, duration, child) {
+                                  final hours = duration.inHours;
+                                  final minutes = (duration.inMinutes % 60)
+                                      .toString()
+                                      .padLeft(2, '0');
+                                  final seconds = (duration.inSeconds % 60)
+                                      .toString()
+                                      .padLeft(2, '0');
+                                  final timeStr = hours > 0
+                                      ? '${hours.toString().padLeft(2, "0")}:$minutes:$seconds'
+                                      : '$minutes:$seconds';
+                                  return Text(
+                                    timeStr,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: 9.0,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              StreamBuilder<int>(
+                                stream: _diamondsStreamCache.putIfAbsent(
+                                  hostId,
+                                  () => ProfileService.getUserDiamondsStream(hostId),
                                 ),
-                              );
-                            },
+                                builder: (context, snapshot) {
+                                  final diamonds = snapshot.data ?? 0;
+                                  final viewersCount = guestParticipants.isNotEmpty
+                                      ? guestParticipants.length
+                                      : (_participantCount > 1
+                                          ? _participantCount - 1
+                                          : 0);
+
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.diamond,
+                                        color: Color(0xFFFFD54F),
+                                        size: 9.5,
+                                      ),
+                                      const SizedBox(width: 1.5),
+                                      Text(
+                                        _formatNumber(diamonds),
+                                        style: const TextStyle(
+                                          color: Color(0xFFFFD54F),
+                                          fontSize: 9.0,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        CupertinoIcons.person_2_fill,
+                                        color: Colors.pinkAccent,
+                                        size: 9.0,
+                                      ),
+                                      const SizedBox(width: 1.5),
+                                      Text(
+                                        viewersCount.toString(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9.0,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -3247,69 +3348,22 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             ),
             const SizedBox(width: 6),
 
-            // Viewers Avatars Line
-            if (guestParticipants.isNotEmpty)
-              GestureDetector(
+            // Viewers Avatars Line (Scrollable, takes all middle available space)
+            Expanded(
+              child: GestureDetector(
                 onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.28,
-                  ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: _buildParticipantAvatars(guestParticipants),
-                  ),
-                ),
-              ),
-
-            const SizedBox(width: 4),
-
-            // Viewer Count Badge
-            GestureDetector(
-              onTap: () => _openCallAndViewsBottomSheet(initialTab: 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      CupertinoIcons.person_2_fill,
-                      color: Colors.pinkAccent,
-                      size: 13,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      (guestParticipants.isNotEmpty
-                              ? guestParticipants.length
-                              : (_participantCount > 1
-                                    ? _participantCount - 1
-                                    : 0))
-                          .toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: _buildParticipantAvatars(guestParticipants),
                 ),
               ),
             ),
-
-            const Spacer(),
+            const SizedBox(width: 6),
 
             // Top-right Speaker Mute/Unmute Button (Image 1 & 2)
             _buildCircleActionButton(
-              size: 38,
+              size: 34,
               onTap: () async {
                 final newMute = !_isSpeakerMuted;
                 setState(() => _isSpeakerMuted = newMute);
@@ -3320,10 +3374,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                     ? CupertinoIcons.speaker_slash_fill
                     : CupertinoIcons.speaker_2_fill,
                 color: Colors.white,
-                size: 18,
+                size: 17,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
 
             if (!widget.isHost && _isCurrentModerator) ...[
               _buildCircleActionButton(
@@ -3892,9 +3946,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     final bool isCameraActive = (widget.isHost && isHost && isCurrentUser)
         ? StreamingService.instance.isCameraOn
         : (isCurrentUser
-              ? (participant.isCameraOn || StreamingService.instance.isCameraOn)
+              ? (participant.isCameraOn && StreamingService.instance.isCameraOn)
               : (isHost
-                    ? (participant.isCameraOn != false)
+                    ? (participant.isCameraOn == true)
                     : participant.isCameraOn));
 
     final String? userVip =
@@ -4284,7 +4338,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
   Widget _buildHostVideoForPK(LiveStreamParticipant host) {
     final bool isCameraActive =
         (widget.isHost && host.userId == _auth.currentUser?.uid)
-        ? (host.isCameraOn || StreamingService.instance.isCameraOn)
+        ? (host.isCameraOn && StreamingService.instance.isCameraOn)
         : host.isCameraOn;
     if (isCameraActive) {
       return _SafeParticipantVideoWidget(participant: host);
@@ -4688,58 +4742,126 @@ class _LiveStreamPageState extends State<LiveStreamPage>
               }
             },
             child: Container(
-              width: MediaQuery.of(context).size.width,
-              height: MediaQuery.of(context).size.height * 0.25,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
+              margin: const EdgeInsets.only(left: 12, right: 64),
               child: ListView.builder(
                 reverse: true,
                 controller: _chatScrollController,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                 itemCount: _messages.length + 1,
                 itemBuilder: (context, index) {
                   if (index == _messages.length) {
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(
-                            width: 150,
-                            child: Text(
-                              "Any sexual or violation content is strictly prohibited. All violator will be banned. Do not expose your personal info such phone or location.",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
+                          Container(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.74,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E022A).withValues(alpha: 0.88),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.amber.withValues(alpha: 0.55),
+                                width: 1.0,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 1.5, right: 6),
+                                  child: Icon(
+                                    Icons.shield_rounded,
+                                    color: Colors.amber,
+                                    size: 15,
+                                  ),
+                                ),
+                                Flexible(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        const TextSpan(
+                                          text: 'Notice: ',
+                                          style: TextStyle(
+                                            color: Colors.amber,
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text:
+                                              "Any sexual or violation content is strictly prohibited. All violators will be banned.",
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.95),
+                                            fontSize: 11,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           if (_roomNotice.isNotEmpty) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              constraints: BoxConstraints(
+                                maxWidth: MediaQuery.of(context).size.width * 0.74,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
                               decoration: BoxDecoration(
-                                color: Colors.pink.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
+                                color: const Color(0xFF28073D).withValues(alpha: 0.88),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: Colors.pink.withValues(alpha: 0.5),
-                                  width: 1,
+                                  color: Colors.pinkAccent.withValues(alpha: 0.6),
+                                  width: 1.0,
                                 ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.pink.withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                  ),
+                                ],
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.campaign,
-                                    color: Colors.pink,
-                                    size: 16,
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 1.5, right: 6),
+                                    child: Icon(
+                                      Icons.campaign_rounded,
+                                      color: Colors.pinkAccent,
+                                      size: 16,
+                                    ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
+                                  Flexible(
                                     child: Text(
                                       _roomNotice,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 12,
+                                        fontSize: 11.5,
                                         fontWeight: FontWeight.w500,
+                                        height: 1.25,
                                       ),
                                     ),
                                   ),
@@ -4768,34 +4890,61 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                       },
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E022A).withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Colors.amber.withValues(alpha: 0.4),
+                                width: 1.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 _buildChatAvatar(m.userId, m.username),
                                 _buildLevelBadge(m.userId),
                                 _buildChatVipBadge(m.userId),
-                                Text(
-                                  "${m.username}:",
-                                  style: TextStyle(
-                                    color: Colors.pink.shade300,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                Flexible(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: '${m.username} ',
+                                          style: const TextStyle(
+                                            color: Color(0xFFF48FB1),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                        const TextSpan(
+                                          text: 'joined the room',
+                                          style: TextStyle(
+                                            color: Color(0xFFFFD54F),
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            const Text(
-                              "Just joined the room!",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     );
@@ -4804,31 +4953,48 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   if (m.isGiftMessage) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.diamond,
-                              color: Colors.cyan,
-                              size: 16,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E022A).withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.pinkAccent.withValues(alpha: 0.6),
+                              width: 1.0,
                             ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                m.message,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.pink,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.pink.withValues(alpha: 0.15),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.diamond,
+                                color: Colors.cyan,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  m.message,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.pinkAccent,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -5366,8 +5532,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     }
     final bool isCurrentlyMuted =
         _localMuteOverride ?? (currentUserParticipant?.isMuted ?? true);
-    final bool isCurrentlyCameraOn =
-        currentUserParticipant?.isCameraOn ?? false;
+    final bool isCurrentlyCameraOn = currentUserParticipant != null
+        ? currentUserParticipant.isCameraOn
+        : StreamingService.instance.isCameraOn;
     final int totalRequests = _joinRequests.length;
     final bool isRoomLocked = roomData['isLocked'] == true;
 
@@ -5667,14 +5834,15 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           final status = await Permission.camera.request();
                           if (!status.isGranted) return;
                         }
-                        StreamingService.instance.setCameraEnabled(
+                        await StreamingService.instance.setCameraEnabled(
                           newCameraState,
                         );
                         if (!newCameraState) _isFrontCamera = true;
-                        LiveStreamService.toggleCameraState(
+                        await LiveStreamService.toggleCameraState(
                           widget.roomID,
                           newCameraState,
                         );
+                        if (mounted) setState(() {});
                       },
                       child: Icon(
                         isCurrentlyCameraOn
@@ -6130,11 +6298,12 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       mainAxisSize: MainAxisSize.min,
       children: participantsToShow.map((participant) {
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2.5),
+          padding: const EdgeInsets.symmetric(horizontal: 2.0),
           child: VipAvatarWidget(
             userId: participant.userId,
             userPicture: participant.userPicture,
-            avatarSize: 24.0,
+            avatarSize: 22.0,
+            frameScale: 1.4,
             directVipType: participant.vipType,
           ),
         );
