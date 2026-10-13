@@ -29,61 +29,123 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
   void _listenToRoomMusic() {
     LiveStreamService.getRoomMusicStream(widget.roomId).listen((event) {
       if (!mounted) return;
-      String? rawVideoId = event.snapshot.value as String?;
+      final rawValue = event.snapshot.value;
+      if (rawValue == null) {
+        setState(() {
+          _currentVideoId = null;
+        });
+        _controller?.close();
+        _controller = null;
+        return;
+      }
+
+      String rawString = rawValue.toString();
       bool audioOnly = false;
       bool isPaused = false;
-      String? videoId;
-      
-      if (rawVideoId != null) {
-        if (rawVideoId.startsWith('PAUSE_')) {
-          isPaused = true;
-          rawVideoId = rawVideoId.substring(6);
+      String videoId = '';
+      double startSeconds = 0.0;
+      int? timestamp;
+
+      // Check if format is: [PAUSE_][AUDIO_]videoId|timestamp|startSeconds
+      if (rawString.contains('|')) {
+        final parts = rawString.split('|');
+        rawString = parts[0];
+        if (parts.length > 1) {
+          timestamp = int.tryParse(parts[1]);
         }
-        
-        if (rawVideoId.startsWith('AUDIO_')) {
-          audioOnly = true;
-          videoId = rawVideoId.substring(6);
-        } else {
-          videoId = rawVideoId;
+        if (parts.length > 2) {
+          startSeconds = double.tryParse(parts[2]) ?? 0.0;
         }
       }
-      
+
+      if (rawString.startsWith('PAUSE_')) {
+        isPaused = true;
+        rawString = rawString.substring(6);
+      }
+
+      if (rawString.startsWith('AUDIO_')) {
+        audioOnly = true;
+        videoId = rawString.substring(6);
+      } else {
+        videoId = rawString;
+      }
+
+      if (videoId.isEmpty) {
+        setState(() {
+          _currentVideoId = null;
+        });
+        _controller?.close();
+        _controller = null;
+        return;
+      }
+
+      // Calculate the exact elapsed playback position in seconds for real-time synchronization
+      double targetSeconds = startSeconds;
+      if (!isPaused && timestamp != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final elapsed = (now - timestamp) / 1000.0;
+        if (elapsed > 0) {
+          targetSeconds = startSeconds + elapsed;
+        }
+      }
+
       if (videoId != _currentVideoId || audioOnly != _isAudioOnly) {
         setState(() {
           _currentVideoId = videoId;
           _isAudioOnly = audioOnly;
         });
-        
-        if (videoId != null) {
-          if (_controller == null) {
-            _controller = YoutubePlayerController.fromVideoId(
-              videoId: videoId,
-              autoPlay: !isPaused,
-              params: const YoutubePlayerParams(
-                showControls: false,
-                showFullscreenButton: false,
-                mute: false,
-                loop: false,
-                strictRelatedVideos: true,
-              ),
-            );
-          } else {
-            _controller!.loadVideoById(videoId: videoId);
-            if (isPaused) {
-              _controller!.pauseVideo();
-            }
+
+        if (_controller == null) {
+          _controller = YoutubePlayerController.fromVideoId(
+            videoId: videoId,
+            autoPlay: !isPaused,
+            startSeconds: targetSeconds > 0 ? targetSeconds : null,
+            params: const YoutubePlayerParams(
+              showControls: false,
+              showFullscreenButton: false,
+              mute: false,
+              loop: false,
+              strictRelatedVideos: true,
+            ),
+          );
+
+          // Additional sync safety net if a new user joins midway through the track
+          if (targetSeconds > 1.0) {
+            Future.delayed(const Duration(milliseconds: 1000), () {
+              if (mounted && _controller != null) {
+                _controller!.seekTo(seconds: targetSeconds, allowSeekAhead: true);
+                if (!isPaused) {
+                  _controller!.playVideo();
+                }
+              }
+            });
           }
         } else {
-          _controller?.close();
-          _controller = null;
-        }
-      } else {
-        // Video ID is the same, just play/pause state changed
-        if (videoId != null && _controller != null) {
+          _controller!.loadVideoById(
+            videoId: videoId,
+            startSeconds: targetSeconds > 0 ? targetSeconds : null,
+          );
           if (isPaused) {
             _controller!.pauseVideo();
           } else {
             _controller!.playVideo();
+          }
+        }
+      } else {
+        // Video ID is the same, just play/pause or seek state changed
+        if (_controller != null) {
+          if (isPaused) {
+            _controller!.pauseVideo();
+          } else {
+            _controller!.playVideo();
+          }
+
+          if (targetSeconds > 0) {
+            _controller!.currentTime.then((curr) {
+              if ((curr - targetSeconds).abs() > 3.0) {
+                _controller!.seekTo(seconds: targetSeconds, allowSeekAhead: true);
+              }
+            }).catchError((_) {});
           }
         }
       }

@@ -12,8 +12,15 @@ class MusicTrack {
   final String name;
   final String filePath;
   final String? thumbnailUrl;
+  final int durationSeconds;
 
-  MusicTrack({required this.id, required this.name, required this.filePath, this.thumbnailUrl});
+  MusicTrack({
+    required this.id,
+    required this.name,
+    required this.filePath,
+    this.thumbnailUrl,
+    this.durationSeconds = 0,
+  });
 }
 
 class MusicPlayerManager extends ChangeNotifier {
@@ -48,8 +55,39 @@ class MusicPlayerManager extends ChangeNotifier {
     _isInitialized = true;
   }
 
+  void addTrack(MusicTrack track) {
+    _playlist.add(track);
+    notifyListeners();
+  }
+
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isPlaying) {
+        _currentProgress++;
+        if (_totalDuration > 0 && _currentProgress >= _totalDuration) {
+          playNext();
+        } else {
+          notifyListeners();
+        }
+      }
+    });
+  }
+
   void seekTo(int position) {
     _currentProgress = position;
+    if (_roomId != null && _currentTrack != null) {
+      String trackId = _currentTrack!.filePath;
+      if (!_isPlaying) {
+        trackId = 'PAUSE_$trackId';
+      }
+      LiveStreamService.setRoomMusic(
+        _roomId!,
+        trackId,
+        startSeconds: position.toDouble(),
+        isPaused: !_isPlaying,
+      );
+    }
     notifyListeners();
   }
 
@@ -110,6 +148,7 @@ class MusicPlayerManager extends ChangeNotifier {
       name: video.title,
       filePath: video.id.value, // We store the videoId in filePath for YouTube
       thumbnailUrl: video.thumbnails.lowResUrl,
+      durationSeconds: video.duration?.inSeconds ?? 0,
     );
     
     _playlist.add(track);
@@ -124,14 +163,23 @@ class MusicPlayerManager extends ChangeNotifier {
     try {
       final track = _playlist[index];
 
-      // Update Firebase
-      if (_roomId != null) {
-        await LiveStreamService.setRoomMusic(_roomId!, track.filePath);
-      }
-
       _currentTrack = track;
       _currentTrackIndex = index;
+      _currentProgress = 0;
+      _totalDuration = track.durationSeconds;
       _isPlaying = true;
+
+      // Update Firebase with synchronized start time
+      if (_roomId != null) {
+        await LiveStreamService.setRoomMusic(
+          _roomId!,
+          track.filePath,
+          startSeconds: 0.0,
+          isPaused: false,
+        );
+      }
+
+      _startProgressTimer();
       notifyListeners();
     } catch (e) {
       debugPrint('Error playing track: $e');
@@ -150,7 +198,12 @@ class MusicPlayerManager extends ChangeNotifier {
         trackId = 'PAUSE_$trackId';
       }
 
-      await LiveStreamService.setRoomMusic(_roomId!, trackId);
+      await LiveStreamService.setRoomMusic(
+        _roomId!,
+        trackId,
+        startSeconds: _currentProgress.toDouble(),
+        isPaused: !_isPlaying,
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('Error pause/resume: $e');
@@ -159,6 +212,7 @@ class MusicPlayerManager extends ChangeNotifier {
 
   Future<void> stopMusic() async {
     try {
+      _progressTimer?.cancel();
       if (_roomId != null) {
         await LiveStreamService.setRoomMusic(_roomId!, null);
       }
@@ -315,10 +369,10 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
         name: video.title,
         filePath: trackId, // We store the trackId in filePath
         thumbnailUrl: video.thumbnails.lowResUrl,
+        durationSeconds: video.duration?.inSeconds ?? 0,
       );
       
-      widget.musicManager.playlist.add(track);
-      widget.musicManager.notifyListeners();
+      widget.musicManager.addTrack(track);
 
       if (playNow) {
         await widget.musicManager.playTrack(widget.musicManager.playlist.length - 1);

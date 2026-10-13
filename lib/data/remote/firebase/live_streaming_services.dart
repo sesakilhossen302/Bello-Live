@@ -314,12 +314,26 @@ class LiveStreamService {
     }
   }
 
-  static Future<void> setRoomMusic(String roomId, String? videoId) async {
+  static Future<void> setRoomMusic(
+    String roomId,
+    String? videoId, {
+    double startSeconds = 0.0,
+    bool isPaused = false,
+  }) async {
     try {
       if (videoId == null) {
         await _roomsRef.child(roomId).child('currentMusicVideoId').remove();
       } else {
-        await _roomsRef.child(roomId).update({'currentMusicVideoId': videoId});
+        final now = DateTime.now().millisecondsSinceEpoch;
+        String prefix = isPaused ? 'PAUSE_' : '';
+        String cleanId = videoId;
+        if (cleanId.startsWith('PAUSE_')) {
+          cleanId = cleanId.substring(6);
+          prefix = 'PAUSE_';
+        }
+        // Encoded format: [PAUSE_][AUDIO_]videoId|timestamp|startSeconds
+        final encodedValue = '$prefix$cleanId|$now|${startSeconds.toStringAsFixed(1)}';
+        await _roomsRef.child(roomId).update({'currentMusicVideoId': encodedValue});
       }
     } catch (e) {
       debugPrint('Error setting room music: $e');
