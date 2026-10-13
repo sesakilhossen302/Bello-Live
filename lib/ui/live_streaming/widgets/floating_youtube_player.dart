@@ -143,7 +143,8 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
             _controller!.playVideo();
           }
 
-          if (targetSeconds > 0) {
+          // Only seek when actively playing; calling seekTo while paused causes YouTube iframe to unpause
+          if (!isPaused && targetSeconds > 0) {
             _controller!.currentTime.then((curr) {
               if ((curr - targetSeconds).abs() > 3.0) {
                 _controller!.seekTo(seconds: targetSeconds, allowSeekAhead: true);

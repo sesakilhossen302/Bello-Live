@@ -181,6 +181,17 @@ class MusicPlayerManager extends ChangeNotifier {
 
       _startProgressTimer();
       notifyListeners();
+
+      // If duration is unknown, fetch duration asynchronously and update!
+      if (_totalDuration <= 0) {
+        final cleanId = track.id.replaceFirst('AUDIO_', '');
+        YoutubeExplode().videos.get(cleanId).then((v) {
+          if (v.duration != null && v.duration!.inSeconds > 0) {
+            _totalDuration = v.duration!.inSeconds;
+            notifyListeners();
+          }
+        }).catchError((_) {});
+      }
     } catch (e) {
       debugPrint('Error playing track: $e');
       rethrow;
@@ -192,6 +203,12 @@ class MusicPlayerManager extends ChangeNotifier {
       if (_roomId == null || _currentTrack == null) return;
 
       _isPlaying = !_isPlaying;
+
+      if (_isPlaying) {
+        _startProgressTimer();
+      } else {
+        _progressTimer?.cancel();
+      }
 
       String trackId = _currentTrack!.filePath; // e.g. 'AUDIO_123' or '123'
       if (!_isPlaying) {
@@ -417,12 +434,12 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
     }
   }
 
-  String _formatDuration(int milliseconds) {
-    final duration = Duration(milliseconds: milliseconds);
+  String _formatDuration(int seconds) {
+    final duration = Duration(seconds: seconds);
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$minutes:$seconds';
+    final sec = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$sec';
   }
 
   @override
@@ -747,6 +764,14 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
                   ],
                 ),
               ),
+              if (widget.isHost)
+                IconButton(
+                  icon: const Icon(Icons.power_settings_new, color: Colors.redAccent, size: 22),
+                  tooltip: 'Turn off music',
+                  onPressed: () {
+                    musicManager.stopMusic();
+                  },
+                ),
             ],
           ),
           
@@ -763,7 +788,12 @@ class _PlayMusicBottomSheetState extends State<PlayMusicBottomSheet> {
                 thumbColor: Colors.pinkAccent,
               ),
               child: Slider(
-                value: musicManager.currentProgress.toDouble(),
+                value: musicManager.currentProgress.toDouble().clamp(
+                  0.0,
+                  musicManager.totalDuration > 0
+                      ? musicManager.totalDuration.toDouble()
+                      : 1.0,
+                ),
                 max: musicManager.totalDuration > 0 ? musicManager.totalDuration.toDouble() : 1.0,
                 onChanged: (value) {
                   musicManager.seekTo(value.toInt());
