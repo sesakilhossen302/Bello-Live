@@ -18,6 +18,7 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
   bool _isAudioOnly = false;
   double? _xOffset;
   double? _yOffset;
+  bool _isDragging = false;
 
   @override
   void initState() {
@@ -118,19 +119,20 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
 
     final mediaQuery = MediaQuery.of(context);
     final size = mediaQuery.size;
-    const double playerWidth = 220.0;
-    const double playerHeight = 124.0; // 16:9 widescreen ratio
+    const double playerWidth = 230.0;
+    const double playerHeight = 129.0; // 16:9 widescreen ratio
     final double safeTop = mediaQuery.padding.top;
     final double safeBottom = mediaQuery.padding.bottom;
 
-    final double minX = 6.0;
-    final double maxX = (size.width - playerWidth - 6.0).clamp(minX, size.width);
-    final double minY = safeTop + 45.0; // below top bar
-    final double maxY = (size.height - safeBottom - playerHeight - 65.0).clamp(minY, size.height);
+    // Freely draggable across the entire page (from top to bottom and left to right)
+    final double minX = 0.0;
+    final double maxX = (size.width - playerWidth).clamp(0.0, size.width);
+    final double minY = safeTop;
+    final double maxY = (size.height - safeBottom - playerHeight).clamp(minY, size.height);
 
     // Initial position: nicely on the upper right area
-    _xOffset ??= (size.width - playerWidth - 12.0).clamp(minX, maxX);
-    _yOffset ??= (safeTop + 90.0).clamp(minY, maxY);
+    _xOffset ??= (size.width - playerWidth - 10.0).clamp(minX, maxX);
+    _yOffset ??= (safeTop + 80.0).clamp(minY, maxY);
 
     final currentX = _xOffset!.clamp(minX, maxX);
     final currentY = _yOffset!.clamp(minY, maxY);
@@ -138,38 +140,55 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
     return Positioned(
       left: currentX,
       top: currentY,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanUpdate: (details) {
-          setState(() {
-            _xOffset = ((_xOffset ?? currentX) + details.delta.dx).clamp(minX, maxX);
-            _yOffset = ((_yOffset ?? currentY) + details.delta.dy).clamp(minY, maxY);
-          });
-        },
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Draggable Player Widget
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (_) {
+              setState(() {
+                _isDragging = true;
+              });
+            },
+            onPanUpdate: (details) {
+              setState(() {
+                _xOffset = ((_xOffset ?? currentX) + details.delta.dx).clamp(minX, maxX);
+                _yOffset = ((_yOffset ?? currentY) + details.delta.dy).clamp(minY, maxY);
+              });
+            },
+            onPanEnd: (_) {
+              setState(() {
+                _isDragging = false;
+              });
+            },
+            onPanCancel: () {
+              setState(() {
+                _isDragging = false;
+              });
+            },
+            child: Container(
               width: playerWidth,
               height: playerHeight,
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: const Color(0xFFFF2D55),
+                  color: _isDragging ? Colors.amberAccent : const Color(0xFFFF2D55),
                   width: 2.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    blurRadius: 14,
-                    spreadRadius: 2,
+                    color: Colors.black.withValues(alpha: 0.7),
+                    blurRadius: _isDragging ? 18 : 12,
+                    spreadRadius: _isDragging ? 3 : 1.5,
                     offset: const Offset(0, 4),
                   ),
                   BoxShadow(
-                    color: const Color(0xFFFF2D55).withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    spreadRadius: 0.5,
+                    color: (_isDragging ? Colors.amberAccent : const Color(0xFFFF2D55))
+                        .withValues(alpha: _isDragging ? 0.55 : 0.35),
+                    blurRadius: _isDragging ? 12 : 8,
+                    spreadRadius: 1,
                   ),
                 ],
               ),
@@ -177,75 +196,81 @@ class _FloatingYoutubePlayerState extends State<FloatingYoutubePlayer> {
                 borderRadius: BorderRadius.circular(12),
                 child: Stack(
                   children: [
-                    // The YouTube Player
-                    AbsorbPointer(
-                      child: YoutubePlayer(
-                        controller: _controller!,
+                    // YouTube Player: IgnorePointer prevents Android WebView from intercepting drag gestures
+                    IgnorePointer(
+                      ignoring: true,
+                      child: SizedBox(
+                        width: playerWidth,
+                        height: playerHeight,
+                        child: YoutubePlayer(
+                          controller: _controller!,
+                        ),
                       ),
                     ),
-                    // Transparent overlay to ensure all touch/drag events are smoothly captured
+
+                    // Active gesture target overlay with alpha > 0 to guarantee Flutter hit test capture
                     Positioned.fill(
                       child: Container(
-                        color: Colors.transparent,
+                        color: Colors.black.withValues(alpha: 0.01),
+                      ),
+                    ),
+
+                    // Subtle drag handle icon at top-left
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.open_with,
+                          color: Colors.white,
+                          size: 13,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+          ),
 
-            // Subtle drag indicator badge at top-left so user knows it can be moved
-            Positioned(
-              top: 6,
-              left: 6,
+          // 2. Close button: separated from drag detector so tap always triggers immediately
+          Positioned(
+            top: -10,
+            right: -10,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                if (widget.isHost) {
+                  LiveStreamService.setRoomMusic(widget.roomId, null);
+                }
+                setState(() {
+                  _currentVideoId = null;
+                  _controller?.pauseVideo();
+                });
+              },
               child: Container(
-                padding: const EdgeInsets.all(3.5),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.6),
+                  color: Colors.black,
+                  border: Border.all(color: Colors.white, width: 1.5),
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 5,
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.open_with,
-                  color: Colors.white70,
-                  size: 13,
-                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
               ),
             ),
-
-            // Close button positioned top-right
-            Positioned(
-              top: -8,
-              right: -8,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (widget.isHost) {
-                    LiveStreamService.setRoomMusic(widget.roomId, null);
-                  }
-                  setState(() {
-                    _currentVideoId = null;
-                    _controller?.pauseVideo();
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(4.5),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    border: Border.all(color: Colors.white, width: 1.5),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
