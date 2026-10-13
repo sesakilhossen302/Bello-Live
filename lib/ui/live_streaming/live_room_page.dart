@@ -3055,6 +3055,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                   if (_isInitialized) _buildFloatingEmojis(),
                   if (_isInitialized)
                     FloatingYoutubePlayer(
+                      key: const ValueKey('live_floating_youtube_player'),
                       roomId: widget.roomID,
                       isHost: widget.isHost,
                     ),

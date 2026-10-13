@@ -2075,7 +2075,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
                                    if (_isInitialized && !_isChatExpanded) _buildEmojiColumnOverlay(),
                                    if (_isInitialized) _buildFloatingEmojis(),
-                                   if (_isInitialized) FloatingYoutubePlayer(roomId: widget.roomID, isHost: widget.isHost),
+                                   if (_isInitialized) FloatingYoutubePlayer(key: const ValueKey('audio_floating_youtube_player'), roomId: widget.roomID, isHost: widget.isHost),
                                 ],
                               )
                             : const Center(
