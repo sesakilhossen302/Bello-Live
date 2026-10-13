@@ -2803,8 +2803,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             // Center Host Avatar
             Center(
               child: SizedBox(
-                width: avatarSize * 1.5,
-                height: avatarSize * 1.5,
+                width: avatarSize,
+                height: avatarSize,
                 child: Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.center,
@@ -2822,12 +2822,14 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isSpeaking ? const Color(0xFF00E5FF) : const Color(0xFFE91E63),
+                                  color: isSpeaking
+                                      ? const Color(0xFF00E5FF)
+                                      : (hasHostVip ? const Color(0xFFFFD700) : const Color(0xFFE91E63)),
                                   width: 2.2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (isSpeaking ? const Color(0xFF00E5FF) : const Color(0xFFE91E63))
+                                    color: (isSpeaking ? const Color(0xFF00E5FF) : (hasHostVip ? const Color(0xFFFFD700) : const Color(0xFFE91E63)))
                                         .withValues(alpha: 0.5),
                                     blurRadius: 10,
                                   ),
@@ -2863,7 +2865,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     // VIP / VVIP Frame (Only if host has VIP) or Active Frame
                     if (hasHostVip)
                       Positioned(
-                        top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                        top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.16),
                         left: (avatarSize - (avatarSize * 1.823)) / 2,
                         width: avatarSize * 1.823,
                         height: avatarSize * 1.823,
@@ -2879,6 +2881,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     else
                       // Active Frame
                       Positioned(
+                        top: (avatarSize - (avatarSize * 1.3)) / 2,
+                        left: (avatarSize - (avatarSize * 1.3)) / 2,
                         width: avatarSize * 1.3,
                         height: avatarSize * 1.3,
                         child: IgnorePointer(
@@ -3119,8 +3123,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             // Center Avatar with Speaking & VIP badge
             Center(
               child: SizedBox(
-                width: avatarSize * 1.4,
-                height: avatarSize * 1.4,
+                width: avatarSize,
+                height: avatarSize,
                 child: Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.center,
@@ -3141,7 +3145,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                                 border: Border.all(
                                   color: isSpeaking
                                       ? const Color(0xFF00E5FF)
-                                      : Colors.pinkAccent.withValues(alpha: 0.6),
+                                      : (hasGuestVip ? const Color(0xFFFFD700) : Colors.pinkAccent.withValues(alpha: 0.6)),
                                   width: 2.0,
                                 ),
                               ),
@@ -3176,7 +3180,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     // VIP / VVIP Frame (Only if guest has VIP) or Active Frame
                     if (hasGuestVip)
                       Positioned(
-                        top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.1644),
+                        top: (avatarSize - (avatarSize * 1.823)) / 2 - (avatarSize * 0.16),
                         left: (avatarSize - (avatarSize * 1.823)) / 2,
                         width: avatarSize * 1.823,
                         height: avatarSize * 1.823,
@@ -3192,6 +3196,8 @@ class _AudioRoomPageState extends State<AudioRoomPage>
                     else
                       // Active Frame
                       Positioned(
+                        top: (avatarSize - (avatarSize * 1.3)) / 2,
+                        left: (avatarSize - (avatarSize * 1.3)) / 2,
                         width: avatarSize * 1.3,
                         height: avatarSize * 1.3,
                         child: IgnorePointer(
