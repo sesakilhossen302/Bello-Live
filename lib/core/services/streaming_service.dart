@@ -17,6 +17,7 @@ class StreamingChatMessage {
   final bool isGiftMessage;
   final int? giftValue;
   final bool isJoinMessage;
+  final int? userLevel;
 
   StreamingChatMessage({
     this.id = '',
@@ -27,6 +28,7 @@ class StreamingChatMessage {
     this.isGiftMessage = false,
     this.giftValue,
     this.isJoinMessage = false,
+    this.userLevel,
   });
 }
 
@@ -129,6 +131,10 @@ class StreamingService {
               timestamp = DateTime.now();
             }
 
+            final int? userLevel = (data['level'] is num)
+                ? (data['level'] as num).toInt()
+                : int.tryParse(data['level']?.toString() ?? '');
+
             if (message.isNotEmpty) {
               loaded.add(
                 StreamingChatMessage(
@@ -137,6 +143,7 @@ class StreamingService {
                   userName: msgUserName,
                   message: message,
                   timestamp: timestamp,
+                  userLevel: userLevel,
                 ),
               );
             }
@@ -247,12 +254,16 @@ class StreamingService {
             _dataMessagesController.add(json);
 
             if (json.containsKey('type') && json['type'] == 'chat') {
+              final int? userLevel = (json['level'] is num)
+                  ? (json['level'] as num).toInt()
+                  : int.tryParse(json['level']?.toString() ?? '');
               addChatMessage(
                 StreamingChatMessage(
                   userId: json['userId'] ?? '',
                   userName: json['userName'] ?? 'User',
                   message: json['message'] ?? '',
                   timestamp: DateTime.now(),
+                  userLevel: userLevel,
                 ),
               );
             }
@@ -340,6 +351,10 @@ class StreamingService {
               timestamp = DateTime.now();
             }
 
+            final int? userLevel = (data['level'] is num)
+                ? (data['level'] as num).toInt()
+                : int.tryParse(data['level']?.toString() ?? '');
+
             if (message.isNotEmpty) {
               addChatMessage(
                 StreamingChatMessage(
@@ -348,6 +363,7 @@ class StreamingService {
                   userName: msgUserName,
                   message: message,
                   timestamp: timestamp,
+                  userLevel: userLevel,
                 ),
               );
             }
@@ -667,6 +683,7 @@ class StreamingService {
     String? roomId,
     bool? isVideo,
     String? customId,
+    int? userLevel,
   }) async {
     final targetRoom = roomId ?? _currentRoomName;
     if (targetRoom == null || targetRoom.isEmpty) {
@@ -690,6 +707,7 @@ class StreamingService {
         'userId': _currentUserId ?? '',
         'userName': _currentUserName ?? 'User',
         'message': messageText,
+        if (userLevel != null && userLevel > 0) 'level': userLevel,
         'timestamp': ServerValue.timestamp,
       });
 
@@ -700,6 +718,7 @@ class StreamingService {
           userName: _currentUserName ?? 'User',
           message: messageText,
           timestamp: DateTime.now(),
+          userLevel: userLevel,
         ),
       );
     } catch (e) {
@@ -714,6 +733,7 @@ class StreamingService {
         'userId': _currentUserId ?? '',
         'userName': _currentUserName ?? 'User',
         'message': messageText,
+        if (userLevel != null && userLevel > 0) 'level': userLevel,
       });
     } catch (_) {}
   }

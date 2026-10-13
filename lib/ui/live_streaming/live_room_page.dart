@@ -136,6 +136,7 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isGiftMessage;
   final int? giftValue;
+  final int? userLevel;
 
   ChatMessage({
     this.id,
@@ -145,6 +146,7 @@ class ChatMessage {
     required this.timestamp,
     this.isGiftMessage = false,
     this.giftValue,
+    this.userLevel,
   });
 }
 
@@ -440,6 +442,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       message,
     ) {
       if (!mounted) return;
+      if (message.userLevel != null && message.userLevel! > 0) {
+        _userLevelCache[message.userId] = message.userLevel!;
+      }
       _addChatMessageToUI(
         ChatMessage(
           id: message.id,
@@ -449,6 +454,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           timestamp: message.timestamp,
           isGiftMessage: message.isGiftMessage,
           giftValue: message.giftValue,
+          userLevel: message.userLevel,
         ),
       );
     });
@@ -478,6 +484,9 @@ class _LiveStreamPageState extends State<LiveStreamPage>
       );
 
       if (!alreadyExists) {
+        if (m.userLevel != null && m.userLevel! > 0) {
+          _userLevelCache[m.userId] = m.userLevel!;
+        }
         _messages.add(
           ChatMessage(
             id: m.id,
@@ -487,6 +496,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             timestamp: m.timestamp,
             isGiftMessage: m.isGiftMessage,
             giftValue: m.giftValue,
+            userLevel: m.userLevel,
           ),
         );
         hasNew = true;
@@ -717,6 +727,23 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         final data = userDoc.data() as Map<String, dynamic>;
         setState(() {
           _currentUserName = data['displayName'] ?? "Unknown";
+          final dynamic totalSentRaw = data['totalSent'];
+          final int totalSent = totalSentRaw is num
+              ? totalSentRaw.toInt()
+              : (int.tryParse(totalSentRaw?.toString() ?? '0') ?? 0);
+          int lvl = 1;
+          if (data['userLevel'] is num) {
+            lvl = (data['userLevel'] as num).toInt();
+          } else if (data['level'] is num) {
+            lvl = (data['level'] as num).toInt();
+          } else {
+            lvl = getSentLevel(totalSent);
+          }
+          if (lvl <= 0) lvl = 1;
+          _userLevelCache[currentUser.uid] = lvl;
+          if (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) {
+            _userPictureCache[currentUser.uid] = data['photoUrl'];
+          }
         });
       } else {
         setState(() {
@@ -3085,7 +3112,10 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             children: [
               _buildAppBar(),
               _buildHostStatsRow(),
-              if (!isSingleHost) _buildDynamicVideoGrid(),
+              if (!isSingleHost)
+                _buildDynamicVideoGrid()
+              else
+                SizedBox(height: mediaQuery.size.height * 0.38),
               Expanded(
                 child: Container(
                   margin: EdgeInsets.only(bottom: chatBottomMargin),
@@ -4570,18 +4600,31 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     );
   }
 
-  // Optimized method to get the level asset safely
+  // Optimized method to get the level badge matching the design in screenshot
   Widget _buildLevelBadge(String userId) {
-    if (!_userLevelCache.containsKey(userId)) {
+    if (userId.isNotEmpty && !_userLevelCache.containsKey(userId)) {
       // Fetch level silently and cache it to avoid spamming Firestore reads on scroll
       ProfileService.getUserProfile(userId)
           .then((doc) {
             if (doc.exists && mounted) {
               final data = doc.data() as Map<String, dynamic>;
-              final int totalSent = data['totalSent'] ?? 0;
+              final dynamic totalSentRaw = data['totalSent'];
+              final int totalSent = totalSentRaw is num
+                  ? totalSentRaw.toInt()
+                  : (int.tryParse(totalSentRaw?.toString() ?? '0') ?? 0);
+              int lvl = 1;
+              if (data['userLevel'] is num) {
+                lvl = (data['userLevel'] as num).toInt();
+              } else if (data['level'] is num) {
+                lvl = (data['level'] as num).toInt();
+              } else {
+                lvl = getSentLevel(totalSent);
+              }
+              if (lvl <= 0) lvl = 1;
+
               setState(() {
-                _userLevelCache[userId] = getSentLevel(totalSent);
-                if (data['photoUrl'] != null) {
+                _userLevelCache[userId] = lvl;
+                if (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) {
                   _userPictureCache[userId] = data['photoUrl'];
                 }
               });
@@ -4590,29 +4633,38 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           .catchError((_) {});
     }
 
-    if (_userLevelCache.containsKey(userId)) {
-      final level = _userLevelCache[userId]!;
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: Image.asset(
-          'assets/images/levels/rank_caifu_cf_$level.png',
-          height: 18,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+    final int level = _userLevelCache[userId] ?? 1;
+
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFA000),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFA000), Color(0xFFFF8F00)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      );
-    } else {
-      // Fallback placeholder while it's fetching
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: Image.asset(
-          'assets/images/levels/rank_caifu_cf_1.png',
-          height: 18,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF8F00).withValues(alpha: 0.35),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Text(
+        'L.v. $level',
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.2,
+          height: 1.1,
         ),
-      );
-    }
+      ),
+    );
   }
 
   Widget _buildChatVipBadge(String userId) {
@@ -5019,55 +5071,70 @@ class _LiveStreamPageState extends State<LiveStreamPage>
                           decoration: BoxDecoration(
                             color: const Color(
                               0xFF1E022A,
-                            ).withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(14),
+                            ).withValues(alpha: 0.90),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: const Color(
                                 0xFF9C27B0,
-                              ).withValues(alpha: 0.5),
-                              width: 1.0,
+                              ).withValues(alpha: 0.75),
+                              width: 1.2,
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
                                   0xFF9C27B0,
-                                ).withValues(alpha: 0.15),
-                                blurRadius: 4,
+                                ).withValues(alpha: 0.25),
+                                blurRadius: 5,
                               ),
                             ],
                           ),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
+                            horizontal: 10,
+                            vertical: 6,
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildChatAvatar(m.userId, m.username),
-                              _buildLevelBadge(m.userId),
-                              _buildChatVipBadge(m.userId),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2, right: 8),
+                                child: _buildChatAvatar(m.userId, m.username),
+                              ),
                               Flexible(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: '${m.username}: ',
-                                        style: const TextStyle(
-                                          color: Color(0xFFF48FB1),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        _buildLevelBadge(m.userId),
+                                        _buildChatVipBadge(m.userId),
+                                        Flexible(
+                                          child: Text(
+                                            m.username,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      m.message,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                      TextSpan(
-                                        text: m.message,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -5087,22 +5154,45 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
   Widget _buildChatAvatar(String userId, String username) {
     final pictureUrl = _userPictureCache[userId];
-    return Container(
-      width: 24,
-      height: 24,
-      margin: const EdgeInsets.only(right: 6),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.3),
-      ),
-      child: ClipOval(
-        child: pictureUrl != null && pictureUrl.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: pictureUrl,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => _defaultChatAvatar(username),
-              )
-            : _defaultChatAvatar(username),
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.3),
+              border: Border.all(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.6),
+                width: 1.0,
+              ),
+            ),
+            child: ClipOval(
+              child: pictureUrl != null && pictureUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: pictureUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _defaultChatAvatar(username),
+                    )
+                  : _defaultChatAvatar(username),
+            ),
+          ),
+          Positioned(
+            width: 36,
+            height: 36,
+            child: IgnorePointer(
+              child: ActiveFrameWidget(
+                userId: userId,
+                size: 36,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -5419,6 +5509,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
 
     final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
     final String currentUserId = _auth.currentUser?.uid ?? '';
+    final int myLevel = _userLevelCache[currentUserId] ?? 1;
 
     _chatController.clear();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -5433,6 +5524,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
           username: _currentUserName,
           message: messageText,
           timestamp: DateTime.now(),
+          userLevel: myLevel,
         ),
       );
     });
@@ -5444,6 +5536,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         roomId: widget.roomID,
         isVideo: true,
         customId: msgId,
+        userLevel: myLevel,
       );
     } catch (e) {
       debugPrint('Error sending message: $e');
@@ -6256,6 +6349,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     const messageText = "Just joined the room!";
     final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
     final String currentUserId = _auth.currentUser?.uid ?? '';
+    final int myLevel = _userLevelCache[currentUserId] ?? 1;
 
     if (mounted) {
       setState(() {
@@ -6267,6 +6361,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
             username: _currentUserName,
             message: messageText,
             timestamp: DateTime.now(),
+            userLevel: myLevel,
           ),
         );
       });
@@ -6279,6 +6374,7 @@ class _LiveStreamPageState extends State<LiveStreamPage>
         roomId: widget.roomID,
         isVideo: true,
         customId: msgId,
+        userLevel: myLevel,
       );
     } catch (e) {
       debugPrint('Error sending join message: $e');

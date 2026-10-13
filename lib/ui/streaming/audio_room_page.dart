@@ -178,6 +178,7 @@ class ChatMessage {
   final bool isGiftMessage;
   final int? giftValue;
   final bool isJoinMessage;
+  final int? userLevel;
 
   ChatMessage({
     this.id,
@@ -188,6 +189,7 @@ class ChatMessage {
     this.isGiftMessage = false,
     this.giftValue,
     this.isJoinMessage = false,
+    this.userLevel,
   });
 }
 
@@ -437,6 +439,9 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     _messageSubscription?.cancel();
     _messageSubscription = StreamingService.instance.chatMessagesStream.listen((message) {
       if (!mounted) return;
+      if (message.userLevel != null && message.userLevel! > 0) {
+        _userLevelCache[message.userId] = message.userLevel!;
+      }
       _addChatMessageToUI(
         ChatMessage(
           id: message.id,
@@ -447,6 +452,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           isGiftMessage: message.isGiftMessage,
           giftValue: message.giftValue,
           isJoinMessage: message.isJoinMessage,
+          userLevel: message.userLevel,
         ),
       );
     });
@@ -474,6 +480,9 @@ class _AudioRoomPageState extends State<AudioRoomPage>
               existing.timestamp.difference(m.timestamp).abs().inSeconds < 4));
 
       if (!alreadyExists) {
+        if (m.userLevel != null && m.userLevel! > 0) {
+          _userLevelCache[m.userId] = m.userLevel!;
+        }
         _messages.add(
           ChatMessage(
             id: m.id,
@@ -484,6 +493,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             isGiftMessage: m.isGiftMessage,
             giftValue: m.giftValue,
             isJoinMessage: m.isJoinMessage,
+            userLevel: m.userLevel,
           ),
         );
         hasNew = true;
@@ -679,6 +689,23 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         final data = userDoc.data() as Map<String, dynamic>;
         setState(() {
           _currentUserName = data['displayName'] ?? "Unknown";
+          final dynamic totalSentRaw = data['totalSent'];
+          final int totalSent = totalSentRaw is num
+              ? totalSentRaw.toInt()
+              : (int.tryParse(totalSentRaw?.toString() ?? '0') ?? 0);
+          int lvl = 1;
+          if (data['userLevel'] is num) {
+            lvl = (data['userLevel'] as num).toInt();
+          } else if (data['level'] is num) {
+            lvl = (data['level'] as num).toInt();
+          } else {
+            lvl = getSentLevel(totalSent);
+          }
+          if (lvl <= 0) lvl = 1;
+          _userLevelCache[currentUser.uid] = lvl;
+          if (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) {
+            _userPictureCache[currentUser.uid] = data['photoUrl'];
+          }
         });
       } else {
         setState(() {
@@ -4002,15 +4029,27 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   // Method to render user level tag matching screenshot
   Widget _buildLevelBadge(String userId) {
-    if (!_userLevelCache.containsKey(userId)) {
+    if (userId.isNotEmpty && !_userLevelCache.containsKey(userId)) {
       ProfileService.getUserProfile(userId)
           .then((doc) {
             if (doc.exists && mounted) {
               final data = doc.data() as Map<String, dynamic>;
-              final int totalSent = data['totalSent'] ?? 0;
+              final dynamic totalSentRaw = data['totalSent'];
+              final int totalSent = totalSentRaw is num
+                  ? totalSentRaw.toInt()
+                  : (int.tryParse(totalSentRaw?.toString() ?? '0') ?? 0);
+              int lvl = 1;
+              if (data['userLevel'] is num) {
+                lvl = (data['userLevel'] as num).toInt();
+              } else if (data['level'] is num) {
+                lvl = (data['level'] as num).toInt();
+              } else {
+                lvl = getSentLevel(totalSent);
+              }
+              if (lvl <= 0) lvl = 1;
               setState(() {
-                _userLevelCache[userId] = getSentLevel(totalSent);
-                if (data['photoUrl'] != null) {
+                _userLevelCache[userId] = lvl;
+                if (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) {
                   _userPictureCache[userId] = data['photoUrl'];
                 }
               });
@@ -4022,16 +4061,20 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     final int level = _userLevelCache[userId] ?? 1;
     return Container(
       margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
+        color: const Color(0xFFFFA000),
         gradient: const LinearGradient(
-          colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
+          colors: [Color(0xFFFFA000), Color(0xFFFF8F00)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF8F00).withValues(alpha: 0.3),
+            color: const Color(0xFFFF8F00).withValues(alpha: 0.35),
             blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -4039,8 +4082,10 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         'L.v. $level',
         style: const TextStyle(
           color: Colors.black,
-          fontSize: 9.5,
+          fontSize: 10.5,
           fontWeight: FontWeight.w900,
+          letterSpacing: 0.2,
+          height: 1.1,
         ),
       ),
     );
@@ -4420,21 +4465,23 @@ class _AudioRoomPageState extends State<AudioRoomPage>
 
   Widget _buildChatAvatar(String userId, String username) {
     final pictureUrl = _userPictureCache[userId];
-    const double size = 26.0;
     return SizedBox(
-      width: size + 6,
-      height: size + 6,
+      width: 32,
+      height: 32,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
           Container(
-            width: size,
-            height: size,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.black.withValues(alpha: 0.3),
-              border: Border.all(color: const Color(0xFFFFD700), width: 1.0),
+              border: Border.all(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.6),
+                width: 1.0,
+              ),
             ),
             child: ClipOval(
               child: pictureUrl != null && pictureUrl.isNotEmpty
@@ -4447,13 +4494,13 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             ),
           ),
           Positioned(
-            bottom: -3,
-            right: -3,
-            child: Image.asset(
-              'assets/images/VVIP PNG.png',
-              width: 17,
-              height: 17,
-              fit: BoxFit.contain,
+            width: 36,
+            height: 36,
+            child: IgnorePointer(
+              child: ActiveFrameWidget(
+                userId: userId,
+                size: 36,
+              ),
             ),
           ),
         ],
@@ -4793,6 +4840,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     }
 
     final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
+    final int myLevel = _userLevelCache[currentUserId] ?? 1;
     _chatController.clear();
     FocusManager.instance.primaryFocus?.unfocus();
 
@@ -4806,6 +4854,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
           username: _currentUserName,
           message: messageText,
           timestamp: DateTime.now(),
+          userLevel: myLevel,
         ),
       );
     });
@@ -4817,6 +4866,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         roomId: widget.roomID,
         isVideo: false,
         customId: msgId,
+        userLevel: myLevel,
       );
     } catch (e) {
       debugPrint('Error sending message: $e');
@@ -4827,6 +4877,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
     const messageText = "Just joined the room!";
     final String msgId = DateTime.now().millisecondsSinceEpoch.toString();
     final String currentUserId = _auth.currentUser?.uid ?? '';
+    final int myLevel = _userLevelCache[currentUserId] ?? 1;
 
     if (mounted) {
       setState(() {
@@ -4839,6 +4890,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
             message: messageText,
             timestamp: DateTime.now(),
             isJoinMessage: true,
+            userLevel: myLevel,
           ),
         );
       });
@@ -4851,6 +4903,7 @@ class _AudioRoomPageState extends State<AudioRoomPage>
         roomId: widget.roomID,
         isVideo: false,
         customId: msgId,
+        userLevel: myLevel,
       );
     } catch (e) {
       debugPrint('Error sending join message: $e');
