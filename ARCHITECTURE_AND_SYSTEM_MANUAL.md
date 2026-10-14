@@ -1,4 +1,4 @@
-# SB Live (FlowLive) — Enterprise Architecture & System Engineering Manual
+# Bello Live (FlowLive) — Enterprise Architecture & System Engineering Manual
 ### Complete Technical Reference, RTC Communication Engine Analysis & Codebase Memory
 **Document Author**: Principal Mobile & WebRTC Systems Architect (20+ Years Experience)  
 **Target Audience**: Senior Engineers, Solution Architects, WebRTC Specialists, and Autonomous AI Agents  
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Product DNA
 
-**SB Live** (internally identified as `picture_live` and `FlowLive`) is a carrier-grade, highly interactive live streaming and social entertainment mobile application. Built using the Flutter framework targeting Android (minimum SDK 21, target SDK 34) and iOS, the platform combines low-latency real-time voice and video communications with an expansive virtual gifting economy, agency/reseller infrastructure, and gamified social spaces.
+**Bello Live** (internally identified as `picture_live` and `FlowLive`) is a carrier-grade, highly interactive live streaming and social entertainment mobile application. Built using the Flutter framework targeting Android (minimum SDK 21, target SDK 34) and iOS, the platform combines low-latency real-time voice and video communications with an expansive virtual gifting economy, agency/reseller infrastructure, and gamified social spaces.
 
 ### Primary Operational Domains
 1. **Multi-Seat Audio Party Rooms**: 8 to 16 participant voice rooms featuring dynamic seat allocations, host/co-host hierarchies, automated speaker promotions, real-time voice activity detection (VAD), and hardware DSP controls.

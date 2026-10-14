@@ -1,20 +1,20 @@
 # Self-Hosted LiveKit Infrastructure & Cross-App Migration Guide
-### Complete Reference for Connecting Applications (Migrating from Agora / ZegoCloud) to the SB Live Self-Hosted LiveKit Infrastructure
+### Complete Reference for Connecting Applications (Migrating from Agora / ZegoCloud) to the Bello Live Self-Hosted LiveKit Infrastructure
 
 ---
 
 ## 1. Executive Summary & Architecture Overview
 
-**SB Live (`picture_live`)** has fully migrated from third-party managed RTC clouds (ZegoCloud / Agora) to our **own self-hosted LiveKit SFU (Selective Forwarding Unit) infrastructure**.
+**Bello Live (`picture_live`)** has fully migrated from third-party managed RTC clouds (ZegoCloud / Agora) to our **own self-hosted LiveKit SFU (Selective Forwarding Unit) infrastructure**.
 
 This document explains:
-1. **How SB Live connects** to our self-hosted LiveKit Media Server and Token Control Plane (`rtc_server`).
+1. **How Bello Live connects** to our self-hosted LiveKit Media Server and Token Control Plane (`rtc_server`).
 2. **How another application** (currently running **Agora** or **ZegoCloud**) can connect to this **exact same LiveKit infrastructure** (or replicate it on another VPS).
 3. **Step-by-step migration blueprints** mapping every Agora and ZegoCloud SDK call (Audio Rooms, Live Video Broadcasting, Multi-Guest Co-Hosting, 1v1 PK Battles, In-Room Chat/Emoji DataChannels, and Voice Activity Detection) to our `LiveKitService` wrapper.
 
 ---
 
-## 2. How SB Live Connects to Our Self-Hosted Infrastructure
+## 2. How Bello Live Connects to Our Self-Hosted Infrastructure
 
 ### 2.1 Infrastructure Endpoints & Server Topology
 
@@ -26,11 +26,11 @@ Our LiveKit infrastructure runs on our dedicated Ubuntu VPS (`167.71.207.84`) an
 | **2. RTC Token Server (`rtc_server`)** | HTTP REST (`http://` / `https://`) Port `5000` | `http://167.71.207.84:5000/api` | Node.js service that signs cryptographic LiveKit JWT access tokens using the server's `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. |
 | **3. WebRTC Media Ports** | UDP `50000-60000`, TCP `7881` | `167.71.207.84:50000-60000/udp` | Low-latency UDP/ICE media transport streams for audio and video tracks. |
 
-### 2.2 End-to-End Connection Flow in SB Live
+### 2.2 End-to-End Connection Flow in Bello Live
 
 ```
 +-----------------------------------------------------------------------------------+
-|                        MOBILE CLIENT (SB Live / Target App)                       |
+|                        MOBILE CLIENT (Bello Live / Target App)                       |
 |                                                                                   |
 |  1. AppServices.getLiveKitConfig()                                                |
 |     - Fetches dynamic endpoints from Firestore (`appSettings/livekit_config`)     |
@@ -65,10 +65,10 @@ Our LiveKit infrastructure runs on our dedicated Ubuntu VPS (`167.71.207.84`) an
 
 ## 3. Server & Backend Specification (For Sharing or Re-Deploying)
 
-### 3.1 Option A: Reusing the Existing SB Live LiveKit Infrastructure for Another App
-Multiple applications can share the **exact same LiveKit Server (`ws://167.71.207.84:7880`) and Token Server (`http://167.71.207.84:5000/api`)** simultaneously without interfering with SB Live!
+### 3.1 Option A: Reusing the Existing Bello Live LiveKit Infrastructure for Another App
+Multiple applications can share the **exact same LiveKit Server (`ws://167.71.207.84:7880`) and Token Server (`http://167.71.207.84:5000/api`)** simultaneously without interfering with Bello Live!
 - **Why?** LiveKit isolates media by `roomName`.
-- **Best Practice when sharing**: Prefix the `roomName` in the second application with an app identifier (for example, `otherapp_room_${roomId}`) so room IDs from the second app never collide with SB Live room IDs.
+- **Best Practice when sharing**: Prefix the `roomName` in the second application with an app identifier (for example, `otherapp_room_${roomId}`) so room IDs from the second app never collide with Bello Live room IDs.
 
 ### 3.2 Token Server API Contract (`POST /api/token`)
 The client requests a token via `POST http://167.71.207.84:5000/api/token`:
@@ -162,7 +162,7 @@ app.listen(5000, '0.0.0.0', () => console.log('RTC Token Server listening on por
 
 When migrating another application from **Agora** or **ZegoCloud**, use this reference table to replace legacy SDK calls:
 
-| Feature / Use Case | ZegoCloud (`zego_uikit` / `zego_express`) | Agora (`agora_rtc_engine`) | SB Live LiveKit (`LiveKitService.instance`) |
+| Feature / Use Case | ZegoCloud (`zego_uikit` / `zego_express`) | Agora (`agora_rtc_engine`) | Bello Live LiveKit (`LiveKitService.instance`) |
 | :--- | :--- | :--- | :--- |
 | **SDK Initialization & Join** | `ZegoUIKit().init(appID, appSign)` + `ZegoUIKit().joinRoom(roomId)` | `createAgoraRtcEngine()` + `engine.initialize()` + `engine.joinChannel(...)` | `LiveKitService.instance.connectRoom(roomName: ..., userId: ..., userName: ..., role: ..., isVideo: ..., isHost: ...)` |
 | **Leave / Disconnect** | `ZegoUIKit().leaveRoom()` | `engine.leaveChannel()` + `engine.release()` | `LiveKitService.instance.disconnect()` |
@@ -284,7 +284,7 @@ Copy `lib/core/services/livekit_service.dart` from `sbliveapp_codebase` into the
 #### A. Joining an Audio Party Room (`isVideo: false`)
 ```dart
 await LiveKitService.instance.connectRoom(
-  roomName: roomId, // Tip: prefix with 'app2_$roomId' if sharing the same server with SB Live
+  roomName: roomId, // Tip: prefix with 'app2_$roomId' if sharing the same server with Bello Live
   userId: currentUserId,
   userName: currentUserName,
   role: isHost ? 'HOST' : 'PARTICIPANT',
@@ -369,7 +369,7 @@ class _ParticipantVideoViewState extends State<ParticipantVideoView> {
 ```
 
 #### E. Implementing 1v1 PK Battles (Cross-Room Streaming)
-In SB Live, 1v1 PK Battles do **not** require complex server-side media relay jobs. Instead, `LiveKitService` maintains a secondary `Room` (`_opponentRoom`) that subscribes to the opponent host's room as a `LISTENER`:
+In Bello Live, 1v1 PK Battles do **not** require complex server-side media relay jobs. Instead, `LiveKitService` maintains a secondary `Room` (`_opponentRoom`) that subscribes to the opponent host's room as a `LISTENER`:
 
 ```dart
 // 1. When PK Battle starts (executed on both Hosts AND Viewers):
@@ -463,7 +463,7 @@ void dispose() {
 2. **Audio Plays Out of Earpiece Instead of Loudspeaker**:
    - `LiveKitService.instance.applyAudioRouting()` automatically invokes `rtc.Helper.setSpeakerphoneOnButPreferBluetooth()` both on room join and whenever a remote audio track is subscribed (`TrackSubscribedEvent`). Do not override audio routing with conflicting third-party audio plugins.
 3. **Room ID Collisions Across Multiple Apps**:
-   - If App A (`SB Live`) and App B share `ws://167.71.207.84:7880`, prefix `roomName` in App B (e.g., `appB_${roomId}`) when calling `LiveKitService.instance.connectRoom(...)` and `connectOpponentPKRoom(...)`.
+   - If App A (`Bello Live`) and App B share `ws://167.71.207.84:7880`, prefix `roomName` in App B (e.g., `appB_${roomId}`) when calling `LiveKitService.instance.connectRoom(...)` and `connectOpponentPKRoom(...)`.
 4. **Black Video Screen After Joining**:
    - Ensure the widget displaying `buildVideoView()` subscribes to `LiveKitService.instance.remoteParticipantsChangedStream` and calls `setState(() {})` when the remote video track finishes negotiating (`TrackSubscribedEvent`).
 

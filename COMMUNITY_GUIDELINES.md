@@ -21,7 +21,7 @@ These **Community Guidelines** apply to all users, hosts, agencies, and viewers 
 
 ## 2. Zero-Tolerance & Prohibited Content
 
-The following types of content and behaviors are strictly forbidden across all areas of **SB Live** (including live streams, voice rooms, profile pictures, bios, status feeds, direct chats, and comments):
+The following types of content and behaviors are strictly forbidden across all areas of **Bello Live** (including live streams, voice rooms, profile pictures, bios, status feeds, direct chats, and comments):
 
 ### A. Sexual Content & Nudity
 - Full or partial nudity, explicit sexual acts, or pornography.
@@ -41,11 +41,11 @@ The following types of content and behaviors are strictly forbidden across all a
 
 ### D. Fraud, Scams & Financial Exploitation
 - Soliciting money, bank details, or passwords under false pretenses.
-- Buying, selling, or trading virtual coins/diamonds outside official SB Live platforms or authorized portals.
+- Buying, selling, or trading virtual coins/diamonds outside official Bello Live platforms or authorized portals.
 - Running unauthorized lotteries, pyramid schemes, or illegal gambling outside integrated in-app mini-games.
 
 ### E. Impersonation & Misinformation
-- Posing as SB Live official staff, moderators, celebrities, or other users to deceive others.
+- Posing as Bello Live official staff, moderators, celebrities, or other users to deceive others.
 - Spreading malicious rumors, misinformation, or defamatory content.
 
 ### F. Intellectual Property & Copyright Violations
@@ -70,7 +70,7 @@ The following types of content and behaviors are strictly forbidden across all a
 
 ## 4. User Safety & In-App Reporting Tools
 
-SB Live empowers users to protect themselves and maintain community quality through the following safety tools:
+Bello Live empowers users to protect themselves and maintain community quality through the following safety tools:
 
 - **Block User:** You can block any user at any time. Blocked users cannot message you, enter your private rooms, or view your feed.
 - **Report Content / User:** Tap the **Report** flag icon on any stream, profile, chat message, or post to alert our 24/7 Safety & Moderation Team.

@@ -1,6 +1,6 @@
-# SB Live (FlowLive) — Interactive Streaming Platform
+# Bello Live — Interactive Streaming Platform
 
-Welcome to the **SB Live** (`picture_live` / `FlowLive`) mobile application codebase. This project is a production Flutter application providing real-time audio party rooms, live video streaming with 1v1 PK battles, a virtual gifting economy, and an agency/reseller ecosystem.
+Welcome to the **Bello Live** mobile application codebase. This project is a production Flutter application providing real-time audio party rooms, live video streaming with 1v1 PK battles, a virtual gifting economy, and an agency/reseller ecosystem.
 
 ---
 

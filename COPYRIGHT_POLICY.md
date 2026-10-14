@@ -15,7 +15,7 @@ In accordance with the **Digital Millennium Copyright Act (DMCA)** and internati
 If you are a copyright owner, or authorized to act on behalf of one, and believe that any content hosted or broadcasted on **ProLive** infringes upon your copyright, please submit a written DMCA Notice containing the following information:
 
 1. **Identification of Copyrighted Work:** A description of the copyrighted work claimed to have been infringed (or a representative list of works).
-2. **Identification of Infringing Content:** The exact URL, live stream ID, host user ID, or screenshot/link pointing to the infringing material on SB Live.
+2. **Identification of Infringing Content:** The exact URL, live stream ID, host user ID, or screenshot/link pointing to the infringing material on Bello Live.
 3. **Contact Information:** Your full legal name, company name (if applicable), physical address, telephone number, and email address.
 4. **Good Faith Statement:** A statement that you have a good faith belief that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or the law.
 5. **Accuracy & Penalty Statement:** A statement made under penalty of perjury that the information in the notification is accurate and that you are authorized to act on behalf of the owner of an exclusive right that is allegedly infringed.
@@ -43,7 +43,7 @@ Send counter-notices to **`copyright@smartliveapp.com`**.
 
 ## 3. Repeat Infringer Policy
 
-In accordance with DMCA guidelines and Google Play Policies, **SB Live** enforces a **Three-Strike Policy** for repeat copyright infringers:
+In accordance with DMCA guidelines and Google Play Policies, **Bello Live** enforces a **Three-Strike Policy** for repeat copyright infringers:
 
 - **1st Strike:** Removal of infringing content / immediate live stream termination + warning.
 - **2nd Strike:** 7-day broadcast ban and account feature restriction.

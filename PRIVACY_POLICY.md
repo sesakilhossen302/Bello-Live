@@ -32,7 +32,7 @@ We collect information to provide better services to all our users, ranging from
 
 ## 2. Device Permissions Required
 
-To provide live streaming, interactive audio rooms, and social features, **SB Live** requests the following device permissions:
+To provide live streaming, interactive audio rooms, and social features, **Bello Live** requests the following device permissions:
 
 - **Camera (`CAMERA`):** Required to broadcast live video streams, participate in video rooms, and take profile pictures.
 - **Microphone (`RECORD_AUDIO`):** Required for live voice streaming, audio room mic seating, and voice message recording.
@@ -59,7 +59,7 @@ We use the collected information for the following core purposes:
 
 ## 4. Third-Party Services & Data Processors
 
-We integrate trusted third-party SDKs and service providers to power core functionality in **SB Live**. These third parties collect and process data in accordance with their respective privacy policies:
+We integrate trusted third-party SDKs and service providers to power core functionality in **Bello Live**. These third parties collect and process data in accordance with their respective privacy policies:
 
 - **Google Play Services / Firebase (Google LLC)**
   - *Services:* Firebase Authentication, Cloud Firestore, Realtime Database, Cloud Storage, Firebase Cloud Messaging (FCM), Google Sign-In.
@@ -79,7 +79,7 @@ We do not sell your personal data. We may share your information under the follo
 
 - **Publicly Visible Data:** Your display name, profile avatar, user ID, user level, VIP status, and public live room activities (e.g., public comments, gift logs, ranking leaderboards) are visible to other users in the App.
 - **Third-Party Service Providers:** With vetted providers (such as Firebase and ZEGO Cloud) who assist in app delivery, cloud storage, and video processing under strict confidentiality terms.
-- **Legal Compliance:** If required by law, subpoena, court order, or government request, or to protect the safety, rights, or property of **SB Live**, our users, or the public.
+- **Legal Compliance:** If required by law, subpoena, court order, or government request, or to protect the safety, rights, or property of **Bello Live**, our users, or the public.
 
 ---
 
@@ -101,7 +101,7 @@ In compliance with Google Play Developer Policies, users have the right to reque
 
 ## 7. Children's Privacy
 
-**SB Live** is strictly intended for users who are **at least 13 years of age** (or 18+ depending on local jurisdiction for live streaming/purchases). We do not knowingly solicit or collect personal information from children under the age of 13.
+**Bello Live** is strictly intended for users who are **at least 13 years of age** (or 18+ depending on local jurisdiction for live streaming/purchases). We do not knowingly solicit or collect personal information from children under the age of 13.
 
 If we learn that we have collected personal data from a child under 13 without verified parental consent, we will take immediate steps to delete that information and terminate the account. If you believe a child under 13 has provided us with personal data, please contact us at **`support@smartliveapp.com`**.
 
@@ -132,7 +132,7 @@ You are advised to review this Privacy Policy periodically for any changes. Cont
 
 If you have any questions, concerns, or requests regarding this Privacy Policy or your personal data, please contact us:
 
-- **App Name:** SB Live
+- **App Name:** Bello Live
 - **Developer / Support Email:** `support@smartliveapp.com` *(Please update with your official email)*  
 - **In-App Support:** Settings > Feedback & Help  
 
