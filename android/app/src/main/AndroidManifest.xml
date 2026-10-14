@@ -40,7 +40,7 @@
     <application
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:label="Pigo Live"
+        android:label="Bello Live"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"

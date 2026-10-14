@@ -211,7 +211,7 @@ class _HomePageState extends State<HomePage>
                 end: Alignment.bottomRight,
               ).createShader(bounds),
               child: const Text(
-                'Pigo Live',
+                'Bello Live',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,
@@ -305,7 +305,7 @@ class _HomePageState extends State<HomePage>
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('noticetext').limit(1).snapshots(),
       builder: (context, snapshot) {
-        String tickerText = 'Welcome To Pigo Live ↔ Enjoy your best time with Pigo Live ↔';
+        String tickerText = 'Welcome To Bello Live ↔ Enjoy your best time with Bello Live ↔';
         
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           final data = snapshot.data!.docs.first.data() as Map<String, dynamic>?;

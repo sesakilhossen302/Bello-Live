@@ -488,7 +488,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ? userEmail
                           : (userProfile.bio.isNotEmpty
                               ? userProfile.bio
-                              : 'Pigo Live User'),
+                              : 'Bello Live User'),
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
                         fontSize: 13,
@@ -1548,7 +1548,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _shareApp() {
     Share.share(
-      'Download and join Pigo Live now!\nhttps://play.google.com/store/apps/details?id=com.pigobdlive.app',
+      'Download and join Bello Live now!\nhttps://play.google.com/store/apps/details?id=com.bellolivebd.app',
     );
   }
 
@@ -1595,7 +1595,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('Terms & Conditions'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using Pigo Live, you agree to our terms of service, community guidelines, and content policies.',
+            'By using Bello Live, you agree to our terms of service, community guidelines, and content policies.',
           ),
         ),
         actions: [

@@ -144,7 +144,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         ),
         const SizedBox(height: 24),
         const Text(
-          'Pigo Live',
+          'Bello Live',
           style: TextStyle(
             color: Colors.white,
             fontSize: 32,

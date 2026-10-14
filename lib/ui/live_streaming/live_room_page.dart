@@ -6160,16 +6160,16 @@ class _LiveStreamPageState extends State<LiveStreamPage>
     FocusManager.instance.primaryFocus?.unfocus();
     final String hostName = roomData['hostName'] ?? 'Testing account';
     final String roomId = widget.roomID;
-    const String packageName = 'com.pigobdlive.app';
+    const String packageName = 'com.bellolivebd.app';
 
-    // Official Google Play Store link for com.pigobdlive.app with room referrer
+    // Official Google Play Store link for com.bellolivebd.app with room referrer
     final String shareLink =
         'https://play.google.com/store/apps/details?id=$packageName&referrer=roomId%3D$roomId';
 
     final String shareMessage = '$hostName\n$shareLink';
 
     // ignore: deprecated_member_use
-    Share.share(shareMessage, subject: '$hostName - Pigo Live');
+    Share.share(shareMessage, subject: '$hostName - Bello Live');
   }
 
   void _openCallAndViewsBottomSheet({int initialTab = 0}) {

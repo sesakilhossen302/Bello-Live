@@ -194,7 +194,7 @@ class RoomService {
     // Send push notification to all followers subscribed to host_$userId topic
     NotificationService.sendTopicNotification(
       topic: 'host_${user.uid}',
-      title: 'Pigo Live',
+      title: 'Bello Live',
       body: '$hostName is live now! Join the room.',
       data: {
         'roomId': roomId,

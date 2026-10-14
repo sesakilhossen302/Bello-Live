@@ -201,7 +201,7 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
   void _handleExternalShare() {
     final String hostName = widget.hostName;
     final String roomId = widget.roomId;
-    const String packageName = 'com.pigobdlive.app';
+    const String packageName = 'com.bellolivebd.app';
 
     final String playStoreLink =
         'https://play.google.com/store/apps/details?id=$packageName&referrer=roomId%3D$roomId';
@@ -209,7 +209,7 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
     final String message = "$hostName\n$playStoreLink";
 
     // ignore: deprecated_member_use
-    Share.share(message, subject: '$hostName - Pigo Live');
+    Share.share(message, subject: '$hostName - Bello Live');
   }
 
   @override

@@ -56,7 +56,7 @@ class MyApp extends StatelessWidget {
           return MaterialApp.router(
             routerConfig: MyRouter.router,
             debugShowCheckedModeBanner: false,
-            title: 'Pigo Live',
+            title: 'Bello Live',
             locale: state.locale,
             localizationsDelegates: const [
               AppLocalizationsDelegate(),
