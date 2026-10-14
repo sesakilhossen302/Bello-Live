@@ -15,11 +15,35 @@
       },
       "oauth_client": [
         {
+          "client_id": "993990672871-11c9psm203jodadtck1uo3efv8h5h0tc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pigobdlive.app",
+            "certificate_hash": "e1e650ce144af5e51e2c3ad5a170bdc03d5d735d"
+          }
+        },
+        {
+          "client_id": "993990672871-5qo4c4nh09jmdv9uijpm8srpmbgmulbc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pigobdlive.app",
+            "certificate_hash": "4dd3418595a85eee0370654c24924e859089c738"
+          }
+        },
+        {
           "client_id": "993990672871-gf0hn0qgn4hqfqna1c2bsgkq06bscsfa.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.pigobdlive.app",
             "certificate_hash": "06d018bdd107e5d15e788a02a18f7afb39005ee4"
+          }
+        },
+        {
+          "client_id": "993990672871-glgb2akvurp4ia5gijenadmsim4mohs2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pigobdlive.app",
+            "certificate_hash": "943b6e7d161ed25beb439482a60b4bac5b25903e"
           }
         },
         {

@@ -2,7 +2,7 @@ name: picture_live
 description: "App for Pigo Live"
 publish_to: 'none'
 
-version: 3.5.40+40
+version: 3.5.41+41
 
 environment:
   sdk: ^3.9.0
